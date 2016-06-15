@@ -18,6 +18,7 @@ export interface VolumeChunkSourceParameters {
   baseUrls: string[];
   nodeKey: string;
   dataInstanceKey: string;
+  level2: string;
 };
 
 export enum TileEncoding {
@@ -31,7 +32,7 @@ export interface TileChunkSourceParameters extends VolumeChunkSourceParameters {
 };
 
 export function volumeSourceToString(parameters: VolumeChunkSourceParameters) {
-  return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}`;
+  return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/${parameters['level2']}`;
 }
 
 export function tileSourceToString(parameters: TileChunkSourceParameters) {
