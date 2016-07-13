@@ -2,8 +2,7 @@ Want to contribute? Great! First, read this page (including the small print at t
 
 ### Before you contribute
 Before we can use your code, you must sign the
-[Google Individual Contributor License Agreement]
-(https://cla.developers.google.com/about/google-individual)
+[Google Individual Contributor License Agreement](https://cla.developers.google.com/about/google-individual)
 (CLA), which you can do online. The CLA is necessary mainly because you own the
 copyright to your changes, even after your contribution becomes part of our
 codebase, so we need your permission to use and distribute your code. We also
@@ -19,8 +18,22 @@ frustration later on.
 ### Code reviews
 All submissions, including submissions by project members, require review.
 
+### Coding Style
+For consistency, please ensure that all files are formatted by `clang-format` using the [.clang-format](.clang-format) style file.  You can verify this by running:
+```shell
+npm run gulp check-format
+```
+To reformat all source files, run:
+```shell
+npm run gulp format
+```
+
+Please also ensure that `tslint` gives no warnings.  You can verify this by running:
+```shell
+npm run gulp tslint
+```
+
 ### The small print
 Contributions made by corporations are covered by a different agreement than
 the one above, the
-[Software Grant and Corporate Contributor License Agreement]
-(https://cla.developers.google.com/about/google-corporate).
+[Software Grant and Corporate Contributor License Agreement](https://cla.developers.google.com/about/google-corporate).

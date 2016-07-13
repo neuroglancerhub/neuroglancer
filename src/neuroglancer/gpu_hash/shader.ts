@@ -16,16 +16,14 @@
 
 import {HashFunction, PRIME_MODULUS} from 'neuroglancer/gpu_hash/hash_function';
 import {HashTable, NUM_ALTERNATIVES} from 'neuroglancer/gpu_hash/hash_table';
-import {glsl_exactDot, glsl_imod, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
-import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {glsl_exactDot, glsl_imod, glsl_uint64} from 'neuroglancer/webgl/shader_lib';
+import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
 export const glsl_hashFunction = [
-  glsl_uint64,
-  glsl_exactDot,
-  glsl_imod, `
+  glsl_uint64, glsl_exactDot, glsl_imod, `
 float computeHash(uint64_t x, vec4 a0, vec4 a1, float b, float c, float modulus, float scalar) {
   x.low *= 255.0;
   x.high *= 255.0;
@@ -41,9 +39,9 @@ float computeHash(uint64_t x, vec4 a0, vec4 a1, float b, float c, float modulus,
 export class GPUHashTable extends RefCounted {
   a: Float32Array;
   b: Float32Array;
-  hashFunctions: HashFunction[][] = null;
-  generation: number = null;
-  textures = new Array<WebGLTexture>();
+  hashFunctions: HashFunction[][]|null = null;
+  generation = -1;
+  textures = new Array<WebGLTexture|null>();
 
   constructor(public gl: GL, public hashTable: HashTable) {
     super();
@@ -52,6 +50,7 @@ export class GPUHashTable extends RefCounted {
     this.b = new Float32Array(numAlternatives * 4 + 5);
     let {textures} = this;
     for (let i = 0; i < numAlternatives; ++i) {
+      // createTexture should never actually return null.
       textures[i] = gl.createTexture();
     }
   }
@@ -125,13 +124,13 @@ export class GPUHashTable extends RefCounted {
   disposed() {
     let {gl} = this;
     this.textures.forEach((texture) => { gl.deleteTexture(texture); });
-    this.textures = null;
-    this.gl = null;
-    this.hashTable = null;
+    this.textures = <any>undefined;
+    this.gl = <any>undefined;
+    this.hashTable = <any>undefined;
     this.hashFunctions = null;
   }
 
-  static get (gl: GL, hashTable: HashTable) {
+  static get(gl: GL, hashTable: HashTable) {
     return gl.memoize.get(hashTable, () => new GPUHashTable(gl, hashTable));
   }
 };
@@ -144,7 +143,7 @@ export class HashTableShaderManager {
 
   constructor(public prefix: string, public numAlternatives = NUM_ALTERNATIVES) {}
 
-  defineShader (builder: ShaderBuilder) {
+  defineShader(builder: ShaderBuilder) {
     let {aName, bName, samplerName, numAlternatives} = this;
     builder.addUniform('highp vec4', aName, numAlternatives * 4);
     builder.addUniform('highp float', bName, numAlternatives * 4 + 5);

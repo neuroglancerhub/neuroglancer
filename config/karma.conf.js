@@ -18,18 +18,22 @@
 
 let webpack_helpers = require('./webpack_helpers');
 const path = require('path');
+const webpack = require('webpack');
 
 module.exports = function(config) {
 
-  let webpackConfig =
-      webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
+  let webpackConfig = webpack_helpers.getBaseConfig({useBabel: false, noOutput: true});
   webpackConfig.devtool = 'inline-source-map';
   webpackConfig.module.postLoaders = [{
     test: /\.ts$/,
     exclude: [/\.spec\.ts$/, /node_modules/],
     loader: 'istanbul-instrumenter-loader',
   }];
-  webpackConfig.plugins = [];
+  webpackConfig.plugins = [
+    new webpack.DefinePlugin({
+      'WORKER': false,
+    }),
+  ];
 
   config.set({
     files: [
@@ -47,12 +51,13 @@ module.exports = function(config) {
       // 'ChromeCanary',
     ],
     colors: true,
+    browserNoActivityTimeout: 60000,
     reporters: ['mocha', 'coverage'],
     coverageReporter: {
       dir: path.resolve(__dirname, '../coverage/'),
       reporters: [{type: 'text-summary'}, {type: 'json'}, {type: 'html'}]
     },
     // logLevel: config.LOG_DEBUG,
-    //singleRun: true,
+    // singleRun: true,
   });
 };

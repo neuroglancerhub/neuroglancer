@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
+import {ChunkFormat, VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {TypedArray} from 'neuroglancer/util/array';
+import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
 import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
-import {ChunkFormat, VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 
 const textureUnitSymbol = Symbol('SingleTextureVolumeChunk.textureUnit');
 const textureLayoutSymbol = Symbol('SingleTextureVolumeChunk.textureLayout');
@@ -35,18 +36,12 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
     builder.addTextureSampler2D('uVolumeChunkSampler', textureUnitSymbol);
   }
 
-  /**
-   * Called when starting to draw chunks.
-   */
   beginDrawing(gl: GL, shader: ShaderProgram) {
     let textureUnit = shader.textureUnit(textureUnitSymbol);
     gl.activeTexture(gl.TEXTURE0 + textureUnit);
     (<any>shader)[textureLayoutSymbol] = null;
   }
 
-  /**
-   * Called once after all chunks have been drawn.
-   */
   endDrawing(gl: GL, shader: ShaderProgram) {
     gl.bindTexture(gl.TEXTURE_2D, null);
     (<any>shader)[textureLayoutSymbol] = null;
@@ -57,12 +52,9 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
    */
   abstract setupTextureLayout(gl: GL, shader: ShaderProgram, textureLayout: TextureLayout): void;
 
-  /**
-   * Called just before drawing each chunk.
-   */
   bindChunk<Data>(
       gl: GL, shader: ShaderProgram, chunk: SingleTextureVolumeChunk<Data, TextureLayout>) {
-    let {textureLayout} = chunk;
+    let textureLayout = chunk.textureLayout!;
     let existingTextureLayout = (<any>shader)[textureLayoutSymbol];
     if (existingTextureLayout !== textureLayout) {
       (<any>shader)[textureLayoutSymbol] = textureLayout;
@@ -70,13 +62,20 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
     }
     gl.bindTexture(gl.TEXTURE_2D, chunk.texture);
   }
+
+  abstract setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedArray): void;
+
+  /**
+   * Does nothing, but may be overridden by subclass.
+   */
+  beginSource(gl: GL, shader: ShaderProgram) {}
 };
 
 export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Disposable> extends
     VolumeChunk {
-  texture: WebGLTexture = null;
+  texture: WebGLTexture|null = null;
   data: Data;
-  textureLayout: TextureLayout;
+  textureLayout: TextureLayout|null;
 
   constructor(source: VolumeChunkSource, x: any) {
     super(source, x);
@@ -99,7 +98,7 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
     super.freeGPUMemory(gl);
     gl.deleteTexture(this.texture);
     this.texture = null;
-    this.textureLayout.dispose();
+    this.textureLayout!.dispose();
     this.textureLayout = null;
   }
 };

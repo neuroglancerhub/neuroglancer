@@ -31,7 +31,7 @@ export interface WritableArrayLike<T> {
  */
 export function partitionArray<T>(
     array: T[], start: number, end: number, predicate: (x: T) => boolean): number {
-  for (; start < end;) {
+  while (start < end) {
     let x = array[start];
     if (predicate(x)) {
       ++start;
@@ -45,6 +45,7 @@ export function partitionArray<T>(
 }
 
 export interface TypedArrayConstructor {
+  new (n: number): TypedArray;
   new (buffer: ArrayBuffer, byteOffset: number, length: number): TypedArray;
   BYTES_PER_ELEMENT: number;
 }

@@ -19,23 +19,20 @@
  * This implements the authentication API by simply forwarding all requests to the frontend.
  */
 
-import {registerRPC} from 'neuroglancer/worker_rpc';
 import {Token, implementation} from 'neuroglancer/datasource/brainmaps/api_implementation';
+import {registerRPC} from 'neuroglancer/worker_rpc';
 import {rpc} from 'neuroglancer/worker_rpc_context';
 
-let resolvePromise: (token: Token) => void = null;
+let resolvePromise: ((token: Token) => void)|null = null;
 
 implementation.getNewTokenPromise = function(invalidToken) {
   let msg: any = {};
   if (invalidToken != null) {
     msg['invalidToken'] = invalidToken;
   }
-  let promise =
-    new Promise(function(resolve, reject) { resolvePromise = resolve; });
+  let promise = new Promise(function(resolve, reject) { resolvePromise = resolve; });
   rpc.invoke('brainmaps.requestToken', msg);
   return promise;
 };
 
-registerRPC('brainmaps.receiveToken', function(x) {
-  resolvePromise(x['authResult']);
-});
+registerRPC('brainmaps.receiveToken', function(x) { resolvePromise!(x['authResult']); });

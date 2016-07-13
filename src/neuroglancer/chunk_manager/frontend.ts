@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {ChunkState, AvailableCapacity} from 'neuroglancer/chunk_manager/base';
-import {RPC, registerRPC, SharedObject} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
-import {GL} from 'neuroglancer/webgl/context';
+import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Memoize} from 'neuroglancer/util/memoize';
+import {GL} from 'neuroglancer/webgl/context';
+import {RPC, SharedObject, registerRPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
+import {Signal} from 'signals';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -37,16 +37,17 @@ interface ChunkConstructor {
   new (source: ChunkSource, update: any): Chunk;
 }
 
+@registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObject {
   visibleChunksChanged = new Signal();
   pendingChunkUpdates: any = null;
   pendingChunkUpdatesTail: any = null;
 
   /**
-   * If non-null, deadline in milliseconds since epoch after which
-   * chunk copies to the GPU may not start (until the next frame).
+   * If non-null, deadline in milliseconds since epoch after which chunk copies to the GPU may not
+   * start (until the next frame).
    */
-  chunkUpdateDeadline: number = null;
+  chunkUpdateDeadline: number|null = null;
 
   chunkUpdateDelay: number = 30;
 
@@ -57,7 +58,6 @@ export class ChunkQueueManager extends SharedObject {
   }) {
     super();
     this.initializeCounterpart(rpc, {
-      'type': 'ChunkQueueManager',
       'gpuMemoryCapacity': capacities.gpuMemory.toObject(),
       'systemMemoryCapacity': capacities.systemMemory.toObject(),
       'downloadCapacity': capacities.download.toObject()
@@ -78,13 +78,12 @@ export class ChunkQueueManager extends SharedObject {
     let deadline = this.chunkUpdateDeadline;
     if (deadline !== null && Date.now() > deadline) {
       // No time to perform chunk update now, we will wait some more.
-      setTimeout(
-          this.processPendingChunkUpdates.bind(this), this.chunkUpdateDelay);
+      setTimeout(this.processPendingChunkUpdates.bind(this), this.chunkUpdateDelay);
       return;
     }
     let update = this.pendingChunkUpdates;
     let {rpc} = this;
-    let source = rpc.get(update['source']);
+    let source = rpc!.get(update['source']);
     if (DEBUG_CHUNK_UPDATES) {
       console.log(
           `${Date.now()} Chunk.update processed: ${source.rpcId} ${update['id']} ${update['state']}`);
@@ -114,8 +113,7 @@ export class ChunkQueueManager extends SharedObject {
             chunk.freeGPUMemory(this.gl);
             break;
           default:
-            throw new Error(
-                `INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
+            throw new Error(`INTERNAL ERROR: Invalid chunk state: ${ChunkState[newState]}`);
         }
       }
     }
@@ -146,25 +144,30 @@ registerRPC('Chunk.update', function(x) {
   }
 });
 
+@registerSharedObjectOwner(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObject {
-  chunkSourceCache: Map<any, Memoize<string, ChunkSource>> = new Map<any, Memoize<string, ChunkSource>>();
+  chunkSourceCache: Map<any, Memoize<string, ChunkSource>> =
+      new Map<any, Memoize<string, ChunkSource>>();
 
   constructor(public chunkQueueManager: ChunkQueueManager) {
     super();
     this.registerDisposer(chunkQueueManager.addRef());
     this.initializeCounterpart(
-        chunkQueueManager.rpc,
-        {'type': 'ChunkManager', 'chunkQueueManager': chunkQueueManager.rpcId});
+        chunkQueueManager.rpc!, {'chunkQueueManager': chunkQueueManager.rpcId});
   }
 
-  getChunkSource<T extends ChunkSource> (constructor: any, key: string, getter: () => T) {
+  getChunkSource<T extends ChunkSource>(constructor: any, key: string, getter: () => T) {
     let {chunkSourceCache} = this;
     let sources = chunkSourceCache.get(constructor);
     if (sources === undefined) {
       sources = new Memoize<string, ChunkSource>();
       chunkSourceCache.set(constructor, sources);
     }
-    return sources.get(key, getter);
+    return sources.get(key, () => {
+      let value = getter();
+      value.initializeCounterpart(value.chunkManager.rpc!, {});
+      return value;
+    });
   }
 };
 
@@ -190,5 +193,5 @@ export abstract class ChunkSource extends SharedObject {
   /**
    * Default implementation for use with backendOnly chunk sources.
    */
-  getChunk(x: any): Chunk { return null; }
+  getChunk(x: any): Chunk { throw new Error('Not implemented.'); }
 };

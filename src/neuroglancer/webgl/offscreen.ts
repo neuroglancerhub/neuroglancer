@@ -15,18 +15,18 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {resizeTexture} from 'neuroglancer/webgl/texture';
-import {GL} from 'neuroglancer/webgl/context';
-import {trivialTextureShader} from 'neuroglancer/webgl/trivial_shaders';
-import {Buffer} from 'neuroglancer/webgl/buffer';
 import {identityMat4} from 'neuroglancer/util/geom';
+import {Buffer} from 'neuroglancer/webgl/buffer';
+import {GL} from 'neuroglancer/webgl/context';
+import {resizeTexture} from 'neuroglancer/webgl/texture';
+import {trivialTextureShader} from 'neuroglancer/webgl/trivial_shaders';
 
 export class OffscreenFramebuffer extends RefCounted {
-  width: number = null;
-  height: number = null;
+  width = Number.NaN;
+  height = Number.NaN;
   framebuffer = this.gl.createFramebuffer();
-  depthBuffer: WebGLRenderbuffer = null;
-  dataTextures = new Array<WebGLRenderbuffer>();
+  depthBuffer: WebGLRenderbuffer|null = null;
+  dataTextures = new Array<WebGLTexture|null>();
   useStencilBuffer: boolean;
   private attachmentVerified = false;
   private tempPixel = new Uint8Array(4);
@@ -147,9 +147,7 @@ export class OffscreenFramebuffer extends RefCounted {
 
 
 export class OffscreenCopyHelper extends RefCounted {
-  constructor (public gl: GL) {
-    super();
-  }
+  constructor(public gl: GL) { super(); }
   private copyVertexPositionsBuffer = this.registerDisposer(Buffer.fromData(
       this.gl, new Float32Array([
         -1, -1, 0, 1,  //
@@ -165,11 +163,11 @@ export class OffscreenCopyHelper extends RefCounted {
         1, 1,  //
         1, 0,  //
       ]),
-    this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
+      this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
 
   private trivialTextureShader = this.registerDisposer(trivialTextureShader(this.gl));
 
-  draw(texture: WebGLTexture) {
+  draw(texture: WebGLTexture|null) {
     let {gl} = this;
     let shader = this.trivialTextureShader;
     shader.bind();
@@ -193,8 +191,7 @@ export class OffscreenCopyHelper extends RefCounted {
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  static get (gl: GL) {
-    return gl.memoize.get(
-        'OffscreenCopyHelper', () => { return new OffscreenCopyHelper(gl); });
+  static get(gl: GL) {
+    return gl.memoize.get('OffscreenCopyHelper', () => { return new OffscreenCopyHelper(gl); });
   }
 };

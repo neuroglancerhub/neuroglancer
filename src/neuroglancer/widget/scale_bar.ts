@@ -15,14 +15,17 @@
  */
 
 /**
- * Facility for drawing a scale bar to indicate pixel size in physical length units.
+ * Facility for drawing a scale bar to indicate pixel size in physical length
+ * units.
  *
  * The physical length with which the scale bar is labeled will be of the form:
  *
  *   significand * 10^exponent
  *
- * Any exponent may be used, but the significand in the range [1, 10] will be equal to one of a
- * discrete set of allowed significand values, in order to ensure that the scale bar is easy to
+ * Any exponent may be used, but the significand in the range [1, 10] will be
+ * equal to one of a
+ * discrete set of allowed significand values, in order to ensure that the scale
+ * bar is easy to
  * understand.
  */
 
@@ -35,7 +38,12 @@ require('./scale_bar.css');
  * Default set of allowed significand values.  1 is implicitly part of the set.
  */
 const DEFAULT_ALLOWED_SIGNIFICANDS = [
-  1.5, 2, 3, 5, 7.5, 10,
+  1.5,
+  2,
+  3,
+  5,
+  7.5,
+  10,
 ];
 
 interface LengthUnit {
@@ -54,12 +62,13 @@ const ALLOWED_UNITS: LengthUnit[] = [
 
 export class ScaleBarDimensions {
   /**
-   * Allowed significand values.  1 is not included, but is always considered part of the set.
+   * Allowed significand values.  1 is not included, but is always considered
+   * part of the set.
    */
   allowedSignificands = DEFAULT_ALLOWED_SIGNIFICANDS;
 
   /**
-   * The target length in pixels.  The closest 
+   * The target length in pixels.  The closest
    */
   targetLengthInPixels: number;
 
@@ -85,14 +94,16 @@ export class ScaleBarDimensions {
   prevTargetLengthInPixels: number = 0;
 
   /**
-   * Updates physicalLength, physicalUnit, and lengthInPixels to be the optimal values corresponding
+   * Updates physicalLength, physicalUnit, and lengthInPixels to be the optimal
+   * values corresponding
    * to targetLengthInPixels and nanometersPerPixel.
    *
    * @returns true if the scale bar has changed, false if it is unchanged.
    */
-  update () {
+  update() {
     let {nanometersPerPixel, targetLengthInPixels} = this;
-    if (this.prevNanometersPerPixel === nanometersPerPixel && this.prevTargetLengthInPixels === targetLengthInPixels) {
+    if (this.prevNanometersPerPixel === nanometersPerPixel &&
+        this.prevTargetLengthInPixels === targetLengthInPixels) {
       return false;
     }
     this.prevNanometersPerPixel = nanometersPerPixel;
@@ -102,11 +113,13 @@ export class ScaleBarDimensions {
     const tenToThePowerExponent = Math.pow(10, exponent);
     const targetSignificand = targetNanometers / tenToThePowerExponent;
 
-    // Determine significand value in this.allowedSignificands that is closest to targetSignificand.
+    // Determine significand value in this.allowedSignificands that is closest
+    // to targetSignificand.
     let bestSignificand = 1;
     let {allowedSignificands} = this;
     for (let allowedSignificand of this.allowedSignificands) {
-      if (Math.abs(allowedSignificand - targetSignificand) < Math.abs(bestSignificand - targetSignificand)) {
+      if (Math.abs(allowedSignificand - targetSignificand) <
+          Math.abs(bestSignificand - targetSignificand)) {
         bestSignificand = allowedSignificand;
       } else {
         // If distance did not decrease, then it can only increase from here.
@@ -136,7 +149,7 @@ export class ScaleBarWidget extends RefCounted {
   element = document.createElement('div');
   textNode = document.createTextNode('');
   barElement = document.createElement('div');
-  constructor (public dimensions = new ScaleBarDimensions()) {
+  constructor(public dimensions = new ScaleBarDimensions()) {
     super();
     let {element, textNode, barElement} = this;
     element.className = 'scale-bar-container';
@@ -145,7 +158,7 @@ export class ScaleBarWidget extends RefCounted {
     barElement.className = 'scale-bar';
   }
 
-  update () {
+  update() {
     let {dimensions} = this;
     if (dimensions.update()) {
       this.textNode.textContent = `${dimensions.physicalLength} ${dimensions.physicalUnit}`;
@@ -153,7 +166,5 @@ export class ScaleBarWidget extends RefCounted {
     }
   }
 
-  disposed () {
-    removeFromParent(this.element);
-  }
+  disposed() { removeFromParent(this.element); }
 };

@@ -36,7 +36,7 @@ export enum ChunkState {
   FAILED = 6,
 
   EXPIRED = 7
-};
+}
 
 export enum ChunkPriorityTier {
   FIRST_TIER = 0,
@@ -46,7 +46,7 @@ export enum ChunkPriorityTier {
   LAST_ORDERED_TIER = 1,
   RECENT = 2,
   LAST_TIER = 2
-};
+}
 
 export class AvailableCapacity {
   availableItems: number;
@@ -84,15 +84,22 @@ export class AvailableCapacity {
     this.availableSize += size;
   }
 
-  toString() { return `${this.availableItems}/${this.itemCapacity} items, ${this.availableSize}/${this.sizeCapacity} size`; }
-
-  toObject() {
-    return {'itemCapacity': this.itemCapacity, 'sizeCapacity': this.sizeCapacity};
+  toString() {
+    return `${this.availableItems}/${this.itemCapacity} items, ${this.availableSize}/${this.sizeCapacity} size`;
   }
 
-  static fromObject(x: any) {
-    return new AvailableCapacity(x['itemCapacity'], x['sizeCapacity']);
-  }
+  toObject() { return {'itemCapacity': this.itemCapacity, 'sizeCapacity': this.sizeCapacity}; }
+
+  static fromObject(x: any) { return new AvailableCapacity(x['itemCapacity'], x['sizeCapacity']); }
 
   static INFINITE = new AvailableCapacity(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
 };
+
+export const CHUNK_QUEUE_MANAGER_RPC_ID = 'ChunkQueueManager';
+export const CHUNK_MANAGER_RPC_ID = 'ChunkManager';
+
+export interface ChunkSourceParametersConstructor<T> {
+  new (): T;
+  RPC_ID: string;
+  stringify: (parameters: T) => string;
+}

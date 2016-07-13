@@ -14,21 +14,23 @@
  * limitations under the License.
  */
 
-import {ShaderBuilder, ShaderProgram, ShaderModule} from 'neuroglancer/webgl/shader';
-import {ChunkState} from 'neuroglancer/chunk_manager/base';
+import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
+import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {RenderLayer} from 'neuroglancer/layer';
-import {Signal} from 'signals';
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
-import {ChunkManager, Chunk, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {VoxelSize} from 'neuroglancer/navigation_state';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
+import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
+import {SliceViewPanelRenderContext, SliceViewPanelRenderLayer, sliceViewPanelEmit} from 'neuroglancer/sliceview/panel';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3, mat4, Vec3, Mat4} from 'neuroglancer/util/geom';
-import {PerspectiveViewRenderLayer, PerspectiveViewRenderContext, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
-import {SliceViewPanelRenderLayer, SliceViewPanelRenderContext, sliceViewPanelEmit} from 'neuroglancer/sliceview/panel';
-import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {GL} from 'neuroglancer/webgl/context';
+import {Mat4, Vec3, mat4, vec3} from 'neuroglancer/util/geom';
+import {stableStringify} from 'neuroglancer/util/json';
 import {Buffer} from 'neuroglancer/webgl/buffer';
-import {SharedObject} from 'neuroglancer/worker_rpc';
+import {GL} from 'neuroglancer/webgl/context';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
+import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
+import {Signal} from 'signals';
 
 class SkeletonShaderManager {
   private tempMat = mat4.create();
@@ -45,7 +47,8 @@ class SkeletonShaderManager {
   }
 
   beginLayer(
-      gl: GL, shader: ShaderProgram, renderContext: SliceViewPanelRenderContext, objectToDataMatrix: Mat4) {
+      gl: GL, shader: ShaderProgram, renderContext: SliceViewPanelRenderContext,
+      objectToDataMatrix: Mat4) {
     let {dataToDevice} = renderContext;
     let mat = mat4.multiply(this.tempMat, dataToDevice, objectToDataMatrix);
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, mat);
@@ -84,7 +87,7 @@ class SkeletonShaderManager {
 
 export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
   private shader = this.base.skeletonShaderManager.getShader(
-    this.gl, 'skeleton/SkeletonShaderManager:PerspectivePanel', perspectivePanelEmit);
+      this.gl, 'skeleton/SkeletonShaderManager:PerspectivePanel', perspectivePanelEmit);
 
   constructor(public base: SkeletonLayer) {
     super();
@@ -104,7 +107,7 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
 
 export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
   private shader = this.base.skeletonShaderManager.getShader(
-    this.gl, 'skeleton/SkeletonShaderManager:SliceViewPanel', sliceViewPanelEmit);
+      this.gl, 'skeleton/SkeletonShaderManager:SliceViewPanel', sliceViewPanelEmit);
 
   constructor(public base: SkeletonLayer) {
     super();
@@ -115,7 +118,6 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
   get gl() { return this.base.gl; }
 
   draw(renderContext: SliceViewPanelRenderContext) {
-    console.log('drawing on sliceview');
     this.base.draw(renderContext, this, this.shader, false, 10);
   }
 };
@@ -137,8 +139,8 @@ export class SkeletonLayer extends RefCounted {
         displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
 
     let sharedObject = this.registerDisposer(new SharedObject());
-    sharedObject.initializeCounterpart(chunkManager.rpc, {
-      'type': 'skeleton/SkeletonLayer',
+    sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
+    sharedObject.initializeCounterpart(chunkManager.rpc!, {
       'chunkManager': chunkManager.rpcId,
       'source': source.addCounterpartRef(),
       'visibleSegmentSet': displayState.visibleSegments.rpcId
@@ -147,7 +149,12 @@ export class SkeletonLayer extends RefCounted {
 
   get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
-  draw(renderContext: SliceViewPanelRenderContext, layer: RenderLayer, shader: ShaderProgram, pickingOnly = false, lineWidth = pickingOnly ? 5 : 1) {
+  draw(
+      renderContext: SliceViewPanelRenderContext, layer: RenderLayer, shader: ShaderProgram,
+      pickingOnly = false, lineWidth?: number) {
+    if (lineWidth === undefined) {
+      lineWidth = pickingOnly ? 5 : 1;
+    }
     let {gl, skeletonShaderManager} = this;
     shader.bind();
 
@@ -185,7 +192,6 @@ export class SkeletonLayer extends RefCounted {
     }
     skeletonShaderManager.endLayer(gl, shader);
   }
-
 };
 
 export class SkeletonChunk extends Chunk {
@@ -223,3 +229,29 @@ export class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
   getChunk(x: any) { return new SkeletonChunk(this, x); }
 };
+
+export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
+  constructor(chunkManager: ChunkManager, public parameters: Parameters) { super(chunkManager); }
+
+  initializeCounterpart(rpc: RPC, options: any) {
+    options['parameters'] = this.parameters;
+    super.initializeCounterpart(rpc, options);
+  }
+};
+
+/**
+ * Defines a SkeletonSource for which all state is encapsulated in an object of type Parameters.
+ */
+export function parameterizedSkeletonSource<Parameters>(
+    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  const newConstructor =
+      class SpecializedParameterizedSkeletonSource extends ParameterizedSkeletonSource<Parameters> {
+    static get(chunkManager: ChunkManager, parameters: Parameters) {
+      return chunkManager.getChunkSource(
+          this, stableStringify(parameters), () => new this(chunkManager, parameters));
+    }
+    toString() { return parametersConstructor.stringify(this.parameters); }
+  };
+  newConstructor.prototype.RPC_TYPE_ID = parametersConstructor.RPC_ID;
+  return newConstructor;
+}

@@ -28,7 +28,7 @@ const DEBUG_MESSAGES = false;
 
 var handlers = new Map<string, RPCHandler>();
 
-export function registerRPC (key: string, handler: RPCHandler) {
+export function registerRPC(key: string, handler: RPCHandler) {
   handlers.set(key, handler);
 };
 
@@ -37,91 +37,83 @@ interface RPCTarget {
   onmessage: (ev: MessageEvent) => any;
 }
 
+const INITIAL_RPC_ID = IS_WORKER ? -1 : 0;
+
 export class RPC {
   private objects = new Map<RpcId, any>();
-  private nextId: RpcId = IS_WORKER ? -1 : 0;
-  constructor (public target: RPCTarget) {
+  private nextId: RpcId = INITIAL_RPC_ID;
+  constructor(public target: RPCTarget) {
     target.onmessage = (e) => {
       let data = e.data;
       if (DEBUG_MESSAGES) {
         console.log('Received message', data);
       }
-      handlers.get(data.functionName).call(this, data);
+      handlers.get(data.functionName)!.call(this, data);
     };
   }
 
   get numObjects() { return this.objects.size; }
 
-  set(id: RpcId, value: any) {
-    this.objects.set(id, value);
-  }
+  set(id: RpcId, value: any) { this.objects.set(id, value); }
 
-  delete(id: RpcId) {
-    this.objects.delete(id);
-  }
-  get (id: RpcId) {
-    return this.objects.get(id);
-  }
-  getRef<T extends SharedObject> (x: {'id': RpcId, 'gen': number}) {
+  delete (id: RpcId) { this.objects.delete(id); }
+  get(id: RpcId) { return this.objects.get(id); }
+  getRef<T extends SharedObject>(x: {'id': RpcId, 'gen': number}) {
     let rpcId = x['id'];
     let obj = <T>this.get(rpcId);
     obj.referencedGeneration = x['gen'];
     obj.addRef();
     return obj;
   }
-  invoke (name: string, x: any, transfers?: any[]) {
+  invoke(name: string, x: any, transfers?: any[]) {
     x.functionName = name;
     if (DEBUG_MESSAGES) {
       console.trace('Sending message', x);
     }
     this.target.postMessage(x, transfers);
   }
-  newId () {
-    return IS_WORKER ? this.nextId-- : this.nextId++;
-  }
+  newId() { return IS_WORKER ? this.nextId-- : this.nextId++; }
 };
 
 export class SharedObject extends RefCounted {
-  rpc: RPC = null;
-  rpcId: RpcId = null;
+  rpc: RPC|null = null;
+  rpcId: RpcId|null = null;
   isOwner: boolean|undefined;
   unreferencedGeneration: number|undefined;
   referencedGeneration: number|undefined;
 
-  initializeSharedObject (rpc: RPC, rpcId = rpc.newId()) {
+  initializeSharedObject(rpc: RPC, rpcId = rpc.newId()) {
     this.rpc = rpc;
     this.rpcId = rpcId;
     this.isOwner = false;
     rpc.set(rpcId, this);
   }
 
-  initializeCounterpart (rpc: RPC, options: any = {}) {
+  initializeCounterpart(rpc: RPC, options: any = {}) {
     this.initializeSharedObject(rpc);
     this.unreferencedGeneration = 0;
     this.referencedGeneration = 0;
     this.isOwner = true;
     options['id'] = this.rpcId;
+    options['type'] = this.RPC_TYPE_ID;
     rpc.invoke('SharedObject.new', options);
   }
 
-  dispose () {
-    super.dispose();
-  }
+  dispose() { super.dispose(); }
 
   /**
    * Precondition: this.isOwner === true.
    */
-  addCounterpartRef () {
-    return {'id': this.rpcId, 'gen': ++this.referencedGeneration};
-  }
+  addCounterpartRef() { return {'id': this.rpcId, 'gen': ++this.referencedGeneration}; }
 
-  protected refCountReachedZero () {
+  protected refCountReachedZero() {
     if (this.isOwner === true) {
       if (this.referencedGeneration === this.unreferencedGeneration) {
         this.ownerDispose();
       }
     } else if (this.isOwner === false) {
-      this.rpc.invoke('SharedObject.refCountReachedZero', {'id': this.rpcId, 'gen': this.referencedGeneration});
+      this.rpc!.invoke(
+          'SharedObject.refCountReachedZero', {'id': this.rpcId, 'gen': this.referencedGeneration});
     } else {
       super.refCountReachedZero();
     }
@@ -130,14 +122,14 @@ export class SharedObject extends RefCounted {
   /**
    * Precondition: this.isOwner === true.
    */
-  protected ownerDispose () {
+  protected ownerDispose() {
     if (DEBUG) {
-      console.log(`[${IS_WORKER}] #rpc object = ${this.rpc.numObjects}`);
+      console.log(`[${IS_WORKER}] #rpc object = ${this.rpc!.numObjects}`);
     }
     let {rpc, rpcId} = this;
     super.refCountReachedZero();
-    rpc.delete(rpcId);
-    rpc.invoke('SharedObject.dispose', {'id': rpcId});
+    rpc!.delete(rpcId!);
+    rpc!.invoke('SharedObject.dispose', {'id': rpcId});
   }
 
   /**
@@ -145,12 +137,18 @@ export class SharedObject extends RefCounted {
    *
    * This should be called when the counterpart's refCount is decremented and reaches zero.
    */
-  counterpartRefCountReachedZero (generation: number) {
+  counterpartRefCountReachedZero(generation: number) {
     this.unreferencedGeneration = generation;
     if (this.refCount === 0 && generation === this.referencedGeneration) {
       this.ownerDispose();
     }
   }
+
+  /**
+   * Should be set to a constant specifying the SharedObject type identifier on the prototype of
+   * final derived owner classes.  It is not used on counterpart (non-owner) classes.
+   */
+  RPC_TYPE_ID: string;
 };
 
 /**
@@ -166,9 +164,7 @@ export class SharedObjectCounterpart extends SharedObject {
 };
 
 
-export interface SharedObjectConstructor {
-  new (rpc: RPC, options: any): SharedObjectCounterpart;
-}
+export interface SharedObjectConstructor { new (rpc: RPC, options: any): SharedObjectCounterpart; }
 
 registerRPC('SharedObject.dispose', function(x) {
   let obj = <SharedObject>this.get(x['id']);
@@ -179,7 +175,7 @@ registerRPC('SharedObject.dispose', function(x) {
     console.log(`[${IS_WORKER}] #rpc objects: ${this.numObjects}`);
   }
   obj.disposed();
-  this.delete(obj.rpcId);
+  this.delete(obj.rpcId!);
   obj.rpcId = null;
   obj.rpc = null;
 });
@@ -192,14 +188,36 @@ registerRPC('SharedObject.refCountReachedZero', function(x) {
 
 const sharedObjectConstructors = new Map<string, SharedObjectConstructor>();
 
-export function registerSharedObject(name: string, constructorFunction: SharedObjectConstructor) {
-  sharedObjectConstructors.set(name, constructorFunction);
+/**
+ * Register a class as a SharedObject owner type under the specified identifier.
+ *
+ * This is intended to be used as a decorator.
+ */
+export function registerSharedObjectOwner(identifier: string) {
+  return (constructorFunction: {prototype: {RPC_TYPE_ID: string}}) => {
+    constructorFunction.prototype.RPC_TYPE_ID = identifier;
+  };
+}
+
+/**
+ * Register a class as a SharedObject counterpart type under the specified identifier.
+ *
+ * This is intended to be used as a decorator.
+ *
+ * Also register the type as a SharedObject owner, which is useful if this type is also used as a
+ * SharedObject owner.
+ */
+export function registerSharedObject(identifier: string) {
+  return (constructorFunction: SharedObjectConstructor) => {
+    sharedObjectConstructors.set(identifier, constructorFunction);
+    constructorFunction.prototype.RPC_TYPE_ID = identifier;
+  };
 }
 
 registerRPC('SharedObject.new', function(x) {
   let rpc = <RPC>this;
   let typeName = <string>x['type'];
-  let constructorFunction = sharedObjectConstructors.get(typeName);
+  let constructorFunction = sharedObjectConstructors.get(typeName)!;
   let obj = new constructorFunction(rpc, x);
   // Counterpart objects start with a reference count of zero.
   --obj.refCount;

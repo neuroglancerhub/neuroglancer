@@ -32,7 +32,7 @@ export class RefCounted implements Disposable {
     this.refCountReachedZero();
   }
 
-  protected refCountReachedZero () {
+  protected refCountReachedZero() {
     this.disposed();
     let {disposers} = this;
     if (disposers != null) {
@@ -45,7 +45,7 @@ export class RefCounted implements Disposable {
           (<() => void>disposer).call(this);
         }
       }
-      this.disposers = null;
+      this.disposers = <any>undefined;
     }
   }
   disposed() {}

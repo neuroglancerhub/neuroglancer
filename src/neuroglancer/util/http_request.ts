@@ -15,7 +15,7 @@
  */
 
 import {simpleStringHash} from 'neuroglancer/util/hash';
-import {makeCancellablePromise, CancellablePromise} from 'neuroglancer/util/promise';
+import {CancellablePromise, makeCancellablePromise} from 'neuroglancer/util/promise';
 
 export type RequestModifier = (request: XMLHttpRequest) => void;
 
@@ -28,7 +28,7 @@ export class HttpError extends Error {
   code: number;
   statusMessage: string;
 
-  constructor (method: string, url: string, code: number, statusMessage: string) {
+  constructor(method: string, url: string, code: number, statusMessage: string) {
     let message = `${method} ${JSON.stringify(url)} resulted in HTTP error ${code}`;
     if (statusMessage) {
       message += `: ${statusMessage}`;
@@ -44,7 +44,8 @@ export class HttpError extends Error {
   }
 
   static fromXhr(xhr: XMLHttpRequest) {
-    return new HttpError((<any>xhr)[METHOD_SYMBOL], (<any>xhr)[URL_SYMBOL], xhr.status, xhr.statusText);
+    return new HttpError(
+        (<any>xhr)[METHOD_SYMBOL], (<any>xhr)[URL_SYMBOL], xhr.status, xhr.statusText);
   }
 };
 
@@ -74,7 +75,8 @@ export function openShardedHttpRequest(baseUrls: string|string[], path: string, 
   return xhr;
 }
 
-export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'arraybuffer'): CancellablePromise<ArrayBuffer>;
+export function sendHttpRequest(
+    xhr: XMLHttpRequest, responseType: 'arraybuffer'): CancellablePromise<ArrayBuffer>;
 export function sendHttpRequest(xhr: XMLHttpRequest, responseType: 'json'): CancellablePromise<any>;
 export function sendHttpRequest(xhr: XMLHttpRequest, responseType: string): any;
 

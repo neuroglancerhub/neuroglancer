@@ -17,7 +17,7 @@
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {MouseSelectionState} from 'neuroglancer/layer';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {vec3, vec4, mat2, kAxes, AXES_NAMES, Vec2, Vec3, Mat4} from 'neuroglancer/util/geom';
+import {AXES_NAMES, kAxes, vec3} from 'neuroglancer/util/geom';
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 
@@ -110,15 +110,17 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     } else {
       let {navigationState} = this;
       let offset = tempVec3;
+      let delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
       offset[0] = 0;
       offset[1] = 0;
-      offset[2] = (e.wheelDelta > 0 ? 1 : -1) * (e.shiftKey ? 10 : 1);
+      offset[2] = (delta > 0 ? -1 : 1) * (e.shiftKey ? 10 : 1);
       navigationState.pose.translateVoxelsRelative(offset);
     }
     e.preventDefault();
   }
+
   onMousedown(e: MouseEvent) {
-    if (event.target !== this.element) {
+    if (e.target !== this.element) {
       return;
     }
     this.onMousemove(e);

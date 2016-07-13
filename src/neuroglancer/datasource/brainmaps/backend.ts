@@ -16,48 +16,57 @@
 
 import 'neuroglancer/datasource/brainmaps/api_backend';
 
-import {handleChunkDownloadPromise} from 'neuroglancer/chunk_manager/backend';
+import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {makeRequest} from 'neuroglancer/datasource/brainmaps/api';
-import {VolumeChunkEncoding, VolumeSourceParameters, volumeSourceToString, MeshSourceParameters, meshSourceToString} from 'neuroglancer/datasource/brainmaps/base';
-import {ManifestChunk, FragmentChunk, MeshSource as GenericMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
-import {VolumeChunk, VolumeChunkSource as GenericVolumeChunkSource} from 'neuroglancer/sliceview/backend';
-import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
+import {MeshSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
+import {FragmentChunk, ManifestChunk, ParameterizedMeshSource, decodeJsonManifestChunk, decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
+import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3Key} from 'neuroglancer/util/geom';
-import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
 import {inflate} from 'pako';
 
-class VolumeChunkSource extends GenericVolumeChunkSource {
-  parameters: VolumeSourceParameters;
-  encodingParams: string;
-  chunkDecoder: ChunkDecoder;
+export function decodeGzippedRawChunk(chunk: VolumeChunk, response: ArrayBuffer) {
+  decodeRawChunk(chunk, inflate(new Uint8Array(response)).buffer);
+}
 
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    let parameters = this.parameters = options['parameters'];
+export function decodeGzippedCompressedSegmentationChunk(
+    chunk: VolumeChunk, response: ArrayBuffer) {
+  decodeCompressedSegmentationChunk(chunk, inflate(new Uint8Array(response)).buffer);
+}
+
+const CHUNK_DECODERS = new Map([
+  [
+    VolumeChunkEncoding.RAW,
+    decodeGzippedRawChunk,
+  ],
+  [VolumeChunkEncoding.JPEG, decodeJpegChunk],
+  [
+    VolumeChunkEncoding.COMPRESSED_SEGMENTATION,
+    decodeGzippedCompressedSegmentationChunk,
+  ]
+]);
+
+
+@registerChunkSource(VolumeSourceParameters)
+class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeSourceParameters> {
+  encodingParams = this.getEncodingParams();
+  chunkDecoder = CHUNK_DECODERS.get(this.parameters.encoding)!;
+
+  private getEncodingParams() {
+    let {encoding} = this.parameters;
     const compression_suffix = `/image_format_options.gzip_compression_level=6`;
-    switch (parameters['encoding']) {
+    switch (encoding) {
       case VolumeChunkEncoding.RAW:
-        this.chunkDecoder = (chunk, response) => {
-          decodeRawChunk(chunk, inflate(new Uint8Array(response)).buffer);
-        };
-        this.encodingParams = `/subvolume_format=RAW${compression_suffix}`;
-        break;
+        return `/subvolume_format=RAW${compression_suffix}`;
       case VolumeChunkEncoding.JPEG:
-        this.chunkDecoder = decodeJpegChunk;
-        this.encodingParams =
-            '/subvolume_format=SINGLE_IMAGE/image_format_options.image_format=JPEG';
-        break;
+        return '/subvolume_format=SINGLE_IMAGE/image_format_options.image_format=JPEG';
       case VolumeChunkEncoding.COMPRESSED_SEGMENTATION:
-        this.chunkDecoder = (chunk, response) => {
-          decodeCompressedSegmentationChunk(chunk, inflate(new Uint8Array(response)).buffer);
-        };
-        this.encodingParams =
-            `/subvolume_format=RAW/image_format_options.compressed_segmentation_block_size=${vec3Key(this.spec.compressedSegmentationBlockSize)}${compression_suffix}`;
-        break;
+        return `/subvolume_format=RAW/image_format_options.compressed_segmentation_block_size=${vec3Key(this.spec.compressedSegmentationBlockSize!)}${compression_suffix}`;
+      default:
+        throw new Error(`Invalid encoding: ${encoding}`);
     }
   }
 
@@ -68,16 +77,14 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
       // chunkPosition must not be captured, since it will be invalidated by the next call to
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
-      let {chunkDataSize} = chunk;
+      let chunkDataSize = chunk.chunkDataSize!;
       path =
           `/v1beta2/binary/volumes/binary/volumes/subvolume/header.volume_id=${parameters['volume_id']}/geometry.corner=${vec3Key(chunkPosition)}/geometry.size=${vec3Key(chunkDataSize)}/geometry.scale=${parameters['scaleIndex']}${this.encodingParams}?alt=media`;
     }
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'), this.chunkDecoder);
   }
-  toString() { return volumeSourceToString(this.parameters); }
 };
-registerSharedObject('brainmaps/VolumeChunkSource', VolumeChunkSource);
 
 function decodeManifestChunk(chunk: ManifestChunk, response: any) {
   return decodeJsonManifestChunk(chunk, response, 'fragmentKey');
@@ -94,16 +101,12 @@ function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer) {
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/8, numVertices);
 }
 
-class MeshSource extends GenericMeshSource {
-  parameters: MeshSourceParameters;
-  constructor (rpc: RPC, options: any) {
-    super(rpc, options);
-    this.parameters = options['parameters'];
-  }
-
+@registerChunkSource(MeshSourceParameters)
+class MeshSource extends ParameterizedMeshSource<MeshSourceParameters> {
   download(chunk: ManifestChunk) {
     let {parameters} = this;
-    const path = `/v1beta2/objects/${parameters['volume_id']}/meshes/${parameters['mesh_name']}:listfragments?object_id=${chunk.objectId}`;
+    const path =
+        `/v1beta2/objects/${parameters['volume_id']}/meshes/${parameters['mesh_name']}:listfragments?object_id=${chunk.objectId}`;
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'json'), decodeManifestChunk);
   }
@@ -111,12 +114,9 @@ class MeshSource extends GenericMeshSource {
   downloadFragment(chunk: FragmentChunk) {
     let {parameters} = this;
     const path =
-        `/v1beta2/binary/objects/binary/objects/fragment/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/fragment_key=${chunk.fragmentId}/object_id=${chunk.manifestChunk.objectId}?alt=media`;
+        `/v1beta2/binary/objects/binary/objects/fragment/header.volume_id=${parameters['volume_id']}/mesh_name=${parameters['mesh_name']}/fragment_key=${chunk.fragmentId}/object_id=${chunk.manifestChunk!.objectId}?alt=media`;
     handleChunkDownloadPromise(
         chunk, makeRequest(parameters['instance'], 'GET', path, 'arraybuffer'),
         decodeFragmentChunk);
   }
-
-  toString() { return meshSourceToString(this.parameters); }
 };
-registerSharedObject('brainmaps/MeshSource', MeshSource);

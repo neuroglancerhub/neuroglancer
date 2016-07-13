@@ -15,6 +15,7 @@
  */
 
 import {WritableArrayLike} from 'neuroglancer/util/array';
+import {vec3} from 'neuroglancer/util/geom';
 
 export function verifyFloat(obj: any) {
   let t = typeof obj;
@@ -27,9 +28,17 @@ export function verifyFloat(obj: any) {
   throw new Error(`Expected floating-point number, but received: ${JSON.stringify(obj)}.`);
 }
 
-export function verifyFinitePositiveFloat(obj: any) {
+export function verifyFiniteFloat(obj: any) {
   let x = verifyFloat(obj);
-  if (Number.isFinite(x) && x > 0) {
+  if (Number.isFinite(x)) {
+    return x;
+  }
+  throw new Error(`Expected finite floating-point number, but received: ${x}.`);
+}
+
+export function verifyFinitePositiveFloat(obj: any) {
+  let x = verifyFiniteFloat(obj);
+  if (x > 0) {
     return x;
   }
   throw new Error(`Expected positive finite floating-point number, but received: ${x}.`);
@@ -201,12 +210,12 @@ const SINGLE_OR_DOUBLE_QUOTE_STRING_PATTERN =
     new RegExp(`${SINGLE_QUOTE_STRING_PATTERN.source}|${DOUBLE_QUOTE_STRING_PATTERN.source}`);
 const DOUBLE_OR_SINGLE_QUOTE_STRING_PATTERN =
     new RegExp(`${DOUBLE_QUOTE_STRING_PATTERN.source}|${SINGLE_QUOTE_STRING_PATTERN.source}`);
-//const stringLiteralPattern = /('(?:[^'\\]|(?:\\.))*')|("(?:[^"\\]|(?:\\.))*")/;
 
 const DOUBLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)"/;
 const SINGLE_QUOTE_PATTERN = /^((?:[^"'\\]|(?:\\.))*)'/;
 
-function convertStringLiteral(x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
+function convertStringLiteral(
+    x: string, quoteInitial: string, quoteReplace: string, quoteSearch: RegExp) {
   if (x.length >= 2 && x.charAt(0) === quoteInitial && x.charAt(x.length - 1) === quoteInitial) {
     let inner = x.substr(1, x.length - 2);
     let s = quoteReplace;
@@ -234,7 +243,6 @@ function convertStringLiteral(x: string, quoteInitial: string, quoteReplace: str
 export function normalizeStringLiteral(x: string) {
   return convertStringLiteral(x, '\'', '"', DOUBLE_QUOTE_PATTERN);
 }
-
 
 
 
@@ -267,7 +275,8 @@ function convertJsonHelper(x: string, desiredCommaChar: string, desiredQuoteChar
       x = x.substr(m.index + m[0].length);
       let originalString = m[1];
       if (originalString !== undefined) {
-        replacement = convertStringLiteral(originalString, quoteInitial, desiredQuoteChar, quoteSearch);
+        replacement =
+            convertStringLiteral(originalString, quoteInitial, desiredQuoteChar, quoteSearch);
       } else {
         replacement = m[2];
       }
@@ -420,7 +429,8 @@ export function verifyObjectAsMap<T>(obj: any, validator: (value: any) => T): Ma
 
 export function verifyFloat01(obj: any): number {
   if (typeof obj !== 'number' || !Number.isFinite(obj) || obj < 0 || obj > 1) {
-    throw new Error(`Expected floating point number in [0,1], but received: ${JSON.stringify(obj)}.`);
+    throw new Error(
+        `Expected floating point number in [0,1], but received: ${JSON.stringify(obj)}.`);
   }
   return obj;
 }
@@ -447,4 +457,34 @@ export function parseQueryStringParameters(queryString: string) {
     }
     return result;
   }
+}
+
+/**
+ * Verifies that `obj' is a string that, when converted to uppercase, matches a string property of
+ * `enumType`.
+ *
+ * Note: TypeScript does not seem to allow better typing of the return type.
+ *
+ * @returns The corresponding numerical value.
+ */
+export function verifyEnumString(obj: any, enumType: {[x: string]: any}): number {
+  if (typeof obj === 'string' && obj.match(/^[a-zA-Z]/) !== null) {
+    obj = obj.toUpperCase();
+    if (enumType.hasOwnProperty(obj)) {
+      return enumType[obj];
+    }
+  }
+  throw new Error(`Invalid enum value: ${JSON.stringify(obj)}.`);
+}
+
+export function verify3dVec(obj: any) {
+  return parseFixedLengthArray(vec3.create(), obj, verifyFiniteFloat);
+}
+
+export function verify3dScale(obj: any) {
+  return parseFixedLengthArray(vec3.create(), obj, verifyFinitePositiveFloat);
+}
+
+export function verify3dDimensions(obj: any) {
+  return parseFixedLengthArray(vec3.create(), obj, verifyPositiveInt);
 }

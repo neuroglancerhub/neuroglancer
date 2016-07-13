@@ -14,7 +14,31 @@
  * limitations under the License.
  */
 
-/**
- * This is a simple wrapper of sortablejs that is compatible with ES6 modules.
- */
-exports.Sortable = require('sortablejs');
+.image-dropdown .CodeMirror {
+  height: 6em;
+  width: 60ch;
+  border: 1px solid transparent;
+}
+
+.image-dropdown .CodeMirror.invalid-input {
+  border: 1px solid red;
+}
+
+.image-dropdown .CodeMirror.valid-input {
+  border: 1px solid green;
+}
+
+.image-dropdown-top-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+/* .image-dropdown-top-row .range-slider {
+  flex: 1;
+} */
+
+.image-layer-shader-overlay .CodeMirror {
+  width: 80vw;
+  height: 80vh;
+}

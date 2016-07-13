@@ -50,7 +50,8 @@ const DEFAULT_BABEL_PLUGINS = exports.DEFAULT_BABEL_PLUGINS = [
   // not fixed as of Firefox 46.
   require.resolve('babel-plugin-transform-es2015-block-scoping'),
 
-  // This is needed in order to avoid transform-es2015-block-scoping generating invalid code.
+  // This is needed in order to avoid transform-es2015-block-scoping generating
+  // invalid code.
   require.resolve('babel-plugin-transform-es2015-classes'),
 ];
 
@@ -60,6 +61,7 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   'neuroglancer/datasource/dvid',
   'neuroglancer/datasource/openconnectome',
   'neuroglancer/datasource/precomputed',
+  'neuroglancer/datasource/python',
 ];
 
 /**
@@ -73,7 +75,8 @@ function getTypescriptLoaderEntry(options) {
     options = {};
   }
   const useBabel = options.useBabel !== undefined ? options.useBabel : true;
-  const babelPlugins = options.babelPlugins !== undefined ? options.babelPlugins : DEFAULT_BABEL_PLUGINS;
+  const babelPlugins =
+      options.babelPlugins !== undefined ? options.babelPlugins : DEFAULT_BABEL_PLUGINS;
   const babelConfig = {
     cacheDirectory: true,
     plugins: babelPlugins,
@@ -81,7 +84,7 @@ function getTypescriptLoaderEntry(options) {
 
   let tsLoaderPrefix = '';
   tsLoaderPrefix = `babel?${JSON.stringify(babelConfig)}!`;
-  return { test: /\.ts$/, loader: tsLoaderPrefix + 'ts' };
+  return {test: /\.ts$/, loader: tsLoaderPrefix + 'ts'};
 }
 
 /**
@@ -90,9 +93,11 @@ function getTypescriptLoaderEntry(options) {
  * @param {object} options In addition to the options of getTypescriptLoaderEntry, the following
  *     options are also valid.
  * @param {string=} options.tsconfigPath Alternative path to tsconfig.json to use, e.g. in order to
- *     specify additional path aliases.  Any path aliases specified in tsconfig will automatically be added as webpack resolve aliases.
+ *     specify additional path aliases.  Any path aliases specified in tsconfig will automatically
+ * be added as webpack resolve aliases.
  * @param {Object.<string,string>} options.resolveAliases Additional module aliases for webpack.
- * @param {Object.<string,string>} options.resolveLoaderAliases Additional loader aliases for webpack.
+ * @param {Object.<string,string>} options.resolveLoaderAliases Additional loader aliases for
+ * webpack.
  * @param {string[]} options.resolveLoaderRoots Additional root directories for finding webpack
  *     loaders.  You may want to include the path to the 'node_modules' directory of your project.
  * @param {boolean=} options.noOutput If true, no output section is added to the configuration.
@@ -115,9 +120,8 @@ function getBaseConfig(options) {
         console.log(`Skipping ${JSON.stringify(key)} -> ${JSON.stringify(value)}`);
         continue;
       }
-      const resolvedTarget = resolveReal(
-          path.dirname(tsconfigPath),
-          value[0].substring(0, value[0].length - 2));
+      const resolvedTarget =
+          resolveReal(path.dirname(tsconfigPath), value[0].substring(0, value[0].length - 2));
       extraResolveAliases[key.substring(0, key.length - 2)] = resolvedTarget;
       newCompilerPaths[key] = [resolvedTarget + '/*'];
     }
@@ -133,8 +137,7 @@ function getBaseConfig(options) {
             // Patched version of jpgjs.
             'jpgjs': resolveReal(__dirname, '../third_party/jpgjs/jpg.js'),
           },
-          extraResolveAliases,
-          options.resolveAliases || {}),
+          extraResolveAliases, options.resolveAliases || {}),
     },
     resolveLoader: {
       alias: Object.assign(
@@ -151,10 +154,11 @@ function getBaseConfig(options) {
     module: {
       loaders: [
         getTypescriptLoaderEntry(options),
-        {
-          test: /\.css$/,
-          loader: ExtractTextPlugin.extract('style-loader', 'css-loader')
-        },
+        {test: /\.json$/, loader: require.resolve('json-loader')},
+        {test: /\.css$/, loader: ExtractTextPlugin.extract('style-loader', 'css-loader')}, {
+          test: /\.glsl$/,
+          loader: require.resolve('raw-loader'),
+        }
       ],
     },
     node: {'Buffer': false},
@@ -169,11 +173,7 @@ function getBaseConfig(options) {
     if (options.outputPath === undefined) {
       throw new Error('options.outputPath must be specified.');
     }
-    baseConfig.output = {
-      filename: '[name].bundle.js',
-      path: options.outputPath,
-      sourcePrefix: ''
-    };
+    baseConfig.output = {filename: '[name].bundle.js', path: options.outputPath, sourcePrefix: ''};
   }
   return baseConfig;
 }
@@ -238,8 +238,8 @@ function getViewerConfig(options) {
     // To deploy to a different origin, you will need to generate your
     // own client ID from on the Google Developer Console and substitute
     // it in.
-    'BRAINMAPS_CLIENT_ID': JSON.stringify(
-        '639403125587-4k5hgdfumtrvur8v48e3pr7oo91d765k.apps.googleusercontent.com'),
+    'BRAINMAPS_CLIENT_ID':
+        JSON.stringify('639403125587-4k5hgdfumtrvur8v48e3pr7oo91d765k.apps.googleusercontent.com'),
   };
   let extraDefines = options.defines || {};
   let srcDir = resolveReal(__dirname, '../src');
@@ -265,7 +265,8 @@ function getViewerConfig(options) {
     ...extraChunkWorkerModules,
   ];
   let frontendModules = options.frontendModules || [resolveReal(srcDir, 'main.ts')];
-  let htmlPlugin = options.htmlPlugin || new HtmlWebpackPlugin({template: resolveReal(srcDir, 'index.html')});
+  let htmlPlugin =
+      options.htmlPlugin || new HtmlWebpackPlugin({template: resolveReal(srcDir, 'index.html')});
   let cssPlugin = options.cssPlugin || new ExtractTextPlugin('styles.css', {allChunks: true});
   return [
     Object.assign(
@@ -274,10 +275,9 @@ function getViewerConfig(options) {
           plugins: [
             htmlPlugin,
             cssPlugin,
-            new webpack.DefinePlugin(
-                Object.assign({}, defaultDefines, extraDefines, {
-                  'WORKER': false,
-                })),
+            new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines, {
+              'WORKER': false,
+            })),
             ...extraFrontendPlugins,
             ...commonPlugins,
             ...extraCommonPlugins,
@@ -288,8 +288,8 @@ function getViewerConfig(options) {
         {
           entry: {'chunk_worker': [...chunkWorkerModules]},
           plugins: [
-            new webpack.DefinePlugin(Object.assign(
-                {}, defaultDefines, extraDefines, {'WORKER': true})),
+            new webpack.DefinePlugin(
+                Object.assign({}, defaultDefines, extraDefines, {'WORKER': true})),
             ...extraChunkWorkerPlugins,
             ...commonPlugins,
             ...extraCommonPlugins,

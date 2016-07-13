@@ -22,10 +22,10 @@ import {PickIDManager} from 'neuroglancer/object_picking';
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {vec3, vec4, mat4, Vec3, Mat4, kAxes} from 'neuroglancer/util/geom';
+import {Mat4, Vec3, kAxes, mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
-import {OffscreenFramebuffer, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
+import {OffscreenCopyHelper, OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 import {Signal} from 'signals';
@@ -97,8 +97,8 @@ export class PerspectivePanel extends RenderedDataPanel {
   viewer: PerspectiveViewerState;
   inverseProjectionMat = mat4.create();
   modelViewMat = mat4.create();
-  width: number = null;
-  height: number = null;
+  width = 0;
+  height = 0;
   private pickIDs = new PickIDManager();
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper = this.registerDisposer(SliceViewRenderHelper.get(
@@ -188,7 +188,7 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   onMousedown(e: MouseEvent) {
-    if (event.target !== this.element) {
+    if (e.target !== this.element) {
       return;
     }
     super.onMousedown(e);
@@ -204,7 +204,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
   }
   draw() {
-    if (!this.navigationState.valid) {
+    let {width, height} = this;
+    if (!this.navigationState.valid || width === 0 || height === 0) {
       return;
     }
 
@@ -213,7 +214,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     }
 
     let gl = this.gl;
-    this.offscreenFramebuffer.bind(this.width, this.height);
+    this.offscreenFramebuffer.bind(width, height);
 
     gl.disable(gl.SCISSOR_TEST);
     this.gl.clearColor(0.0, 0.0, 0.0, 0.0);

@@ -15,8 +15,8 @@
  */
 
 import {removeFromParent} from 'neuroglancer/util/dom';
-import {verifyObject, verifyString, parseArray} from 'neuroglancer/util/json';
-import {makeCancellablePromise, callFinally} from 'neuroglancer/util/promise';
+import {parseArray, verifyObject, verifyString} from 'neuroglancer/util/json';
+import {callFinally, makeCancellablePromise} from 'neuroglancer/util/promise';
 import {getRandomHexString} from 'neuroglancer/util/random';
 
 export const AUTH_SERVER = 'https://accounts.google.com/o/oauth2/auth';
@@ -38,7 +38,6 @@ interface PromiseCallbacks<T> {
   resolve: (x: T) => void;
   reject: (x: string) => void;
 }
-;
 
 export interface Token {
   accessToken: string;
@@ -46,7 +45,6 @@ export interface Token {
   tokenType: string;
   scope: string;
 }
-;
 
 class AuthHandler {
   proxyName = `postmessageRelay${getRandomHexString()}`;
@@ -150,6 +148,7 @@ class AuthHandler {
     state?: string,
     origin?: string,
     loginHint?: string,
+    authUser?: number,
     immediate?: boolean
   }) {
     let url = `${AUTH_SERVER}?client_id=${encodeURIComponent(options.clientId)}`;
@@ -172,6 +171,9 @@ class AuthHandler {
     if (options.immediate) {
       url += `&immediate=true`;
     }
+    if (options.authUser !== undefined) {
+      url += `&authuser=${options.authUser}`;
+    }
     return url;
   }
 };
@@ -188,7 +190,11 @@ function authHandler() {
 
 export function authenticateGoogleOAuth2(options: {
   clientId: string,
-  scopes: string[], approvalPrompt?: 'force' | 'auto', loginHint?: string, immediate?: boolean
+  scopes: string[],
+  approvalPrompt?: 'force' | 'auto',
+  loginHint?: string,
+  immediate?: boolean,
+  authUser?: number,
 }) {
   const state = getRandomHexString();
   const handler = authHandler();
@@ -199,11 +205,13 @@ export function authenticateGoogleOAuth2(options: {
     approvalPrompt: options.approvalPrompt,
     loginHint: options.loginHint,
     immediate: options.immediate,
+    authUser: options.authUser,
   });
   let promise = handler.getAuthPromise(state);
 
   if (options.immediate) {
-    // For immediate mode auth, we can wait until the relay is ready, since we aren't opening a new
+    // For immediate mode auth, we can wait until the relay is ready, since we
+    // aren't opening a new
     // window.
     handler.relayReadyPromise.then(() => {
       let iframe = document.createElement('iframe');

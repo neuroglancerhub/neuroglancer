@@ -22,19 +22,20 @@
  * (each corresponding to a different variable) in NPY binary format.
  */
 
-import {DataType} from 'neuroglancer/sliceview/base';
 import {VolumeChunk} from 'neuroglancer/sliceview/backend';
+import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
+import {DataType} from 'neuroglancer/sliceview/base';
+import {vec3Key} from 'neuroglancer/util/geom';
 import {parseNpy} from 'neuroglancer/util/npy';
 import {inflate} from 'pako';
-import {vec3Key} from 'neuroglancer/util/geom';
-import {postProcessRawData} from 'neuroglancer/sliceview/backend_chunk_decoders/postprocess';
 
 export function decodeNdstoreNpzChunk(chunk: VolumeChunk, response: ArrayBuffer) {
   let parseResult = parseNpy(inflate(new Uint8Array(response)));
-  let {chunkDataSize} = chunk;
-  let {source} = chunk;
+  let chunkDataSize = chunk.chunkDataSize!;
+  let source = chunk.source!;
+  let {numChannels} = source.spec;
   let {shape} = parseResult;
-  if (shape.length !== 4 || shape[0] !== 1 || shape[1] !== chunkDataSize[2] ||
+  if (shape.length !== 4 || shape[0] !== numChannels || shape[1] !== chunkDataSize[2] ||
       shape[2] !== chunkDataSize[1] || shape[3] !== chunkDataSize[0]) {
     throw new Error(
         `Shape ${JSON.stringify(shape)} does not match chunkDataSize ${vec3Key(chunkDataSize)}`);

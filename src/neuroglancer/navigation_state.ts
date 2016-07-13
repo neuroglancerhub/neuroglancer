@@ -15,7 +15,7 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Vec3, Quat, Mat4, mat3, vec3, quat, mat4} from 'neuroglancer/util/geom';
+import {Mat4, Quat, Vec3, mat3, mat4, quat, vec3} from 'neuroglancer/util/geom';
 import {parseFiniteVec} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
 
@@ -85,7 +85,7 @@ export class SpatialPosition extends RefCounted {
   voxelSize: VoxelSize;
   spatialCoordinates: Vec3;
   spatialCoordinatesValid: boolean;
-  private voxelCoordinates: Vec3 = null;
+  private voxelCoordinates: Vec3|null = null;
   changed = new Signal();
   constructor(voxelSize?: VoxelSize, spatialCoordinates?: Vec3) {
     super();
@@ -198,10 +198,12 @@ export class SpatialPosition extends RefCounted {
       } catch (e) {
       }
     }
-    try {
-      parseFiniteVec(this.spatialCoordinates, obj['spatialCoordinates']);
-      this.markSpatialCoordinatesChanged();
-    } catch (e) {
+    if (obj.hasOwnProperty('spatialCoordinates')) {
+      try {
+        parseFiniteVec(this.spatialCoordinates, obj['spatialCoordinates']);
+        this.markSpatialCoordinatesChanged();
+      } catch (e) {
+      }
     }
   }
 
@@ -455,9 +457,9 @@ export class TrackableZoomState {
   }
   changed = new Signal();
 
-  toJSON () {
+  toJSON() {
     let {value_, defaultValue} = this;
-    if (Number.isNaN(value_) === Number.isNaN(defaultValue) || value_ === defaultValue) {
+    if (Number.isNaN(value_) && Number.isNaN(defaultValue) || value_ === defaultValue) {
       return undefined;
     }
     return value_;
@@ -471,9 +473,7 @@ export class TrackableZoomState {
     }
   }
 
-  reset() {
-    this.value = this.defaultValue;
-  }
+  reset() { this.value = this.defaultValue; }
 
   zoomBy(factor: number) {
     let {value_} = this;
@@ -498,7 +498,8 @@ export class NavigationState extends RefCounted {
     this.registerDisposer(pose);
     this.registerSignalBinding(this.pose.changed.add(() => { this.changed.dispatch(); }));
     this.registerSignalBinding(this.zoomFactor.changed.add(() => { this.changed.dispatch(); }));
-    this.registerSignalBinding(this.voxelSize.changed.add(() => { this.handleVoxelSizeChanged(); }));
+    this.registerSignalBinding(
+        this.voxelSize.changed.add(() => { this.handleVoxelSizeChanged(); }));
     this.handleVoxelSizeChanged();
   }
   get voxelSize() { return this.pose.position.voxelSize; }
@@ -554,7 +555,5 @@ export class NavigationState extends RefCounted {
     this.changed.dispatch();
   }
 
-  zoomBy(factor: number) {
-    this.zoomFactor.zoomBy(factor);
-  }
+  zoomBy(factor: number) { this.zoomFactor.zoomBy(factor); }
 };

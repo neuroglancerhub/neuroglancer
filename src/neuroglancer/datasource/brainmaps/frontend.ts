@@ -17,16 +17,19 @@
 import 'neuroglancer/datasource/brainmaps/api_frontend';
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {makeRequest, INSTANCE_NAMES, INSTANCE_IDENTIFIERS, PRODUCTION_INSTANCE, BrainmapsInstance} from 'neuroglancer/datasource/brainmaps/api';
-import {VolumeChunkEncoding, VolumeSourceParameters, volumeSourceToString, MeshSourceParameters, meshSourceToString} from 'neuroglancer/datasource/brainmaps/base';
+import {BrainmapsInstance, INSTANCE_IDENTIFIERS, INSTANCE_NAMES, PRODUCTION_INSTANCE, makeRequest} from 'neuroglancer/datasource/brainmaps/api';
+import {MeshSourceParameters, VolumeChunkEncoding, VolumeSourceParameters} from 'neuroglancer/datasource/brainmaps/base';
 import {registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {DataType, VolumeType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
-import {VolumeChunkSource as GenericVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {getPrefixMatches} from 'neuroglancer/util/completion';
+import {defineParameterizedMeshSource} from 'neuroglancer/mesh/frontend';
+import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
+import {getPrefixMatches} from 'neuroglancer/util/completion';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
-import {verifyObject, verifyString, verifyPositiveInt, verifyMapKey, verifyFinitePositiveFloat, parseXYZ, parseArray, stableStringify, verifyObjectProperty} from 'neuroglancer/util/json';
-import {MeshSource as GenericMeshSource} from 'neuroglancer/mesh/frontend';
+import {parseArray, parseXYZ, stableStringify, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+
+const VolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeSourceParameters);
+const MeshSource = defineParameterizedMeshSource(MeshSourceParameters);
 
 const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
@@ -49,18 +52,6 @@ export class VolumeInfo {
       throw new Error(`Failed to parse BrainMaps volume geometry: ${parseError.message}`);
     }
   }
-};
-
-export class VolumeChunkSource extends GenericVolumeChunkSource {
-  constructor(
-      chunkManager: ChunkManager, spec: VolumeChunkSpecification,
-      public parameters: VolumeSourceParameters) {
-    super(chunkManager, spec);
-    this.initializeCounterpart(
-        chunkManager.rpc, {'type': 'brainmaps/VolumeChunkSource', 'parameters': parameters});
-  }
-
-  toString() { return volumeSourceToString(this.parameters); }
 };
 
 export class MeshInfo {
@@ -105,21 +96,18 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
       }
 
       // Infer the VolumeType from the data type and number of channels.
-      let volumeType = VolumeType.UNKNOWN;
+      let volumeType = VolumeType.IMAGE;
       if (numChannels === 1) {
         switch (dataType) {
           case DataType.UINT64:
             volumeType = VolumeType.SEGMENTATION;
             break;
-          case DataType.UINT8:
-          case DataType.FLOAT32:
-            volumeType = VolumeType.IMAGE;
-            break;
         }
       }
       this.volumeType = volumeType;
     } catch (parseError) {
-      throw new Error(`Failed to parse BrainMaps multiscale volume specification: ${parseError.message}`);
+      throw new Error(
+          `Failed to parse BrainMaps multiscale volume specification: ${parseError.message}`);
     }
     try {
       verifyObject(meshesResponse);
@@ -138,56 +126,44 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
     let encoding = VolumeChunkEncoding.RAW;
     if (this.volumeType === VolumeType.SEGMENTATION) {
       encoding = VolumeChunkEncoding.COMPRESSED_SEGMENTATION;
-    } else if (this.volumeType === VolumeType.IMAGE && this.dataType === DataType.UINT8) {
+    } else if (
+        this.volumeType === VolumeType.IMAGE && this.dataType === DataType.UINT8 &&
+        this.numChannels === 1) {
       encoding = VolumeChunkEncoding.JPEG;
     }
 
     return this.scales.map(
-        (volumeInfo, scaleIndex) =>
-            Array
-                .from(VolumeChunkSpecification.getDefaults({
-                  voxelSize: volumeInfo.voxelSize,
-                  dataType: volumeInfo.dataType,
-                  numChannels: volumeInfo.numChannels,
-                  lowerVoxelBound: vec3.fromValues(0, 0, 0),
-                  upperVoxelBound: volumeInfo.upperVoxelBound,
-                  volumeType: this.volumeType,
-                }))
-                .map(spec => {
-
-                  let parameters: VolumeSourceParameters = {
-                    'instance': this.instance,
-                    'volume_id': this.volume_id,
-                    'scaleIndex': scaleIndex,
-                    'encoding': encoding
-                  };
-                  return chunkManager.getChunkSource(
-                      VolumeChunkSource, stableStringify(parameters),
-                      () => new VolumeChunkSource(chunkManager, spec, parameters));
-                }));
+        (volumeInfo, scaleIndex) => VolumeChunkSpecification
+                                        .getDefaults({
+                                          voxelSize: volumeInfo.voxelSize,
+                                          dataType: volumeInfo.dataType,
+                                          numChannels: volumeInfo.numChannels,
+                                          upperVoxelBound: volumeInfo.upperVoxelBound,
+                                          volumeType: this.volumeType,
+                                        })
+                                        .map(spec => {
+                                          return VolumeChunkSource.get(chunkManager, spec, {
+                                            'instance': this.instance,
+                                            'volume_id': this.volume_id,
+                                            'scaleIndex': scaleIndex,
+                                            'encoding': encoding
+                                          });
+                                        }));
   }
 
-  getMeshSource(chunkManager: ChunkManager): MeshSource|null {
+  getMeshSource(chunkManager: ChunkManager) {
     let validMesh = this.meshes.find(x => x.type === 'TRIANGLES');
     if (validMesh === undefined) {
       return null;
     }
-    return getMeshSource(chunkManager, {'instance': this.instance, 'volume_id': this.volume_id, 'mesh_name': validMesh.name});
+    return getMeshSource(
+        chunkManager,
+        {'instance': this.instance, 'volume_id': this.volume_id, 'mesh_name': validMesh.name});
   }
-};
-
-export class MeshSource extends GenericMeshSource {
-  constructor(chunkManager: ChunkManager, public parameters: MeshSourceParameters) {
-    super(chunkManager);
-    this.initializeCounterpart(
-        this.chunkManager.rpc, {'type': 'brainmaps/MeshSource', 'parameters': parameters});
-  }
-  toString() { return meshSourceToString(this.parameters); }
 };
 
 export function getMeshSource(chunkManager: ChunkManager, parameters: MeshSourceParameters) {
-  return chunkManager.getChunkSource(
-      MeshSource, stableStringify(parameters), () => new MeshSource(chunkManager, parameters));
+  return MeshSource.get(chunkManager, parameters);
 }
 
 let existingVolumes = new Map<string, Promise<MultiscaleVolumeChunkSource>>();
@@ -213,7 +189,7 @@ export function getVolume(instance: BrainmapsInstance, key: string) {
 export class VolumeList {
   volumeIds: string[];
   hierarchicalVolumeIds = new Map<string, string[]>();
-  constructor (response: any) {
+  constructor(response: any) {
     try {
       verifyObject(response);
       let volumeIds = this.volumeIds = parseArray(response['volumeId'], verifyString);
@@ -222,7 +198,7 @@ export class VolumeList {
       for (let volumeId of volumeIds) {
         let componentStart = 0;
         while (true) {
-          let nextColon = volumeId.indexOf(':', componentStart);
+          let nextColon: number|undefined = volumeId.indexOf(':', componentStart);
           if (nextColon === -1) {
             nextColon = undefined;
           } else {

@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-import {ManagedUserLayer, UserLayer} from 'neuroglancer/layer';
+import {ManagedUserLayer, UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
+import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
-import {Disposable, RefCounted} from 'neuroglancer/util/disposable';
+import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren} from 'neuroglancer/util/dom';
 import {positionDropdown} from 'neuroglancer/util/dropdown';
-import {Sortable} from 'neuroglancer/util/sortablejs_es6';
-import {LayerDialog} from 'neuroglancer/layer_dialog';
+
+// Sortable must be imported using non-ES6 module syntax because of how it is exported.
+import Sortable = require('sortablejs');
 
 require('neuroglancer/noselect.css');
 require('./layer_panel.css');
@@ -32,8 +34,8 @@ class LayerWidget extends RefCounted {
   labelElement: HTMLSpanElement;
   valueElement: HTMLSpanElement;
   dropdownElement: HTMLDivElement;
-  dropdown: Disposable;
-  userLayer: UserLayer;
+  dropdown: UserLayerDropdown|undefined;
+  userLayer: UserLayer|null;
   hovering: boolean;
 
   constructor(public layer: ManagedUserLayer, public panel: LayerPanel) {
@@ -52,16 +54,15 @@ class LayerWidget extends RefCounted {
     let closeElement = document.createElement('span');
     closeElement.title = 'Delete layer';
     closeElement.className = 'layer-item-close';
-    this.registerEventListener(
-      closeElement, 'click', (event: MouseEvent) => {
-        this.panel.layerManager.removeManagedLayer(this.layer);
-      });
+    this.registerEventListener(closeElement, 'click', (event: MouseEvent) => {
+      this.panel.layerManager.removeManagedLayer(this.layer);
+    });
     widgetElement.appendChild(layerNumberElement);
     widgetElement.appendChild(labelElement);
     widgetElement.appendChild(valueElement);
     widgetElement.appendChild(closeElement);
     this.registerEventListener(
-      widgetElement, 'click', (event: MouseEvent) => { layer.setVisible(!layer.visible); });
+        widgetElement, 'click', (event: MouseEvent) => { layer.setVisible(!layer.visible); });
 
     // Hide the dropdown menu while dragging.  We can't wait until the onStart handler from
     // Sortablejs fires because it occurs too late to affect what is shown while dragging.
@@ -102,17 +103,26 @@ class LayerWidget extends RefCounted {
   }
 
   updateDropdownState() {
+    let style = this.dropdownElement.style;
     if (this.hovering && !this.panel.dragging && this.dropdownElement.childElementCount > 0) {
-      this.dropdownElement.style.display = 'flex';
+      if (style.display !== 'flex') {
+        style.display = 'flex';
+        if (this.dropdown) {
+          this.dropdown.onShow();
+        }
+      }
       positionDropdown(this.dropdownElement, this.widgetElement);
     } else {
-      this.dropdownElement.style.display = 'none';
+      if (style.display !== 'none') {
+        this.dropdownElement.style.display = 'none';
+        if (this.dropdown) {
+          this.dropdown.onHide();
+        }
+      }
     }
   }
 
-  setupDropdownElement () {
-    this.dropdownElement.className = 'layer-dropdown';
-  }
+  setupDropdownElement() { this.dropdownElement.className = 'layer-dropdown'; }
 
   update() {
     let {layer} = this;
@@ -133,7 +143,7 @@ class LayerWidget extends RefCounted {
       if (userLayer) {
         this.dropdown = userLayer.makeDropdown(this.dropdownElement);
       } else {
-        this.dropdown = null;
+        this.dropdown = undefined;
       }
     }
   }
@@ -155,13 +165,13 @@ export class LayerPanel extends RefCounted {
 
   get layerManager() { return this.manager.layerManager; }
 
-  constructor(
-      public element: HTMLElement, public manager: LayerListSpecification) {
+  constructor(public element: HTMLElement, public manager: LayerListSpecification) {
     super();
     element.className = 'layer-panel';
     this.registerSignalBinding(
-      manager.layerSelectedValues.changed.add(this.handleLayerValuesChanged, this));
-    this.registerSignalBinding(manager.layerManager.layersChanged.add(this.handleLayersChanged, this));
+        manager.layerSelectedValues.changed.add(this.handleLayerValuesChanged, this));
+    this.registerSignalBinding(
+        manager.layerManager.layersChanged.add(this.handleLayersChanged, this));
     let addButton = this.addButton = document.createElement('button');
     addButton.className = 'layer-add-button';
     addButton.title = 'Add layer';
@@ -193,7 +203,7 @@ export class LayerPanel extends RefCounted {
 
   dispose() {
     this.layerWidgets.forEach(x => x.dispose());
-    this.layerWidgets = null;
+    this.layerWidgets = <any>undefined;
   }
 
   handleLayersChanged() {
@@ -213,10 +223,13 @@ export class LayerPanel extends RefCounted {
     this.updateLayers();
     let values = this.manager.layerSelectedValues;
     for (let [layer, widget] of this.layerWidgets) {
-      let value = values.get(layer.layer);
+      let userLayer = layer.layer;
       let text = '';
-      if (value !== undefined) {
-        text = '' + value;
+      if (userLayer !== null) {
+        let value = values.get(userLayer);
+        if (value !== undefined) {
+          text = '' + value;
+        }
       }
       widget.valueElement.textContent = text;
     }

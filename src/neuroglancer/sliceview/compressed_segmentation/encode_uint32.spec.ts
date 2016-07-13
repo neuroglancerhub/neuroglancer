@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
-import {encodeBlock, newCache, encodeChannel, encodeChannels} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
 import {decodeChannel, decodeChannels} from 'neuroglancer/sliceview/compressed_segmentation/decode_uint32';
-import {prod3, prod4} from 'neuroglancer/util/geom';
+import {encodeBlock, encodeChannel, encodeChannels, newCache} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint32';
 import {makeRandomUint32Array} from 'neuroglancer/sliceview/compressed_segmentation/test_util';
+import {prod3, prod4, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 
 describe('compressed_segmentation uint32', () => {
   describe('encodeBlock', () => {
@@ -198,8 +198,8 @@ describe('compressed_segmentation uint32', () => {
     it('basic 1-channel 1-block', () => {
       const blockSize = [2, 2, 1];
       const input = Uint32Array.of(
-        4, 4, 4, 4 //
-      );
+          4, 4, 4, 4  //
+          );
       const volumeSize = [2, 2, 1, 1];
       const output = new Uint32ArrayBuilder();
       encodeChannels(output, blockSize, input, volumeSize);
@@ -210,23 +210,24 @@ describe('compressed_segmentation uint32', () => {
               ));
     });
 
-    for (let volumeSize of [  //
-      [1, 2, 1, 1],       //
-      [1, 2, 1, 3],       //
-      [2, 2, 2, 1],       //
-      [2, 2, 2, 3],       //
-      [4, 4, 5, 3],       //
-    ]) {
-      it(`round trip ${volumeSize.join(',')}`, () => {
-        const numPossibleValues = 15;
-        const input = makeRandomUint32Array(prod4(volumeSize), numPossibleValues);
-        const blockSize = [2, 2, 2];
-        const output = new Uint32ArrayBuilder();
-        encodeChannels(output, blockSize, input, volumeSize);
-        const decoded = new Uint32Array(input.length);
-        decodeChannels(decoded, output.view, 0, volumeSize, blockSize);
-        expect(decoded).toEqual(input);
-      });
+    for (let blockSize of [vec3.fromValues(2, 2, 2), vec3.fromValues(8, 4, 1), ]) {
+      for (let volumeSize of [  //
+               [1, 2, 1, 1],    //
+               [1, 2, 1, 3],    //
+               [2, 2, 2, 1],    //
+               [2, 2, 2, 3],    //
+               [4, 4, 5, 3],    //
+      ]) {
+        it(`round trip ${volumeSize.join(',')} with blockSize ${vec3Key(blockSize)}`, () => {
+          const numPossibleValues = 15;
+          const input = makeRandomUint32Array(prod4(volumeSize), numPossibleValues);
+          const output = new Uint32ArrayBuilder();
+          encodeChannels(output, blockSize, input, volumeSize);
+          const decoded = new Uint32Array(input.length);
+          decodeChannels(decoded, output.view, 0, volumeSize, blockSize);
+          expect(decoded).toEqual(input);
+        });
+      }
     }
   });
 });

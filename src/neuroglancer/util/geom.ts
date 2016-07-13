@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-export {vec2, vec3, vec4, mat2, mat3, mat4, quat} from 'gl-matrix';
-import {vec3, vec4, mat4} from 'gl-matrix';
+import {mat4, vec3, vec4} from 'gl-matrix';
+
+export {mat2, mat3, mat4, quat, vec2, vec3, vec4} from 'gl-matrix';
 
 export type Vec2 = Float32Array;
 export type Vec3 = Float32Array;
@@ -32,11 +33,10 @@ export class BoundingBox {
   constructor(public lower: Vec3, public upper: Vec3) {}
 };
 
-export const kAxes = [
-  vec4.fromValues(1, 0, 0, 0), vec4.fromValues(0, 1, 0, 0),
-  vec4.fromValues(0, 0, 1, 0)
-];
+export const kAxes =
+    [vec4.fromValues(1, 0, 0, 0), vec4.fromValues(0, 1, 0, 0), vec4.fromValues(0, 0, 1, 0)];
 export const kZeroVec = vec3.fromValues(0, 0, 0);
+export const kInfinityVec = vec3.fromValues(Infinity, Infinity, Infinity);
 
 export function prod3(x: ArrayLike<number>) {
   return x[0] * x[1] * x[2];
@@ -53,4 +53,31 @@ export function prod4(x: ArrayLike<number>) {
  */
 export function vec3Key(x: ArrayLike<number>) {
   return `${x[0]},${x[1]},${x[2]}`;
+}
+
+const RECTIFY_EPSILON = 1e-4;
+
+export function rectifyVec3IfAxisAligned(v: Float32Array, offset: number) {
+  let a0 = Math.abs(v[offset]), a1 = Math.abs(v[offset + 1]), a2 = Math.abs(v[offset + 2]);
+  let max = Math.max(a0, a1, a2);
+  if (a0 / max < RECTIFY_EPSILON) {
+    v[offset] = 0;
+  }
+  if (a1 / max < RECTIFY_EPSILON) {
+    v[offset + 1] = 0;
+  }
+  if (a2 / max < RECTIFY_EPSILON) {
+    v[offset + 2] = 0;
+  }
+}
+
+/**
+ * Makes columns of m that are approximately axis-aligned exactly axis aligned.
+ *
+ * Note that mat is stored in Fortran order, and therefore the first column is m[0], m[1], m[2].
+ */
+export function rectifyTransformMatrixIfAxisAligned(m: Mat4) {
+  rectifyVec3IfAxisAligned(m, 0);
+  rectifyVec3IfAxisAligned(m, 4);
+  rectifyVec3IfAxisAligned(m, 8);
 }

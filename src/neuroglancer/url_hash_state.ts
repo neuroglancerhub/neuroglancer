@@ -16,8 +16,9 @@
 
 // Facility for storing global state in the url hash.
 
+import {urlSafeParse, urlSafeStringify} from 'neuroglancer/util/json';
 import {Signal} from 'signals';
-import {urlSafeStringify, urlSafeParse} from 'neuroglancer/util/json';
+
 
 // Maps keys to objects.
 let trackedKeys = new Map<string, Trackable>();
@@ -25,10 +26,10 @@ let trackedKeys = new Map<string, Trackable>();
 let trackedObjects = new Map<Trackable, string>();
 
 let currentHashState: any = {};
-let updatingObject: Trackable = null;
+let updatingObject: Trackable|null = null;
 let updatedObjects = new Set<Trackable>();
-let lastHash: string = null;
-let pendingUpdate: number = null;
+let lastHash: string|null = null;
+let pendingUpdate: number|null = null;
 
 const UPDATE_DELAY = 500;
 
@@ -126,9 +127,9 @@ function updateHash() {
       lastHash = newHash;
       // console.log(`replaceState at ${Date.now()}`);
       if (lastHash === '{}') {
-        history.replaceState(null, null, '#');
+        history.replaceState(null, undefined, '#');
       } else {
-        history.replaceState(null, null, '#!' + lastHash);
+        history.replaceState(null, undefined, '#!' + lastHash);
       }
       // console.log(`replaceState done at ${Date.now()}`);
     }
@@ -167,9 +168,9 @@ export function registerTrackable(key: string, obj: Trackable) {
   handleObjectUpdate.call(obj);
 };
 
-export function unregisterTrackable(keyOrObject: string | Trackable) {
+export function unregisterTrackable(keyOrObject: string|Trackable) {
   let obj = trackedKeys.get(<string>keyOrObject);
-  let key: string;
+  let key: string|undefined;
   if (obj !== undefined) {
     key = <string>keyOrObject;
   } else {

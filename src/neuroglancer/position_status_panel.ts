@@ -14,16 +14,18 @@
  * limitations under the License.
  */
 
-import {ViewerPositionState} from 'neuroglancer/viewer_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3, AXES_NAMES} from 'neuroglancer/util/geom';
+import {AXES_NAMES, vec3} from 'neuroglancer/util/geom';
+import {ViewerPositionState} from 'neuroglancer/viewer_state';
 
 require('./position_status_panel.css');
+
+const ROUND_POSITIONS = true;
 
 export class PositionStatusPanel extends RefCounted {
   private positionElements = new Array<HTMLInputElement>();
   private mouseElement: HTMLSpanElement;
-  private needsUpdate: number = null;
+  private needsUpdate: number|null = null;
   private tempPosition = vec3.create();
 
   constructor(public element: HTMLElement, public viewer: ViewerPositionState) {
@@ -126,7 +128,11 @@ export class PositionStatusPanel extends RefCounted {
       if (mouseState.active) {
         voxelSize.voxelFromSpatial(voxelPosition, mouseState.position);
         let p = voxelPosition;
-        text = `x ${Math.round(p[0])}  y ${Math.round(p[1])}  z ${Math.round(p[2])}`;
+        if (ROUND_POSITIONS) {
+          text = `x ${Math.round(p[0])}  y ${Math.round(p[1])}  z ${Math.round(p[2])}`;
+        } else {
+          text = `x ${p[0].toFixed(2)}  y ${p[1].toFixed(2)}  z ${p[2].toFixed(2)}`;
+        }
       }
       this.mouseElement.textContent = text;
     }
@@ -136,7 +142,7 @@ export class PositionStatusPanel extends RefCounted {
     for (let x of this.positionElements) {
       this.element.removeChild(x);
     }
-    this.positionElements = null;
-    this.element = null;
+    this.positionElements = <any>undefined;
+    this.element = <any>undefined;
   }
 };

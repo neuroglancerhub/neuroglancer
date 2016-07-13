@@ -14,33 +14,34 @@
  * limitations under the License.
  */
 
-import {ChunkState, ChunkPriorityTier, AvailableCapacity} from 'neuroglancer/chunk_manager/base';
-import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {Signal} from 'signals';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
-import {PairingHeapOperations, ComparisonFunction} from 'neuroglancer/util/pairing_heap';
+import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
+import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {Signal} from 'signals';
+
 import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
 import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
 import LinkedList0 from 'neuroglancer/util/linked_list.0';
 import LinkedList1 from 'neuroglancer/util/linked_list.1';
 import {rpc} from 'neuroglancer/worker_rpc_context';
-import {CancellablePromise} from 'neuroglancer/util/promise';
+import {CancellablePromise, cancelPromise} from 'neuroglancer/util/promise';
 
 const DEBUG_CHUNK_UPDATES = false;
 
 export class Chunk implements Disposable {
   // Node properties used for eviction/promotion heaps and LRU linked lists.
-  child0: Chunk | null = null;
-  next0: Chunk | null = null;
-  prev0: Chunk | null = null;
-  child1: Chunk | null = null;
-  next1: Chunk | null = null;
-  prev1: Chunk | null = null;
+  child0: Chunk|null = null;
+  next0: Chunk|null = null;
+  prev0: Chunk|null = null;
+  child1: Chunk|null = null;
+  next1: Chunk|null = null;
+  prev1: Chunk|null = null;
 
-  source: ChunkSource | null = null;
+  source: ChunkSource|null = null;
 
-  key: string | null = null;
+  key: string|null = null;
   state = ChunkState.NEW;
 
   /**
@@ -65,6 +66,11 @@ export class Chunk implements Disposable {
   systemMemoryBytes: number;
   gpuMemoryBytes: number;
   backendOnly = false;
+
+  /**
+   * Must be set to a non-null value by ChunkSource.prototype.download.
+   */
+  cancelDownload: (() => void)|null = null;
 
   initialize(key: string) {
     this.key = key;
@@ -99,8 +105,6 @@ export class Chunk implements Disposable {
   downloadSucceeded() { this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER); }
 
   freeSystemMemory() {}
-
-  cancelDownload() {}
 
   serialize(msg: any, transfers: any[]) {
     msg['id'] = this.key;
@@ -158,7 +162,7 @@ export abstract class ChunkSource extends SharedObjectCounterpart {
     if (chunks.size === 0) {
       this.addRef();
     }
-    chunks.set(chunk.key, chunk);
+    chunks.set(chunk.key!, chunk);
   }
 
   /**
@@ -168,7 +172,7 @@ export abstract class ChunkSource extends SharedObjectCounterpart {
    */
   removeChunk(chunk: Chunk) {
     let {chunks, freeChunks} = this;
-    chunks.delete(chunk.key);
+    chunks.delete(chunk.key!);
     chunk.dispose();
     freeChunks[freeChunks.length] = chunk;
     if (chunks.size === 0) {
@@ -182,7 +186,7 @@ export function handleChunkDownloadPromise<ChunkType extends Chunk, Result>(
     chunkDecoder: (chunk: ChunkType, result: Result) => void) {
   chunk.cancelDownload = function() {
     chunk.cancelDownload = null;
-    promise.cancel();
+    cancelPromise(promise);
   };
   promise.then(
       response => {
@@ -221,7 +225,7 @@ class ChunkPriorityQueue {
   /**
    * Heap roots for VISIBLE and PREFETCH priority tiers.
    */
-  private heapRoots: (Chunk | null)[] = [null, null];
+  private heapRoots: (Chunk|null)[] = [null, null];
 
   /**
    * Head node for RECENT linked list.
@@ -338,7 +342,7 @@ function tryToFreeCapacity(
   return true;
 }
 
-
+@registerSharedObject(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObjectCounterpart {
   gpuMemoryCapacity: AvailableCapacity;
   systemMemoryCapacity: AvailableCapacity;
@@ -370,7 +374,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
    */
   private gpuMemoryEvictionQueue = makeChunkPriorityQueue1(Chunk.priorityLess);
 
-  private updatePending: number | null = null;
+  private updatePending: number|null = null;
 
   private numQueued = 0;
   private numFailed = 0;
@@ -452,8 +456,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   private addChunkToQueues_(chunk: Chunk) {
     if (chunk.state === ChunkState.QUEUED && chunk.priorityTier === ChunkPriorityTier.RECENT) {
       // Delete this chunk.
-      let source = chunk.source;
-      source.removeChunk(chunk);
+      let {source} = chunk;
+      source!.removeChunk(chunk);
       this.adjustCapacitiesForChunk(chunk, false);
       return false;
     } else {
@@ -471,7 +475,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
       return;
     }
     if (DEBUG_CHUNK_UPDATES) {
-      console.log(`${chunk}: changed priority ${chunk.priorityTier}:${chunk.priority} -> ${chunk.newPriorityTier}:${chunk.newPriority}`);
+      console.log(
+          `${chunk}: changed priority ${chunk.priorityTier}:${chunk.priority} -> ${chunk.newPriorityTier}:${chunk.newPriority}`);
     }
     this.removeChunkFromQueues_(chunk);
     chunk.updatePriorityProperties();
@@ -501,7 +506,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     let queueManager = this;
     function evictFromGPUMemory(chunk: Chunk) {
       queueManager.freeChunkGPUMemory(chunk);
-      chunk.source.chunkManager.queueManager.updateChunkState(chunk, ChunkState.SYSTEM_MEMORY);
+      chunk.source!.chunkManager.queueManager.updateChunkState(chunk, ChunkState.SYSTEM_MEMORY);
     }
     let promotionCandidates = this.gpuMemoryPromotionQueue.candidates();
     let evictionCandidates = this.gpuMemoryEvictionQueue.candidates();
@@ -531,14 +536,14 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   freeChunkGPUMemory(chunk: Chunk) {
     rpc.invoke(
         'Chunk.update',
-        {'id': chunk.key, 'state': ChunkState.SYSTEM_MEMORY, 'source': chunk.source.rpcId});
+        {'id': chunk.key, 'state': ChunkState.SYSTEM_MEMORY, 'source': chunk.source!.rpcId});
   }
 
   freeChunkSystemMemory(chunk: Chunk) {
     if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
       rpc.invoke(
           'Chunk.update',
-          {'id': chunk.key, 'state': ChunkState.EXPIRED, 'source': chunk.source.rpcId});
+          {'id': chunk.key, 'state': ChunkState.EXPIRED, 'source': chunk.source!.rpcId});
     } else {
       chunk.freeSystemMemory();
     }
@@ -548,7 +553,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     if (chunk.state === ChunkState.SYSTEM_MEMORY) {
       rpc.invoke(
           'Chunk.update',
-          {'id': chunk.key, 'source': chunk.source.rpcId, 'state': ChunkState.GPU_MEMORY});
+          {'id': chunk.key, 'source': chunk.source!.rpcId, 'state': ChunkState.GPU_MEMORY});
     } else {
       let msg: any = {};
       let transfers: any[] = [];
@@ -563,7 +568,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     function evict(chunk: Chunk) {
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
-          chunk.cancelDownload();
+          chunk.cancelDownload!();
           break;
         case ChunkState.GPU_MEMORY:
           queueManager.freeChunkGPUMemory(chunk);
@@ -573,7 +578,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
           break;
       }
       // Note: After calling this, chunk may no longer be valid.
-      chunk.source.chunkManager.queueManager.updateChunkState(chunk, ChunkState.QUEUED);
+      chunk.source!.chunkManager.queueManager.updateChunkState(chunk, ChunkState.QUEUED);
     }
     let promotionCandidates = this.queuedPromotionQueue.candidates();
     let downloadEvictionCandidates = this.downloadEvictionQueue.candidates();
@@ -600,7 +605,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
         return;
       }
       this.updateChunkState(promotionCandidate, ChunkState.DOWNLOADING);
-      promotionCandidate.source.download(promotionCandidate);
+      promotionCandidate.source!.download(promotionCandidate);
     }
   }
 
@@ -621,9 +626,8 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     }
   }
 };
-registerSharedObject('ChunkQueueManager', ChunkQueueManager);
 
-
+@registerSharedObject(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObjectCounterpart {
   queueManager: ChunkQueueManager;
 
@@ -638,7 +642,7 @@ export class ChunkManager extends SharedObjectCounterpart {
    */
   private newTierChunks: Chunk[] = [];
 
-  private updatePending: number = null;
+  private updatePending: number|null = null;
 
   recomputeChunkPriorities = new Signal();
 
@@ -709,4 +713,21 @@ export class ChunkManager extends SharedObjectCounterpart {
     this.queueManager.scheduleUpdate();
   }
 };
-registerSharedObject('ChunkManager', ChunkManager);
+
+/**
+ * Decorates final subclasses of ChunkSource.
+ *
+ * Defines the toString method based on the stringify method of the specified Parameters class.
+ *
+ * Calls registerSharedObject using parametersConstructor.RPC_ID.
+ */
+export function registerChunkSource<Parameters>(
+    parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  return <T extends{parameters: Parameters}&SharedObjectCounterpart>(
+             target: {new (rpc: RPC, options: any): T}) => {
+    registerSharedObject(parametersConstructor.RPC_ID)(target);
+    target.prototype.toString = function(this: {parameters: Parameters}) {
+      return parametersConstructor.stringify(this.parameters);
+    };
+  };
+}
