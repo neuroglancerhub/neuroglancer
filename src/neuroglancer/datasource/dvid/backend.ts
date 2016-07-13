@@ -42,12 +42,7 @@ class VolumeChunkSource extends GenericVolumeChunkSource {
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
       let {chunkDataSize} = chunk;
-      
-      if (params['level2'] == "0") {
-        path = `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
-      } else {
-      path = `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}_${params['level2']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
-      }
+      path = `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
     }
     handleChunkDownloadPromise(
         chunk, sendHttpRequest(openShardedHttpRequest(params.baseUrls, path), 'arraybuffer'),
