@@ -36,7 +36,8 @@ export class Overlay extends RefCounted {
     let content = this.content = document.createElement('div');
     content.className = 'overlay-content';
     container.appendChild(content);
-    document.body.appendChild(container);
+    
+    (document.getElementById('neurog-body')!).appendChild(container);
     this.keyboardShortcutHandler = this.registerDisposer(
         new GlobalKeyboardShortcutHandler(keySequenceMap, this.commandReceived.bind(this)));
   }
@@ -50,7 +51,8 @@ export class Overlay extends RefCounted {
 
   disposed() {
     --overlaysOpen;
-    document.body.removeChild(this.container);
+    (document.getElementById('neurog-body')!).removeChild(this.container);
     super.disposed();
+
   }
 };

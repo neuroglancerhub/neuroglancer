@@ -17,7 +17,12 @@
 import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
 import {makeDefaultViewer} from 'neuroglancer/default_viewer';
 
-window.addEventListener('DOMContentLoaded', () => {
-  let viewer = (<any>window)['viewer'] = makeDefaultViewer();
+// let neuroglancerElement =
+
+export function InitializeNeuroglancer(config: any) {
+  let viewer = (<any>window)['viewer'] = makeDefaultViewer(config);
   makeDefaultKeyBindings(viewer.keyMap);
-});
+}
+
+(<any>window).InitializeNeuroglancer = InitializeNeuroglancer
+

@@ -31,7 +31,7 @@ export function embedRelayFrame(proxyName: string, rpcToken: string) {
   const origin = location.origin;
   iframe.src =
       `https://accounts.google.com/o/oauth2/postmessageRelay?parent=${encodeURIComponent(origin)}#rpctoken=${rpcToken}`;
-  document.body.appendChild(iframe);
+  (document.getElementById('neurog-body')!).appendChild(iframe);
 }
 
 interface PromiseCallbacks<T> {
@@ -217,7 +217,7 @@ export function authenticateGoogleOAuth2(options: {
       let iframe = document.createElement('iframe');
       iframe.src = url;
       iframe.style.display = 'none';
-      document.body.appendChild(iframe);
+      (document.getElementById('neurog-body')!).appendChild(iframe);
       callFinally(promise, () => { removeFromParent(iframe); });
     });
   } else {

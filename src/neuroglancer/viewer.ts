@@ -189,7 +189,7 @@ export class Viewer extends RefCounted implements ViewerState {
       this.navigationState.voxelSize);
   layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
 
-  constructor(public display: DisplayContext) {
+  constructor(public display: DisplayContext, config: any) {
     super();
 
     // Delay hash update after each redraw to try to prevent noticeable lag in Chrome.
@@ -222,8 +222,8 @@ export class Viewer extends RefCounted implements ViewerState {
     // Debounce this call to ensure that a transient state does not result in the layer dialog being
     // shown.
     this.layerManager.layersChanged.add(this.registerCancellable(debounce(() => {
-      if (this.layerManager.managedLayers.length === 0) {
-        // No layers, reset state.
+      if (this.layerManager.managedLayers.length === 0 && config.auto_show_layer_dialog === true) {
+      // No layers, reset state.
         this.navigationState.reset();
         this.perspectiveNavigationState.pose.orientation.reset();
         this.perspectiveNavigationState.zoomFactor.reset();
@@ -282,7 +282,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     // This needs to happen after the global keyboard shortcut handler for the viewer has been
     // registered, so that it has priority.
-    if (this.layerManager.managedLayers.length === 0) {
+    if (this.layerManager.managedLayers.length === 0 && config.auto_show_layer_dialog === true) {
       new LayerDialog(this.layerSpecification);
     }
   }
