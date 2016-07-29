@@ -18,9 +18,12 @@ import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chun
 import {TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
+import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {VolumeType} from 'neuroglancer/sliceview/base';
+import {Vec3, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
+import {RPC} from 'neuroglancer/worker_rpc';
 
 const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
   [TileEncoding.JPEG, decodeJpegChunk],
@@ -28,6 +31,17 @@ const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
 
 @registerChunkSource(VolumeChunkSourceParameters)
 class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSourceParameters> {
+  compressedSegmentationBlockSize: Vec3|undefined;
+
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+
+    this.parameters = options['parameters'];
+    if (this.parameters.volumeType === VolumeType.SEGMENTATION) {
+      this.compressedSegmentationBlockSize = vec3.fromValues(8, 8, 8);
+    }
+  }
+
   download(chunk: VolumeChunk) {
     let params = this.parameters;
     let path: string;
@@ -36,12 +50,28 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
       // computeChunkBounds.
       let chunkPosition = this.computeChunkBounds(chunk);
       let chunkDataSize = chunk.chunkDataSize!;
-      path =
-          `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/nd`;
+      // if the volume is an image, get a jpeg
+      path = this.getPath(chunkPosition, chunkDataSize, params);
     }
     handleChunkDownloadPromise(
         chunk, sendHttpRequest(openShardedHttpRequest(params.baseUrls, path), 'arraybuffer'),
-        decodeRawChunk);
+        this.getDecoder(params));
+  }
+  getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array, params: any) {
+    if (params.volumeType === VolumeType.IMAGE) {
+      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
+    } else {
+      // volumeType is SEGMENTATION
+      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip`;
+    }
+  }
+  getDecoder(params: any) {
+    if (params.volumeType === VolumeType.IMAGE) {
+      return decodeJpegChunk;
+    } else {
+      // volumeType is SEGMENTATION
+      return decodeCompressedSegmentationChunk;
+    }
   }
 };
 
