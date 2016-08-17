@@ -23,6 +23,7 @@ import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
 const textureUnitSymbol = Symbol('SingleTextureVolumeChunk.textureUnit');
 const textureLayoutSymbol = Symbol('SingleTextureVolumeChunk.textureLayout');
+const textureColorSymbol = Symbol('SingleTextureVolumeChunk.textureColor');
 
 export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable> extends RefCounted
     implements ChunkFormat {
@@ -34,6 +35,7 @@ export abstract class SingleTextureChunkFormat<TextureLayout extends Disposable>
 
   defineShader(builder: ShaderBuilder) {
     builder.addTextureSampler2D('uVolumeChunkSampler', textureUnitSymbol);
+    builder.addTextureSampler2D('uColorChunkSampler', textureColorSymbol);
   }
 
   beginDrawing(gl: GL, shader: ShaderProgram) {
@@ -91,7 +93,49 @@ export abstract class SingleTextureVolumeChunk<Data, TextureLayout extends Dispo
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     setRawTextureParameters(gl);
     this.setTextureData(gl);
+    this.createColorTexture(gl);
     gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+   createColorTexture(gl: GL){
+    //set up for texture
+    let ctexture = gl.createTexture();
+    // let textureColor = this.textureLayout.shader.textureUnit(textureColorSymbol);
+    gl.activeTexture(gl.TEXTURE0 + 1);//hack location for now
+    gl.bindTexture(gl.TEXTURE_2D, ctexture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    setRawTextureParameters(gl);
+
+    //load data into texture
+    this.setColorTextureData(gl);
+    // gl.bindTexture(gl.TEXTURE_2D, null);
+    //reactivate ID texture
+    gl.activeTexture(gl.TEXTURE0 + 0);//hack location for now
+
+
+  }
+  setColorTextureData(gl: GL){
+    let {chunkFormat} = this;
+    let data = this.data.slice(0);
+    //experiment: set color texture data
+    // let idx = 0; 
+    // let indices = [];
+    // while(idx !== -1){ 
+    //   idx = data.indexOf(7021, idx+1); 
+    //   indices.push(idx); 
+    // }
+    // indices.pop();//pop off the last -1
+    // indices.forEach(function(i){
+    //   data[i] = 16711680;
+    // });
+    // finish setting data to texture
+    // let textureLayout = chunkFormat.getTextureLayout(gl, this.chunkDataSize, data.length);
+    this.setTextureData(gl);
+
+
+    // chunkFormat.setTextureData(gl, textureLayout, data);
+
+
   }
 
   freeGPUMemory(gl: GL) {

@@ -88,9 +88,11 @@ export class ShaderLinkError extends Error {
 
 export function getShader(gl: WebGLRenderingContext, source: string, shaderType: ShaderType) {
   var shader = gl.createShader(shaderType);
+console.log(source)
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
-
+console.log(gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+console.log(gl.getShaderInfoLog(shader) );
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
     let log = gl.getShaderInfoLog(shader) || '';
     throw new ShaderCompilationError(shaderType, source, log, parseShaderErrors(log));

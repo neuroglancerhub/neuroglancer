@@ -129,7 +129,7 @@ uint64_t getMappedObjectId() {
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
-  vec3 rgb = segmentColorHash(value);
+  vec3 rgb = vec3(value.low);
   emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
 `);
   }

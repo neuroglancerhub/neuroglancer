@@ -87,7 +87,7 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
     let fragmentCode = `
 vec4 ${local('readTextureValue')}(float offset) {
   vec4 result;
-  ${this.textureAccessHelper.readTextureValue}(uVolumeChunkSampler, offset, result);
+  ${this.textureAccessHelper.readTextureValue}(uColorChunkSampler, offset, result);
   return result;
 }
 float ${local('getChannelOffset')}(int channelIndex) {
