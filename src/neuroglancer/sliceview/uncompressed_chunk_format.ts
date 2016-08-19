@@ -178,7 +178,7 @@ uint32_t getDataValue (int channelIndex) {
         builder.addFragmentCode(`
 uint64_t getDataValue (int channelIndex) {
   uint64_t result;
-  ${this.textureAccessHelper.readTextureValue}(uColorChunkSampler, getIndexIntoChunk(channelIndex), result.low, result.high);
+  ${this.textureAccessHelper.readTextureValue}(uVolumeChunkSampler, getIndexIntoChunk(channelIndex), result.low, result.high);
   return result;
 }
 `);
