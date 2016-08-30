@@ -292,6 +292,7 @@ export class RepositoryInfo {
     for (let key of instanceKeys) {
       try {
         this.dataInstances.set(key, parseDataInstance(dataInstanceObjs[key], key, instanceKeys));
+        this.dataInstances.set(key + '#', parseDataInstance(dataInstanceObjs[key], key, instanceKeys));
       } catch (parseError) {
         let message = `Failed to parse data instance ${JSON.stringify(key)}: ${parseError.message}`;
         console.log(message);

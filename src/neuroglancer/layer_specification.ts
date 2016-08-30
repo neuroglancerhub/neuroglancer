@@ -28,6 +28,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
+import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
 
 export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(new Promise(function(resolve) { resolve(getVolume(x)); }), {
@@ -58,6 +59,31 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
   }
 };
 
+export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
+  metricLayer: SegmentationMetricUserLayer;
+  segmentationLayer: SegmentationUserLayer;
+
+  constructor(
+      name: string, public initialSpecification: any, public manager: LayerListSpecification, 
+      metricLayer: SegmentationMetricUserLayer, segmentationLayer: SegmentationUserLayer) {
+    super(name, initialSpecification, manager);
+    this.metricLayer = metricLayer;
+    this.segmentationLayer = segmentationLayer;
+    this.layer = this.metricLayer;//set the metric layer as the first visible layer
+  
+  }
+
+  toggleUserLayer(){
+    if(this.layer == this.metricLayer){
+      this.layer = this.segmentationLayer;
+    }
+    else{
+      this.layer = this.metricLayer;
+    }
+  }
+}
+
+
 export class LayerListSpecification extends RefCounted implements Trackable {
   changed = new Signal();
   constructor(
@@ -80,13 +106,12 @@ export class LayerListSpecification extends RefCounted implements Trackable {
   }
 
   getLayer(name: string, spec: any) {
-    let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
     if (typeof spec === 'string') {
       spec = {'source': spec};
     }
     verifyObject(spec);
     let layerType = verifyObjectProperty(spec, 'type', verifyOptionalString);
-    managedLayer.visible = verifyObjectProperty(spec, 'visible', x => {
+    let visible = verifyObjectProperty(spec, 'visible', x => {
       if (x === undefined || x === true) {
         return true;
       }
@@ -95,6 +120,28 @@ export class LayerListSpecification extends RefCounted implements Trackable {
       }
       throw new Error(`Expected boolean, but received: ${JSON.stringify(x)}.`);
     });
+
+    if(layerType === 'metric'){
+      //set metricData for testing. TODO: read this in
+      let metricData = {
+        metricName:'testMetric',
+        IDColorMap: { //(RGBA)
+          "333290":0b00000000111111110000000000000000,//green 
+          "316812":0b00000000000000001111111100000000//blue
+        }
+      }
+      let segmentationLayer = new SegmentationUserLayer(this, spec);
+      let metricSpec = Object.assign( {},
+                                  spec,
+                                  {source: spec.source + '#'});
+      let metricLayer = new SegmentationMetricUserLayer(this, metricSpec, metricData, segmentationLayer);
+      let managedLayer = new ManagedUserMetricLayer(name, spec, this, metricLayer, segmentationLayer);
+      managedLayer.visible = true;//TODO: make consistent with
+      return managedLayer;
+    }
+    
+    let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
+    managedLayer.visible = visible;
     let sourceUrl = managedLayer.sourceUrl =
         verifyObjectProperty(spec, 'source', verifyOptionalString);
     if (layerType === undefined) {

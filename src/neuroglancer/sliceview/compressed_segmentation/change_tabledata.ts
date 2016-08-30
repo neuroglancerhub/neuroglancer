@@ -20,6 +20,8 @@ export function updateLookupTableData(
         data[i] = newDataMap[data[i]];
       }
       else{
+        //TODO: map missing data to greyscale and add new values to 
+        //idea: just map 1st 8 bits to the rest of the bits (greyscale)
         data[i] = 0;
       }
     }
