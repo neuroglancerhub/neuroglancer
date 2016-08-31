@@ -60,5 +60,17 @@ export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer{
 `);
   }
 
+  getSelectedSegment(){
+    let {segmentSelectionState} = this.displayState;
+    let selectedSegmentStash = segmentSelectionState.selectedSegment;
 
+    let colorVal = this.IDColorMap[segmentSelectionState.selectedSegment];
+    segmentSelectionState.selectedSegment = colorVal? { low: colorVal, high: 0}: { low:0, high: 0};
+    
+    let segmentVal = super.getSelectedSegment();
+
+    segmentSelectionState.selectedSegment = selectedSegmentStash;
+
+    return segmentVal;
+  }
 }

@@ -137,9 +137,28 @@ uint64_t getMappedObjectId() {
   beginSlice(sliceView: SliceView) {
     let shader = super.beginSlice(sliceView);
     let gl = this.gl;
-
     let {displayState} = this;
-    let {segmentSelectionState, visibleSegments} = this.displayState;
+    let {visibleSegments} = this.displayState;
+
+    let selectedSegmentForShader = this.getSelectedSegment();
+    gl.uniform1f(shader.uniform('uSelectedAlpha'), this.selectedAlpha.value);
+    gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.notSelectedAlpha.value);
+    gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
+    gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0.0 : 1.0);
+    this.hashTableManager.enable(gl, shader, this.gpuHashTable);
+    
+    if (this.hasEquivalences) {
+      this.equivalencesHashMap.update();
+      this.equivalencesShaderManager.enable(gl, shader, this.gpuEquivalencesHashTable);
+    }
+    this.segmentColorShaderManager.enable(gl, shader, displayState.segmentColorHash);
+    return shader;
+  }
+
+  getSelectedSegment(){
+    let selectedSegmentForShader = selectedSegmentForShader;
+
+    let {segmentSelectionState} = this.displayState;
     if (!segmentSelectionState.hasSelectedSegment) {
       selectedSegmentForShader.fill(0);
     } else {
@@ -150,19 +169,9 @@ uint64_t getMappedObjectId() {
         selectedSegmentForShader[4 + i] = ((high >> (8 * i)) & 0xFF) / 255.0;
       }
     }
-    gl.uniform1f(shader.uniform('uSelectedAlpha'), this.selectedAlpha.value);
-    gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.notSelectedAlpha.value);
-    gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
-    gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0.0 : 1.0);
-    this.hashTableManager.enable(gl, shader, this.gpuHashTable);
-    if (this.hasEquivalences) {
-      this.equivalencesHashMap.update();
-      this.equivalencesShaderManager.enable(gl, shader, this.gpuEquivalencesHashTable);
-    }
-
-    this.segmentColorShaderManager.enable(gl, shader, displayState.segmentColorHash);
-    return shader;
+        return selectedSegmentForShader;
   }
+
   endSlice(shader: ShaderProgram) {
     let {gl} = this;
     this.hashTableManager.disable(gl, shader);
