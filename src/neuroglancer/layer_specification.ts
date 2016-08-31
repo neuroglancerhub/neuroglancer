@@ -63,7 +63,7 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
 export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
   metricLayer: SegmentationMetricUserLayer;
   segmentationLayer: SegmentationUserLayer;
-  showMetrics: TrackableBoolean = new TrackableBoolean(true, true);
+  showMetrics: TrackableBoolean = new TrackableBoolean(false, false);
 
   constructor(
       name: string, public initialSpecification: any, public manager: LayerListSpecification, 
@@ -71,7 +71,7 @@ export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
     super(name, initialSpecification, manager);
     this.metricLayer = metricLayer;
     this.segmentationLayer = segmentationLayer;
-    this.layer = this.metricLayer;//set the metric layer as the first visible layer
+    this.layer = this.segmentationLayer;//set the seg layer as the first visible layer
     
   }
 
