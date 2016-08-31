@@ -129,7 +129,7 @@ export class ChunkQueueManager extends SharedObject {
     }
   }
 
-  private getTransformFn(dataTransformFns: Map<any>, dataKey:string){
+  private getTransformFn(dataTransformFns: Map<string, (chunk: Chunk) => void>, dataKey:string){
     // allow key matching when dataKey contains the key--allows for handling multiscale
     // without needing to register new transform functions
     for(let key of dataTransformFns.keys()){
@@ -164,8 +164,7 @@ registerRPC('Chunk.update', function(x) {
 export class ChunkManager extends SharedObject {
   chunkSourceCache: Map<any, Memoize<string, ChunkSource>> =
       new Map<any, Memoize<string, ChunkSource>>();
-  //TODO: enforce stricter types for functions
-  dataTransformFns: Map<any> = new Map<any>();
+  dataTransformFns: Map<string, (chunk: Chunk) => void> = new Map<string, (chunk: Chunk) => void>();
 
   constructor(public chunkQueueManager: ChunkQueueManager) {
     super();

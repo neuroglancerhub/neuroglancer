@@ -45,15 +45,15 @@ export class EquivalencesHashMap {
 };
 
 export class SegmentationRenderLayer extends RenderLayer {
-  private segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
-  private hashTableManager = new HashSetShaderManager('visibleSegments');
-  private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
+  protected segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
+  protected hashTableManager = new HashSetShaderManager('visibleSegments');
+  protected gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
 
-  private equivalencesShaderManager = new HashMapShaderManager('equivalences');
-  private equivalencesHashMap =
+  protected equivalencesShaderManager = new HashMapShaderManager('equivalences');
+  protected equivalencesHashMap =
       new EquivalencesHashMap(this.displayState.segmentEquivalences.disjointSets);
-  private gpuEquivalencesHashTable = GPUHashTable.get(this.gl, this.equivalencesHashMap.hashMap);
-  private hasEquivalences: boolean;
+  protected gpuEquivalencesHashTable = GPUHashTable.get(this.gl, this.equivalencesHashMap.hashMap);
+  protected hasEquivalences: boolean;
 
   constructor(
       chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,

@@ -71,6 +71,8 @@ export class UserLayer extends RefCounted {
   readyStateChanged = new Signal();
   specificationChanged = new Signal();
   renderLayers = new Array<RenderLayer>();
+  managingUserLayer: ManagedUserLayer;//optional reference back to the managing layer
+
   constructor(renderLayers: RenderLayer[] = []) {
     super();
     renderLayers.forEach(this.addRenderLayer.bind(this));

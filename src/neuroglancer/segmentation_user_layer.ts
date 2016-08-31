@@ -16,6 +16,7 @@
 
 import {getMeshSource, getSkeletonSource} from 'neuroglancer/datasource/factory';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
+import {SegmentationDropdown, MetricDropdown} from 'neuroglancer/layer_dropdown';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
@@ -48,6 +49,7 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
   skeletonsPath: string|undefined;
   meshLayer: MeshLayer|undefined;
   wasDisposed = false;
+  dropDownType: string;
 
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
@@ -59,6 +61,7 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
 
     this.selectedAlpha.restoreState(x['selectedAlpha']);
     this.notSelectedAlpha.restoreState(x['notSelectedAlpha']);
+    this.dropDownType = verifyOptionalString(x['dropDownType']) || 'SegmentationDropdown';
 
     let volumePath = this.volumePath = verifyOptionalString(x['source']);
     let meshPath = this.meshPath = verifyOptionalString(x['mesh']);
@@ -183,25 +186,3 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
   }
 };
 
-class SegmentationDropdown extends UserLayerDropdown {
-  visibleSegmentWidget = this.registerDisposer(new SegmentSetWidget(this.layer));
-  addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
-  selectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.selectedAlpha));
-  notSelectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.notSelectedAlpha));
-  constructor(public element: HTMLDivElement, public layer: SegmentationUserLayer) {
-    super();
-    element.classList.add('segmentation-dropdown');
-    let {selectedAlphaWidget, notSelectedAlphaWidget} = this;
-    selectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
-    notSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
-
-    element.appendChild(this.selectedAlphaWidget.element);
-    element.appendChild(this.notSelectedAlphaWidget.element);
-    this.addSegmentWidget.element.classList.add('add-segment');
-    this.addSegmentWidget.element.title = 'Add segment ID';
-    element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
-    this.registerSignalBinding(this.addSegmentWidget.valueEntered.add(
-        (value: Uint64) => { this.layer.visibleSegments.add(value); }));
-    element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
-  }
-};

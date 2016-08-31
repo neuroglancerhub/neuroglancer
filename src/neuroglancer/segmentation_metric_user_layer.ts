@@ -15,7 +15,7 @@
  */
 
 import {getMeshSource, getSkeletonSource} from 'neuroglancer/datasource/factory';
-import {UserLayer, RenderLayer, UserLayerDropdown} from 'neuroglancer/layer';
+import {UserLayer, RenderLayer} from 'neuroglancer/layer';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {LayerListSpecification, ManagedUserLayerWithSpecification} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
@@ -33,6 +33,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
+import {MetricDropdown} from 'neuroglancer/layer_dropdown';
 
 require('./segmentation_user_layer.css');
 
@@ -123,9 +124,9 @@ export class SegmentationMetricUserLayer extends UserLayer implements Segmentati
     return x;
   }
 
-  makeDropdown(element: HTMLDivElement) { return new SegmentationDropdown(element, this); }
+  makeDropdown(element: HTMLDivElement) { return new MetricDropdown(element, this); }
 
-//disable actions for now
+//disable segmentation actions for now
   handleAction(action: string) {
     switch (action) {
       case 'recolor': 
@@ -137,27 +138,3 @@ export class SegmentationMetricUserLayer extends UserLayer implements Segmentati
   }
 };
 
-
-
-class SegmentationDropdown extends UserLayerDropdown {
-  visibleSegmentWidget = this.registerDisposer(new SegmentSetWidget(this.layer));
-  addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
-  selectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.selectedAlpha));
-  notSelectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.notSelectedAlpha));
-  constructor(public element: HTMLDivElement, public layer: SegmentationUserLayer) {
-    super();
-    element.classList.add('segmentation-dropdown');
-    let {selectedAlphaWidget, notSelectedAlphaWidget} = this;
-    selectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
-    notSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
-
-    element.appendChild(this.selectedAlphaWidget.element);
-    element.appendChild(this.notSelectedAlphaWidget.element);
-    this.addSegmentWidget.element.classList.add('add-segment');
-    this.addSegmentWidget.element.title = 'Add segment ID';
-    element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
-    this.registerSignalBinding(this.addSegmentWidget.valueEntered.add(
-        (value: Uint64) => { this.layer.visibleSegments.add(value); }));
-    element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
-  }
-};

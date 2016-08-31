@@ -29,6 +29,7 @@ import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neurogla
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
 export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(new Promise(function(resolve) { resolve(getVolume(x)); }), {
@@ -62,6 +63,7 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
 export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
   metricLayer: SegmentationMetricUserLayer;
   segmentationLayer: SegmentationUserLayer;
+  showMetrics: TrackableBoolean = new TrackableBoolean(true, true);
 
   constructor(
       name: string, public initialSpecification: any, public manager: LayerListSpecification, 
@@ -70,7 +72,7 @@ export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
     this.metricLayer = metricLayer;
     this.segmentationLayer = segmentationLayer;
     this.layer = this.metricLayer;//set the metric layer as the first visible layer
-  
+    
   }
 
   toggleUserLayer(){
@@ -130,13 +132,18 @@ export class LayerListSpecification extends RefCounted implements Trackable {
           "316812":0b00000000000000001111111100000000//blue
         }
       }
+      spec['dropDownType'] = 'MetricDropdown';
       let segmentationLayer = new SegmentationUserLayer(this, spec);
       let metricSpec = Object.assign( {},
                                   spec,
                                   {source: spec.source + '#'});
       let metricLayer = new SegmentationMetricUserLayer(this, metricSpec, metricData, segmentationLayer);
       let managedLayer = new ManagedUserMetricLayer(name, spec, this, metricLayer, segmentationLayer);
-      managedLayer.visible = true;//TODO: make consistent with
+      managedLayer.visible = visible;
+
+      //set up links back to the manging layer
+      metricLayer.managingUserLayer = managedLayer;
+      segmentationLayer.managingUserLayer = managedLayer;
       return managedLayer;
     }
     
