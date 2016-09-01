@@ -16,8 +16,8 @@ export function updateLookupTableData(
   each(ranges, function(range: Range){
 
     for(let i = range.start; i<range.stop; i++){
-      if(newDataMap[data[i]]){
-        data[i] = newDataMap[data[i]];
+      if(newDataMap.get(data[i])){
+        data[i] = newDataMap.get(data[i]);
       }
       else{
         //TODO: map missing data to greyscale and add new values to 

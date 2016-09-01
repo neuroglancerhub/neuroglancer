@@ -2,7 +2,7 @@ import {encodeChannel} from 'neuroglancer/sliceview/compressed_segmentation/enco
 import {updateLookupTableData} from 'neuroglancer/sliceview/compressed_segmentation/change_tabledata';
 import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 
-describe('change_tabledata uint64', () => {
+fdescribe('change_tabledata uint64', () => {
 
    describe('change_tabledata ', () => {
     it('base', () => {
@@ -13,10 +13,11 @@ describe('change_tabledata uint64', () => {
       const volumeSize = [2, 2, 2];
       const blockSize = [2, 2, 1];
       const output = new Uint32ArrayBuilder();
-      const dataMap = {
-        5: 10,
-        3: 6
-      };
+      const dataMap = new Map([
+          [5, 10],
+          [3, 6]
+        ]
+      );
       output.appendArray([1, 2, 3]);
       encodeChannel(output, blockSize, input, volumeSize);
 
@@ -42,9 +43,9 @@ describe('change_tabledata uint64', () => {
     const output = new Uint32ArrayBuilder();
     output.appendArray([1, 2, 3]);
     encodeChannel(output, blockSize, input, volumeSize);
-    const dataMap = {
-      4: 10
-    };
+    const dataMap = new Map([
+      [4,10]
+    ]);
 
     updateLookupTableData(output.view, dataMap, 3, blockSize, volumeSize);
     expect(output.view)

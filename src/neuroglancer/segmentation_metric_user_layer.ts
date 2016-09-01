@@ -30,10 +30,13 @@ import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_rende
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RangeWidget} from 'neuroglancer/widget/range';
+import {MetricKeyData} from 'neuroglancer/widget/metric_scale_widget';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 import {MetricDropdown} from 'neuroglancer/layer_dropdown';
+import {iteratee, minBy, maxBy} from 'lodash';
+
+var chroma = require('chroma-js');//needs to be imported this way due to export style differences
 
 require('./segmentation_user_layer.css');
 
@@ -50,6 +53,7 @@ export class SegmentationMetricUserLayer extends UserLayer implements Segmentati
   meshLayer: MeshLayer|undefined;
   wasDisposed = false;
   ReferenceUserLayer: SegmentationUserLayer;
+  metricKeyData: MetricKeyData = new MetricKeyData();
 
   constructor(public manager: LayerListSpecification, x: any, metricData: any, ReferenceUserLayer: SegmentationUserLayer) {
     super([]);
@@ -80,11 +84,32 @@ export class SegmentationMetricUserLayer extends UserLayer implements Segmentati
           }
         }
       });
+      this.metricKeyData.name = metricData['metricName'];
+      let IDColorMap = this.mapMetricsToColors(metricData['IDColorMap']);
       this.addRenderLayer(new CustomColorSegmentationRenderLayer(
-          manager.chunkManager, cvolumePromise, this, this.selectedAlpha, this.notSelectedAlpha, metricData['IDColorMap']));
+          manager.chunkManager, cvolumePromise, this, this.selectedAlpha, this.notSelectedAlpha, IDColorMap));
       
     }
 
+  }
+
+  mapMetricsToColors(IdMetricMap: any){
+    let metricKeyData = this.metricKeyData;
+    let colors = ['White', 'Yellow', 'aquamarine', 'deepskyblue', 'mediumorchid'];
+    let metricIteratee = function(el){
+      return el[1];//metric value
+    }
+    let min = metricKeyData.min = minBy(IdMetricMap, metricIteratee)[1];
+    let max = metricKeyData.max = maxBy(IdMetricMap, metricIteratee)[1];
+    let scale = metricKeyData.chromaScale = chroma.scale(colors).domain([min, max]);
+    console.log(scale(50))
+    for(let metricArr of IdMetricMap){
+      let metricVal = metricArr[1];
+      let rgb = (scale(metricVal)).rgba();
+      metricArr[1] = (rgb[3]<<24)+(rgb[2]<<16)+(rgb[1]<<8)+ rgb[0]//convert to 32bit little-endian(?) value
+    }
+    let IDColorMap = new Map(IdMetricMap);
+    return IDColorMap;
   }
 
   getValueAt(position: Float32Array, pickedRenderLayer: RenderLayer|null, pickedObject: Uint64) {
@@ -137,4 +162,3 @@ export class SegmentationMetricUserLayer extends UserLayer implements Segmentati
     }
   }
 };
-

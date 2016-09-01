@@ -75,6 +75,7 @@
     "ts-loader": "^0.8.2",
     "typescript": "^1.9.0-dev.20160622-1.0",
     "webpack": "^1.13.1",
-    "webpack-closure-compiler": "^2.0.2"
+    "webpack-closure-compiler": "^2.0.2",
+    "chroma-js": "^1.1.1"
   }
 }

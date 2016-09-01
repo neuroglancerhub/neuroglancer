@@ -125,13 +125,14 @@ export class LayerListSpecification extends RefCounted implements Trackable {
 
     if(layerType === 'metric'){
       //set metricData for testing. TODO: read this in
-      let metricData = {
-        metricName:'testMetric',
-        IDColorMap: { //(RGBA)
-          "333290":0b00000000111111110000000000000000,//green 
-          "316812":0b00000000000000001111111100000000//blue
-        }
-      }
+      let metricData = spec['metricData'];
+      // let metricData = {
+      //   metricName:'testMetric',
+      //   IDColorMap: [ //(RGBA)
+      //     [333290, 0b00000000111111110000000000000000],//green 
+      //     [316812, 0b00000000000000001111111100000000]//blue
+      //   ]
+      // }
       spec['dropDownType'] = 'MetricDropdown';
       let segmentationLayer = new SegmentationUserLayer(this, spec);
       let metricSpec = Object.assign( {},

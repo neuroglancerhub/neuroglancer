@@ -7,6 +7,7 @@ import {TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
+import {MetricScaleWidget} from 'neuroglancer/widget/metric_scale_widget';
 
 
 
@@ -40,6 +41,7 @@ export class MetricDropdown extends SegmentationDropdown {
     //must be a ManagedUserMetricLayer
     let managedUserLayer = layer.managingUserLayer;
 
+    //add metric checkbox
     let showMetricLayerCheckbox =
         this.registerDisposer(new TrackableBooleanCheckbox(managedUserLayer.showMetrics));
     let showMetricLayerLabel = document.createElement('label');
@@ -48,7 +50,10 @@ export class MetricDropdown extends SegmentationDropdown {
     this.element.appendChild(showMetricLayerLabel);
     this.registerSignalBinding(managedUserLayer.showMetrics.changed.add(() => { managedUserLayer.toggleUserLayer(); }));
 
-
+    if(layer.metricKeyData){
+      let metricScaleWidget = this.registerDisposer( new MetricScaleWidget(layer.metricKeyData));
+      element.appendChild(metricScaleWidget.element);
+    }
   }
 
 };
