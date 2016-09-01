@@ -95,14 +95,14 @@ export class SegmentationMetricUserLayer extends UserLayer implements Segmentati
 
   mapMetricsToColors(IdMetricMap: any){
     let metricKeyData = this.metricKeyData;
-    let colors = ['White', 'Yellow', 'aquamarine', 'deepskyblue', 'mediumorchid'];
+    let colors = ['Yellow', 'aquamarine', 'deepskyblue', 'mediumorchid'];
     let metricIteratee = function(el){
       return el[1];//metric value
     }
     let min = metricKeyData.min = minBy(IdMetricMap, metricIteratee)[1];
     let max = metricKeyData.max = maxBy(IdMetricMap, metricIteratee)[1];
     let scale = metricKeyData.chromaScale = chroma.scale(colors).domain([min, max]);
-    console.log(scale(50))
+
     for(let metricArr of IdMetricMap){
       let metricVal = metricArr[1];
       let rgb = (scale(metricVal)).rgba();
