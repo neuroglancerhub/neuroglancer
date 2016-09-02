@@ -91,6 +91,8 @@ export class SegmentationMetricUserLayer extends UserLayer implements Segmentati
       
     }
 
+    this.addRenderLayer(this.ReferenceUserLayer.renderLayers[0]);
+
   }
 
   mapMetricsToColors(IdMetricMap: any){

@@ -64,6 +64,8 @@ export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
   metricLayer: SegmentationMetricUserLayer;
   segmentationLayer: SegmentationUserLayer;
   showMetrics: TrackableBoolean = new TrackableBoolean(false, false);
+  segSelectedAlphaStash: number;
+  segNotSelectedAlphaStash: number;
 
   constructor(
       name: string, public initialSpecification: any, public manager: LayerListSpecification, 
@@ -71,17 +73,33 @@ export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
     super(name, initialSpecification, manager);
     this.metricLayer = metricLayer;
     this.segmentationLayer = segmentationLayer;
+    this.hideSegRenderLayer();
     this.layer = this.segmentationLayer;//set the seg layer as the first visible layer
     
   }
 
   toggleUserLayer(){
     if(this.layer == this.metricLayer){
+      this.showSegRenderLayer();
       this.layer = this.segmentationLayer;
+
     }
     else{
+      this.hideSegRenderLayer();
       this.layer = this.metricLayer;
     }
+  }
+  showSegRenderLayer(){
+      this.segmentationLayer.renderLayers[0].selectedAlpha.value = this.segSelectedAlphaStash;
+      this.segmentationLayer.renderLayers[0].notSelectedAlpha.value = this.segNotSelectedAlphaStash;
+  }
+  hideSegRenderLayer(){
+      console.log(this.segmentationLayer.renderLayers[0].selectedAlpha.value);
+      this.segSelectedAlphaStash = this.segmentationLayer.renderLayers[0].selectedAlpha.value;
+      this.segNotSelectedAlphaStash= this.segmentationLayer.renderLayers[0].notSelectedAlpha.value;
+
+      this.segmentationLayer.renderLayers[0].selectedAlpha.value = 0;
+      this.segmentationLayer.renderLayers[0].notSelectedAlpha.value = 0;
   }
 }
 
