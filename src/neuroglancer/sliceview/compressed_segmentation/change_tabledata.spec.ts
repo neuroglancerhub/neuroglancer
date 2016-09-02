@@ -1,7 +1,7 @@
 import {encodeChannel} from 'neuroglancer/sliceview/compressed_segmentation/encode_uint64';
 import {updateLookupTableData} from 'neuroglancer/sliceview/compressed_segmentation/change_tabledata';
 import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
-
+import {Uint64} from 'neuroglancer/util/uint64';
 fdescribe('change_tabledata uint64', () => {
 
    describe('change_tabledata ', () => {
@@ -14,8 +14,8 @@ fdescribe('change_tabledata uint64', () => {
       const blockSize = [2, 2, 1];
       const output = new Uint32ArrayBuilder();
       const dataMap = new Map([
-          [5, 10],
-          [3, 6]
+          ['5,0', new Uint64(10, 0)],
+          ['3,0', new Uint64(6, 0)]
         ]
       );
       output.appendArray([1, 2, 3]);
@@ -44,19 +44,19 @@ fdescribe('change_tabledata uint64', () => {
     output.appendArray([1, 2, 3]);
     encodeChannel(output, blockSize, input, volumeSize);
     const dataMap = new Map([
-      [4,10]
+      ['4,0',new Uint64(10, 0)]
     ]);
 
     updateLookupTableData(output.view, dataMap, 3, blockSize, volumeSize);
     expect(output.view)
         .toEqual(Uint32Array.of(
             1, 2, 3,             //junk padding
-            8 | (0 << 24), 8,    //header block 1
+            8 | (0 << 24), 8,    //header block 1(#encoding bits |(lookuptableoffset), encData offset)
             10 | (0 << 24), 10,  //header block 2
             10 | (0 << 24), 12,  //header block 3
             8 | (0 << 24), 12,   //header block 4
-            10, 0,                //data for blocks 1, 4
-            0, 0                 //data for blocks 2, 3
+            10, 0,                //enc & table data for blocks 1, 4
+            0, 0                 //enc & table data for blocks 2, 3
             ));
      });
    });

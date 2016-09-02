@@ -108,8 +108,16 @@ export class SegmentationMetricUserLayer extends UserLayer implements Segmentati
     for(let metricArr of IdMetricMap){
       let metricVal = metricArr[1];
       let rgb = (scale(metricVal)).rgba();
-      metricArr[1] = (rgb[3]<<24)+(rgb[2]<<16)+(rgb[1]<<8)+ rgb[0]//convert to 32bit little-endian(?) value
+      metricArr[1] = (rgb[3]<<24)+(rgb[2]<<16)+(rgb[1]<<8)+ rgb[0]//convert color to 32bit little-endian value
+      //make data key
+      let idUint64 = new Uint64();
+      idUint64.parseString(metricArr[0].toString())
+      metricArr[0] = idUint64.low + ',' + idUint64.high;
+      //convert val to Uint64 with rand high values
+      let randHigh = Math.floor(Math.random()*Math.pow(2,32));
+      metricArr[1] = new Uint64(metricArr[1], randHigh)
     }
+
     let IDColorMap = new Map(IdMetricMap);
     return IDColorMap;
   }

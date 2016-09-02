@@ -73,7 +73,6 @@ export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
     super(name, initialSpecification, manager);
     this.metricLayer = metricLayer;
     this.segmentationLayer = segmentationLayer;
-    this.hideSegRenderLayer();
     this.layer = this.segmentationLayer;//set the seg layer as the first visible layer
     
   }
@@ -94,7 +93,6 @@ export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
       this.segmentationLayer.renderLayers[0].notSelectedAlpha.value = this.segNotSelectedAlphaStash;
   }
   hideSegRenderLayer(){
-      console.log(this.segmentationLayer.renderLayers[0].selectedAlpha.value);
       this.segSelectedAlphaStash = this.segmentationLayer.renderLayers[0].selectedAlpha.value;
       this.segNotSelectedAlphaStash= this.segmentationLayer.renderLayers[0].notSelectedAlpha.value;
 

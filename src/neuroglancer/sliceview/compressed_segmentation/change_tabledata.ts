@@ -15,14 +15,15 @@ export function updateLookupTableData(
 
   each(ranges, function(range: Range){
 
-    for(let i = range.start; i<range.stop; i++){
-      if(newDataMap.get(data[i])){
-        data[i] = newDataMap.get(data[i]);
+    for(let i = range.start; i<range.stop; i= i+2){
+      let key = data[i] + ',' + data[i+1]; //'low,high'
+      if(newDataMap.get(key)){
+        let newData = newDataMap.get(key);
+        data[i] = newData.low;
+        data[i+1] = newData.high;
       }
       else{
-        //TODO: map missing data to greyscale and add new values to 
-        //idea: just map 1st 8 bits to the rest of the bits (greyscale)
-        data[i] = 0;
+        data[i] = data[i+1] = 0;
       }
     }
 
