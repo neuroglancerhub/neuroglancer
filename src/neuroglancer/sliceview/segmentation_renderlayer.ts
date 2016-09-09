@@ -75,6 +75,8 @@ export class SegmentationRenderLayer extends RenderLayer {
     });
     this.registerSignalBinding(
         notSelectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerSignalBinding(
+        displayState.showSegmentsOnHover.changed.add(() => { this.redrawNeeded.dispatch(); }));
   }
 
   getShaderKey() {
@@ -112,6 +114,7 @@ uint64_t getMappedObjectId() {
     this.segmentColorShaderManager.defineShader(builder);
     builder.addUniform('highp vec4', 'uSelectedSegment', 2);
     builder.addUniform('highp float', 'uShowAllSegments');
+    builder.addUniform('highp float', 'uShowSegmentsOnHover');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.setFragmentMain(`
@@ -125,7 +128,8 @@ uint64_t getMappedObjectId() {
   }
   bool has = uShowAllSegments > 0.0 ? true : ${this.hashTableManager.hasFunctionName}(value);
   if (uSelectedSegment[0] == value.low && uSelectedSegment[1] == value.high) {
-    saturation = has ? 0.5 : 0.75;
+    saturation = has ? 0.5 : uShowSegmentsOnHover;
+    alpha = has || (uShowSegmentsOnHover > 0.0 ) ? alpha : 0.0; 
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
@@ -138,13 +142,14 @@ uint64_t getMappedObjectId() {
     let shader = super.beginSlice(sliceView);
     let gl = this.gl;
     let {displayState} = this;
-    let {visibleSegments} = this.displayState;
+    let {visibleSegments, showSegmentsOnHover} = this.displayState;
 
     let selectedSegmentForShader = this.getSelectedSegment();
     gl.uniform1f(shader.uniform('uSelectedAlpha'), this.selectedAlpha.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.notSelectedAlpha.value);
     gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
     gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0.0 : 1.0);
+    gl.uniform1f(shader.uniform('uShowSegmentsOnHover'), showSegmentsOnHover.value ? 1.0 : 0.0);
     this.hashTableManager.enable(gl, shader, this.gpuHashTable);
     
     if (this.hasEquivalences) {

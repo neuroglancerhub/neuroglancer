@@ -30,6 +30,14 @@ export class SegmentationDropdown extends UserLayerDropdown {
     this.registerSignalBinding(this.addSegmentWidget.valueEntered.add(
         (value: Uint64) => { this.layer.visibleSegments.add(value); }));
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
+    
+    //add show segments on hover checkbox
+    let showSegmentsOnHoverCheckbox =
+        this.registerDisposer(new TrackableBooleanCheckbox(layer.showSegmentsOnHover));
+    let showSegmentsOnHoverLabel = document.createElement('label');
+    showSegmentsOnHoverLabel.appendChild(document.createTextNode('Show Segments On Hover'));
+    showSegmentsOnHoverLabel.appendChild(showSegmentsOnHoverCheckbox.element);
+    this.element.appendChild(showSegmentsOnHoverLabel);
   }
 };
 

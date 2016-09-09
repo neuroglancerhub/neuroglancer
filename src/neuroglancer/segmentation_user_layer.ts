@@ -33,6 +33,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
 require('./segmentation_user_layer.css');
 
@@ -51,6 +52,7 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
   segmentationLayer: SegmentationRenderLayer;
   wasDisposed = false;
   dropDownType: string;
+  showSegmentsOnHover: TrackableBoolean = new TrackableBoolean(false, false);
 
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);

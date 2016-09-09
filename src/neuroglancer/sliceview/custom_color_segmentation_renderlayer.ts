@@ -60,11 +60,11 @@ export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer{
   bool has = uShowAllSegments > 0.0 ? true : ${this.hashTableManager.hasFunctionName}(value);
   if (uSelectedSegment[0] == value.low && uSelectedSegment[1] == value.high) {
     saturation = has ? 0.5 : 0.75;
+    alpha = has || (uShowSegmentsOnHover > 0.0 )? alpha : 0.0; 
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
   vec3 rgb = vec3(value.low);
-  //emit(vec4(rgb, alpha));
   emit(vec4(mix(vec3(1.0,1.0,1.0), rgb, saturation), alpha));
 `);
   }
