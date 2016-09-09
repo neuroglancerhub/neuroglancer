@@ -60,48 +60,6 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
   }
 };
 
-export class ManagedUserMetricLayer extends ManagedUserLayerWithSpecification {
-  metricLayer: SegmentationMetricUserLayer;
-  segmentationLayer: SegmentationUserLayer;
-  showMetrics: TrackableBoolean = new TrackableBoolean(false, false);
-  segSelectedAlphaStash: number;
-  segNotSelectedAlphaStash: number;
-
-  constructor(
-      name: string, public initialSpecification: any, public manager: LayerListSpecification, 
-      metricLayer: SegmentationMetricUserLayer, segmentationLayer: SegmentationUserLayer) {
-    super(name, initialSpecification, manager);
-    this.metricLayer = metricLayer;
-    this.segmentationLayer = segmentationLayer;
-    this.layer = this.segmentationLayer;//set the seg layer as the first visible layer
-    
-  }
-
-  toggleUserLayer(){
-    if(this.layer == this.metricLayer){
-      this.showSegRenderLayer();
-      this.layer = this.segmentationLayer;
-
-    }
-    else{
-      this.hideSegRenderLayer();
-      this.layer = this.metricLayer;
-    }
-  }
-  showSegRenderLayer(){
-      this.segmentationLayer.renderLayers[0].selectedAlpha.value = this.segSelectedAlphaStash;
-      this.segmentationLayer.renderLayers[0].notSelectedAlpha.value = this.segNotSelectedAlphaStash;
-  }
-  hideSegRenderLayer(){
-      this.segSelectedAlphaStash = this.segmentationLayer.renderLayers[0].selectedAlpha.value;
-      this.segNotSelectedAlphaStash= this.segmentationLayer.renderLayers[0].notSelectedAlpha.value;
-
-      this.segmentationLayer.renderLayers[0].selectedAlpha.value = 0;
-      this.segmentationLayer.renderLayers[0].notSelectedAlpha.value = 0;
-  }
-}
-
-
 export class LayerListSpecification extends RefCounted implements Trackable {
   changed = new Signal();
   constructor(
@@ -141,26 +99,20 @@ export class LayerListSpecification extends RefCounted implements Trackable {
 
     if(layerType === 'metric'){
       //set metricData for testing. TODO: read this in
-      let metricData = spec['metricData'];
-      // let metricData = {
-      //   metricName:'testMetric',
-      //   IDColorMap: [ //(RGBA)
-      //     [333290, 0b00000000111111110000000000000000],//green 
-      //     [316812, 0b00000000000000001111111100000000]//blue
-      //   ]
-      // }
+      // let metricData = spec['metricData'];
+      let metricData = {
+        metricName:'testMetric',
+        IDColorMap: [ //(RGBA)
+          [333290, 0b00000000111111110000000000000000],//green 
+          [316812, 0b00000000000000001111111100000000]//blue
+        ]
+      }
       spec['dropDownType'] = 'MetricDropdown';
-      let segmentationLayer = new SegmentationUserLayer(this, spec);
-      let metricSpec = Object.assign( {},
-                                  spec,
-                                  {source: spec.source + '#'});
-      let metricLayer = new SegmentationMetricUserLayer(this, metricSpec, metricData, segmentationLayer);
-      let managedLayer = new ManagedUserMetricLayer(name, spec, this, metricLayer, segmentationLayer);
+      let metricLayer = new SegmentationMetricUserLayer(this, spec, metricData);
+      let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
+      managedLayer.layer = metricLayer;
       managedLayer.visible = visible;
 
-      //set up links back to the manging layer
-      metricLayer.managingUserLayer = managedLayer;
-      segmentationLayer.managingUserLayer = managedLayer;
       return managedLayer;
     }
     

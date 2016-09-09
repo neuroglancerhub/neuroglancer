@@ -1,5 +1,4 @@
 import {UserLayerDropdown, UserLayer} from 'neuroglancer/layer';
-import {ManagedUserMetricLayer} from 'neuroglancer/layer_specification';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
@@ -16,7 +15,7 @@ export class SegmentationDropdown extends UserLayerDropdown {
   addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
   selectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.selectedAlpha));
   notSelectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.notSelectedAlpha));
-  constructor(public element: HTMLDivElement, public layer: SegmentationUserLayer | SegmentationMetricUserLayer) {
+  constructor(public element: HTMLDivElement, public layer: SegmentationUserLayer) {
     super();
     element.classList.add('segmentation-dropdown');
     let {selectedAlphaWidget, notSelectedAlphaWidget} = this;
@@ -35,24 +34,50 @@ export class SegmentationDropdown extends UserLayerDropdown {
 };
 
 export class MetricDropdown extends SegmentationDropdown {
-  
-  constructor(public element: HTMLDivElement, public layer: SegmentationUserLayer | SegmentationMetricUserLayer) {
+  metricSelectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.metricLayer.selectedAlpha));
+  metricNotSelectedAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.metricLayer.notSelectedAlpha));
+
+  constructor(public element: HTMLDivElement, public layer: SegmentationMetricUserLayer) {
     super(element, layer);
-    //must be a ManagedUserMetricLayer
-    let managedUserLayer = layer.managingUserLayer;
+
+    element.insertBefore(this.metricNotSelectedAlphaWidget.element, element.firstChild);
+    element.insertBefore(this.metricSelectedAlphaWidget.element, element.firstChild);
+
+
+    this.metricSelectedAlphaWidget.element.style.display = 'none';
+    this.metricNotSelectedAlphaWidget.element.style.display = 'none';
+    this.metricSelectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
+    this.metricNotSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
 
     //add metric checkbox
     let showMetricLayerCheckbox =
-        this.registerDisposer(new TrackableBooleanCheckbox(managedUserLayer.showMetrics));
+        this.registerDisposer(new TrackableBooleanCheckbox(layer.showMetrics));
     let showMetricLayerLabel = document.createElement('label');
     showMetricLayerLabel.appendChild(document.createTextNode('Show Metric Data'));
     showMetricLayerLabel.appendChild(showMetricLayerCheckbox.element);
     this.element.appendChild(showMetricLayerLabel);
-    this.registerSignalBinding(managedUserLayer.showMetrics.changed.add(() => { managedUserLayer.toggleUserLayer(); }));
+    this.registerSignalBinding(layer.showMetrics.changed.add(() => {
+       layer.toggleUserLayer(); 
+       this.toggleSliders();
+    }));
 
-    if(layer.metricKeyData){
-      let metricScaleWidget = this.registerDisposer( new MetricScaleWidget(layer.metricKeyData));
-      element.appendChild(metricScaleWidget.element);
+    //add metric scale
+    let metricScaleWidget = this.registerDisposer( new MetricScaleWidget(layer.metricKeyData));
+    element.appendChild(metricScaleWidget.element);
+  }
+
+  toggleSliders(){
+    if(this.layer.showMetrics.value){
+      this.metricSelectedAlphaWidget.element.style.display = 'flex';
+      this.metricNotSelectedAlphaWidget.element.style.display = 'flex';
+      this.selectedAlphaWidget.element.style.display = 'none';
+      this.notSelectedAlphaWidget.element.style.display = 'none';
+    }
+    else{
+      this.metricSelectedAlphaWidget.element.style.display = 'none';
+      this.metricNotSelectedAlphaWidget.element.style.display = 'none';
+      this.selectedAlphaWidget.element.style.display = 'flex';
+      this.notSelectedAlphaWidget.element.style.display = 'flex';      
     }
   }
 

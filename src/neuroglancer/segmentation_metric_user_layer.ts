@@ -35,75 +35,69 @@ import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 import {MetricDropdown} from 'neuroglancer/layer_dropdown';
 import {iteratee, minBy, maxBy} from 'lodash';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
-var chroma = require('chroma-js');//needs to be imported this way due to export style differences
+var chroma:any = require('chroma-js');//needs to be imported this way due to export style differences
 
 require('./segmentation_user_layer.css');
 
-export class SegmentationMetricUserLayer extends UserLayer implements SegmentationDisplayState {
-  segmentColorHash = SegmentColorHash.getDefault();
-  segmentSelectionState = new SegmentSelectionState();
-  selectedAlpha = trackableAlphaValue(0.5);
-  notSelectedAlpha = trackableAlphaValue(0);
-  visibleSegments: Uint64Set;
-  volumePath: string|undefined;
-  meshPath: string|undefined;
-  meshLod: number|undefined;
-  skeletonsPath: string|undefined;
-  meshLayer: MeshLayer|undefined;
-  wasDisposed = false;
-  ReferenceUserLayer: SegmentationUserLayer;
+export class SegmentationMetricUserLayer extends SegmentationUserLayer {
+  colorPath: string|undefined;
   metricKeyData: MetricKeyData = new MetricKeyData();
+  showMetrics: TrackableBoolean = new TrackableBoolean(false, false);
+  metricLayer: CustomColorSegmentationRenderLayer;
+  selectedAlphaStash: number;
+  notSelectedAlphaStash: number;
 
-  constructor(public manager: LayerListSpecification, x: any, metricData: any, ReferenceUserLayer: SegmentationUserLayer) {
-    super([]);
-    this.ReferenceUserLayer = ReferenceUserLayer;
-    this.visibleSegments = Uint64Set.makeWithCounterpart(manager.worker);
-    this.visibleSegments.changed.add(() => { this.specificationChanged.dispatch(); });
-    this.segmentSelectionState.bindTo(manager.layerSelectedValues, this);
-    this.selectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
-    this.notSelectedAlpha.changed.add(() => { this.specificationChanged.dispatch(); });
+  constructor(public manager: LayerListSpecification, x: any, metricData: any) {
+    super(manager, x);
+    this.metricKeyData.name = metricData['metricName'];
+    let IDColorMap = this.mapMetricsToColors(metricData['IDColorMap']);
 
-    this.selectedAlpha.restoreState(x['selectedAlpha']);
-    this.notSelectedAlpha.restoreState(x['notSelectedAlpha']);
-    //add the color layer
-    let volumePath = this.volumePath = verifyOptionalString(x['source']);
-    let meshPath = this.meshPath = verifyOptionalString(x['mesh']);
-    let skeletonsPath = this.skeletonsPath = verifyOptionalString(x['skeletons']);
-    if (this.volumePath !== undefined) {
+    let colorPath = this.colorPath = this.volumePath + '#';
 
-      let cvolumePromise = getVolumeWithStatusMessage(this.volumePath);
-      cvolumePromise
-      .then(volume => {
-        if (!this.wasDisposed) {
-          if (!this.meshLayer) {
-            let meshSource = volume.getMeshSource(this.manager.chunkManager);
-            if (meshSource != null) {
-              this.addMesh(meshSource);
-            }
-          }
-        }
-      });
-      this.metricKeyData.name = metricData['metricName'];
-      let IDColorMap = this.mapMetricsToColors(metricData['IDColorMap']);
-      this.addRenderLayer(new CustomColorSegmentationRenderLayer(
-          manager.chunkManager, cvolumePromise, this, this.selectedAlpha, this.notSelectedAlpha, IDColorMap));
-      
+    if(this.volumePath != undefined){
+      //promise for color renderlayer
+      let colorPromise = getVolumeWithStatusMessage(this.colorPath);
+
+      //assumption: seg and metric layers are the top two layers
+      this.metricLayer = new CustomColorSegmentationRenderLayer(
+          manager.chunkManager, colorPromise, IDColorMap, this);
+      this.addRenderLayer(this.metricLayer);
+
+      this.hideLayer(this.metricLayer);
+      this.visibleSegments.changed.add(this.syncMetricVisibleSegments, this);
     }
 
-    this.addRenderLayer(this.ReferenceUserLayer.renderLayers[0]);
 
   }
 
-  mapMetricsToColors(IdMetricMap: any){
+  syncMetricVisibleSegments(x: Uint64|null, added: boolean){
+    let metricVisibleSegments = this.metricLayer.displayState.visibleSegments;
+    if(x){
+      let colorSegment = this.metricLayer.getColorVal(x);
+      if(added && colorSegment){
+        metricVisibleSegments.add(colorSegment);
+      }
+      else if(colorSegment){
+        metricVisibleSegments.delete(colorSegment);
+      }
+    }
+    else{
+        metricVisibleSegments.clear();
+    }
+
+  }
+
+  mapMetricsToColors(IdMetricMap: any): Map<string, Uint64>{
     let metricKeyData = this.metricKeyData;
     let colors = ['Yellow', 'aquamarine', 'deepskyblue', 'mediumorchid'];
-    let metricIteratee = function(el){
+    let metricIteratee = function(el:ArrayLike<number>){
       return el[1];//metric value
     }
     let min = metricKeyData.min = minBy(IdMetricMap, metricIteratee)[1];
     let max = metricKeyData.max = maxBy(IdMetricMap, metricIteratee)[1];
-    let scale = metricKeyData.chromaScale = chroma.scale(colors).domain([min, max]);
+    let scale = metricKeyData.chromaScale = chroma!.scale(colors).domain([min, max]);
 
     for(let metricArr of IdMetricMap){
       let metricVal = metricArr[1];
@@ -118,57 +112,44 @@ export class SegmentationMetricUserLayer extends UserLayer implements Segmentati
       metricArr[1] = new Uint64(metricArr[1], randHigh)
     }
 
-    let IDColorMap = new Map(IdMetricMap);
+    let IDColorMap = new Map<string, Uint64>(IdMetricMap);
     return IDColorMap;
   }
 
   getValueAt(position: Float32Array, pickedRenderLayer: RenderLayer|null, pickedObject: Uint64) {
     let result: any;
     let {renderLayers} = this;
-    let {ReferenceUserLayer} = this;
 
-    return ReferenceUserLayer.renderLayers[0].getValueAt(position);
+    return this.segmentationLayer.getValueAt(position);
 
   }
 
-  disposed() {
-    super.disposed();
-    this.wasDisposed = true;
-  }
-
-  addMesh(meshSource: MeshSource) {
-    this.meshLayer = new MeshLayer(this.manager.chunkManager, meshSource, this);
-    this.addRenderLayer(this.meshLayer);
-  }
-
-  toJSON() {
-    let x: any = {'type': 'segmentation'};
-    x['source'] = this.volumePath;
-    x['mesh'] = this.meshPath;
-    x['meshLod'] = this.meshLod;
-    x['skeletons'] = this.skeletonsPath;
-    x['selectedAlpha'] = this.selectedAlpha.toJSON();
-    x['notSelectedAlpha'] = this.notSelectedAlpha.toJSON();
-    let {visibleSegments} = this;
-    if (visibleSegments.size > 0) {
-      let segments = x['segments'] = new Array<string>();
-      for (let id of visibleSegments) {
-        segments.push(id.toString());
-      }
+  toggleUserLayer(){
+    if(this.showMetrics.value){
+      this.showLayer(this.metricLayer);
+      this.hideLayer(this.segmentationLayer);
     }
-    return x;
+    else{
+      this.showLayer(this.segmentationLayer);
+      this.hideLayer(this.metricLayer);
+    }
+  }
+  showLayer(layer: SegmentationRenderLayer){
+      //make sure this layer is in front to avoid blending hidden layers
+      this.renderLayers[1] = this.renderLayers[0];
+      this.renderLayers[0] = layer;
+      layer.selectedAlpha.value = this.selectedAlphaStash;
+      layer.notSelectedAlpha.value = this.notSelectedAlphaStash;
+      this.layersChanged.dispatch();
+  }
+  hideLayer(layer: SegmentationRenderLayer){
+      this.selectedAlphaStash = layer.selectedAlpha.value;
+      this.notSelectedAlphaStash= layer.notSelectedAlpha.value;
+
+      layer.selectedAlpha.value = 0;
+      layer.notSelectedAlpha.value = 0;
   }
 
   makeDropdown(element: HTMLDivElement) { return new MetricDropdown(element, this); }
 
-//disable segmentation actions for now
-  handleAction(action: string) {
-    switch (action) {
-      case 'recolor': 
-      case 'clear-segments': 
-      case 'select': {
-        break;
-      }
-    }
-  }
 };

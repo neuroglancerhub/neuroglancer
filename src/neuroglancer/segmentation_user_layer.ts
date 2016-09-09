@@ -48,6 +48,7 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
   meshLod: number|undefined;
   skeletonsPath: string|undefined;
   meshLayer: MeshLayer|undefined;
+  segmentationLayer: SegmentationRenderLayer;
   wasDisposed = false;
   dropDownType: string;
 
@@ -61,7 +62,6 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
 
     this.selectedAlpha.restoreState(x['selectedAlpha']);
     this.notSelectedAlpha.restoreState(x['notSelectedAlpha']);
-    this.dropDownType = verifyOptionalString(x['dropDownType']) || 'SegmentationDropdown';
 
     let volumePath = this.volumePath = verifyOptionalString(x['source']);
     let meshPath = this.meshPath = verifyOptionalString(x['mesh']);
@@ -78,8 +78,9 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
           }
         }
       });
-      this.addRenderLayer(new SegmentationRenderLayer(
-          manager.chunkManager, volumePromise, this, this.selectedAlpha, this.notSelectedAlpha));
+      this.segmentationLayer = new SegmentationRenderLayer(
+          manager.chunkManager, volumePromise, this, this.selectedAlpha, this.notSelectedAlpha);
+      this.addRenderLayer(this.segmentationLayer);
     }
     if (meshPath !== undefined) {
       let meshLod = x['meshLod'];
