@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import * as debounce from 'lodash/debounce';
 import * as throttle from 'lodash/throttle';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
@@ -25,6 +26,7 @@ import {Signal} from 'signals';
 export class RenderLayer extends RefCounted {
   ready = false;
   layerChanged = new Signal();
+  redrawNeeded = new Signal();
   readyStateChanged = new Signal();
   setReady(value: boolean) {
     this.ready = value;
@@ -78,7 +80,7 @@ export class UserLayer extends RefCounted {
     let result: any;
     let {renderLayers} = this;
     if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
-      return pickedObject;
+      return this.transformPickedValue(pickedObject);
     }
     for (let layer of renderLayers) {
       if (!layer.ready) {
@@ -89,8 +91,10 @@ export class UserLayer extends RefCounted {
         break;
       }
     }
-    return result;
+    return this.transformPickedValue(result);
   }
+
+  transformPickedValue(value: any) { return value; }
 
   toJSON(): any { return null; }
 
@@ -114,10 +118,14 @@ export class ManagedUserLayer extends RefCounted {
         layer.specificationChanged, this.specificationChanged.dispatch, this.specificationChanged);
   }
 
+  /**
+   * If layer is not null, tranfers ownership of a reference.
+   */
   set layer(layer: UserLayer|null) {
     let oldLayer = this.layer_;
     if (oldLayer != null) {
       this.updateSignalBindings(oldLayer, removeSignalBinding);
+      oldLayer.dispose();
     }
     this.layer_ = layer;
     if (layer != null) {
@@ -126,10 +134,15 @@ export class ManagedUserLayer extends RefCounted {
       this.handleLayerChanged();
     }
   }
+
+  /**
+   * If layer is not null, tranfers ownership of a reference.
+   */
   constructor(public name: string, layer: UserLayer|null = null, public visible: boolean = true) {
     super();
     this.layer = layer;
   }
+
   private handleLayerChanged() {
     if (this.visible) {
       this.layerChanged.dispatch();
@@ -142,7 +155,11 @@ export class ManagedUserLayer extends RefCounted {
     }
   }
 
-  disposed() { this.wasDisposed = true; }
+  disposed() {
+    this.wasDisposed = true;
+    this.layer = null;
+    super.disposed();
+  }
 };
 
 export class LayerManager extends RefCounted {
@@ -226,41 +243,34 @@ export class LayerManager extends RefCounted {
     this.layersChanged.dispatch();
   }
 
-  disposed() { this.clear(); }
+  disposed() {
+    this.clear();
+    super.disposed();
+  }
 
   getLayerByName(name: string) { return this.managedLayers.find(x => x.name === name); }
 
   /**
-   * Asynchronously initialize the voxelSize and position based on the managed
-   * layers.
+   * Asynchronously initialize the voxelSize and position based on the managed layers.
    *
-   * The first ready layer with an associated bounding box will set the position
-   * to the center of the bounding box.
+   * The first ready layer with an associated bounding box will set the position to the center of
+   * the bounding box.
+   *
+   * If the position later becomes invalid, it will be initialized again.
    */
   initializePosition(position: SpatialPosition) {
-    if (position.valid) {
-      // Nothing to do.
-      return;
-    }
-
-    if (this.updatePositionFromLayers(position)) {
-      return;
-    }
-
     let {boundPositions} = this;
     if (boundPositions.has(position)) {
       return;
     }
     boundPositions.add(position);
 
-    let handler = () => {
-      this.updatePositionFromLayers(position);
-      if (position.valid) {
-        this.readyStateChanged.remove(handler);
-        this.boundPositions.delete(position);
-      }
-    };
+    // Deboucne to ensure that if the position is reset and the layers are reset immediately after,
+    // the position will not be reinitialized based on the soon to be reset layers.
+    const handler = debounce(() => { this.updatePositionFromLayers(position); });
     this.readyStateChanged.add(handler);
+    position.changed.add(handler);
+    this.updatePositionFromLayers(position);
   }
 
   updatePositionFromLayers(position: SpatialPosition) {
@@ -469,6 +479,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends RenderLayer> exte
     this.cancelUpdate();
     this.visibleLayers.forEach(this.layerRemoved);
     this.visibleLayers.clear();
+    super.disposed();
   }
 
   private cancelUpdate() {

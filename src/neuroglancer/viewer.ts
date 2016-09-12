@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import * as debounce from 'lodash/debounce';
 import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
@@ -106,7 +107,10 @@ export class FourPanelLayout extends RefCounted {
     display.onResize();
   }
 
-  disposed() { removeChildren(this.rootElement); }
+  disposed() {
+    removeChildren(this.rootElement);
+    super.disposed();
+  }
 };
 
 export class SinglePanelLayout extends RefCounted {
@@ -128,7 +132,10 @@ export class SinglePanelLayout extends RefCounted {
     viewer.display.onResize();
   }
 
-  disposed() { removeChildren(this.rootElement); }
+  disposed() {
+    removeChildren(this.rootElement);
+    super.disposed();
+  }
 };
 
 interface DataDisplayLayout extends RefCounted {
@@ -211,20 +218,21 @@ export class Viewer extends RefCounted implements ViewerState {
         this.navigationState.changed.add(this.handleNavigationStateChanged, this));
 
     this.layerManager.initializePosition(this.navigationState.position);
-    this.layerManager.layersChanged.add(() => {
+
+    // Debounce this call to ensure that a transient state does not result in the layer dialog being
+    // shown.
+    this.layerManager.layersChanged.add(this.registerCancellable(debounce(() => {
       if (this.layerManager.managedLayers.length === 0) {
         // No layers, reset state.
-        this.navigationState.voxelSize.reset();
         this.navigationState.reset();
         this.perspectiveNavigationState.pose.orientation.reset();
         this.perspectiveNavigationState.zoomFactor.reset();
         this.resetInitiated.dispatch();
-        this.layerManager.initializePosition(this.navigationState.position);
         if (!overlaysOpen) {
           new LayerDialog(this.layerSpecification);
         }
       }
-    });
+    })));
 
     this.registerSignalBinding(this.chunkQueueManager.visibleChunksChanged.add(
         () => { this.layerSelectedValues.handleLayerChange(); }));

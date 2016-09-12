@@ -86,9 +86,18 @@ export class Uint64 {
     return vHigh.toString(base) + '0'.repeat(lowDigits - vLowStr.length) + vLowStr;
   }
 
+  /**
+   * Returns true if a is strictly less than b.
+   */
   static less(a: Uint64, b: Uint64): boolean {
     return a.high < b.high || (a.high === b.high && a.low < b.low);
   }
+
+  /**
+   * Returns a negative number if a is strictly less than b, 0 if a is equal to b, or a positive
+   * number if a is strictly greater than b.
+   */
+  static compare(a: Uint64, b: Uint64): number { return (a.high - b.high) || (a.low - b.low); }
 
   static ZERO = new Uint64(0, 0);
 
@@ -101,7 +110,7 @@ export class Uint64 {
     return new Uint64(randomTempBuffer[0], randomTempBuffer[1]);
   }
 
-  parseString(s: string, base = 10) {
+  tryParseString(s: string, base = 10) {
     let {lowDigits, lowBase, lowBase1, lowBase2, pattern} = stringConversionData[base];
     if (!pattern.test(s)) {
       return false;
@@ -132,16 +141,22 @@ export class Uint64 {
     return true;
   }
 
-  static parseString(s: string, base = 10) {
-    let x = new Uint64();
-    if (!x.parseString(s, base)) {
+  parseString(s: string, base = 10) {
+    if (!this.tryParseString(s, base)) {
       throw new Error(`Failed to parse string as uint64 value: ${JSON.stringify(s)}.`);
     }
-    return x;
+    return this;
+  }
+
+  static parseString(s: string, base = 10) {
+    let x = new Uint64();
+    return x.parseString(s, base);
   }
 
   valid() {
     let {low, high} = this;
     return ((low >>> 0) === low) && ((high >>> 0) === high);
   }
+
+  toJSON() { return this.toString(); }
 };

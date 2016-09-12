@@ -14,5 +14,22 @@
  * limitations under the License.
  */
 
-var testContext = require.context('.', true, /\.benchmark\.ts$/);
-testContext.keys().map(testContext);
+import {HashSetUint64} from 'neuroglancer/gpu_hash/hash_table';
+import {getRandomValues} from 'neuroglancer/util/random';
+import {Uint64} from 'neuroglancer/util/uint64';
+
+suite('gpu_hash/hash_table', () => {
+  let ht = new HashSetUint64();
+  const numValues = 100;
+  let values = new Uint32Array(numValues * 2);
+  let temp = new Uint64();
+  getRandomValues(values);
+  benchmark('insert', () => {
+    ht.clear();
+    for (let i = 0, length = values.length; i < length; i += 2) {
+      temp.low = values[i];
+      temp.high = values[i + 1];
+      ht.add(temp);
+    }
+  });
+});

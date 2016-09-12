@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 
@@ -25,7 +25,7 @@ type ItemElement = HTMLButtonElement;
 
 let temp = new Uint64();
 
-export class SegmentSetWidget extends RefCounted implements SegmentationDisplayState {
+export class SegmentSetWidget extends RefCounted {
   element = document.createElement('div');
   private clearButton = document.createElement('button');
   private itemContainer = document.createElement('span');
@@ -95,15 +95,15 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
     itemElement.title = `Remove segment ID ${s}`;
     let widget = this;
     itemElement.addEventListener('click', function(this: ItemElement) {
-      temp.parseString(this.textContent!);
+      temp.tryParseString(this.textContent!);
       widget.visibleSegments.delete(temp);
     });
     itemElement.addEventListener('mouseenter', function(this: ItemElement) {
-      temp.parseString(this.textContent!);
+      temp.tryParseString(this.textContent!);
       widget.segmentSelectionState.set(temp);
     });
     itemElement.addEventListener('mouseleave', function(this: ItemElement) {
-      temp.parseString(this.textContent!);
+      temp.tryParseString(this.textContent!);
       widget.segmentSelectionState.set(null);
     });
     this.setItemColor(itemElement);
@@ -112,7 +112,7 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
   }
 
   private setItemColor(itemElement: ItemElement) {
-    temp.parseString(itemElement.textContent!);
+    temp.tryParseString(itemElement.textContent!);
     itemElement.style.backgroundColor = this.segmentColorHash.computeCssColor(temp);
   }
 
@@ -126,5 +126,6 @@ export class SegmentSetWidget extends RefCounted implements SegmentationDisplayS
     if (parentElement) {
       parentElement.removeChild(element);
     }
+    super.disposed();
   }
 };
