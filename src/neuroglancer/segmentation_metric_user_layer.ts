@@ -72,6 +72,17 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
 
   }
 
+  toJSON() {
+    let x: any = super.toJSON()
+    x['type'] = 'metric';
+    x['metricData'] = {'metricName': this.metricKeyData.name}
+    if(!x['selectedAlpha']){
+      x['selectedAlpha'] = this.selectedAlphaStash;
+    }
+    return x;
+  }
+
+
   syncMetricVisibleSegments(x: Uint64|null, added: boolean){
     let metricVisibleSegments = this.metricLayer.displayState.visibleSegments;
     if(x){

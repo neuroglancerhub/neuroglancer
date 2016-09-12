@@ -161,7 +161,6 @@ uint64_t getMappedObjectId() {
   }
 
   getSelectedSegment(){
-    let selectedSegmentForShader = selectedSegmentForShader;
 
     let {segmentSelectionState} = this.displayState;
     if (!segmentSelectionState.hasSelectedSegment) {
