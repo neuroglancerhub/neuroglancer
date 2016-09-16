@@ -1,8 +1,8 @@
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_renderlayer';
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {GPUHashTable, HashTableShaderManager} from 'neuroglancer/gpu_hash/shader';
+import {GPUHashTable, HashMapShaderManager, HashSetShaderManager} from 'neuroglancer/gpu_hash/shader';
 import {SegmentColorShaderManager} from 'neuroglancer/segment_color';
-import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {SegmentSelectionState, SegmentationDisplayState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
 import {RenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
@@ -11,12 +11,12 @@ import {updateLookupTableData} from 'neuroglancer/sliceview/compressed_segmentat
 import {Chunk} from 'neuroglancer/chunk_manager/frontend';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64} from 'neuroglancer/util/uint64';
-
+import {HashTableBase} from 'neuroglancer/gpu_hash/hash_table';
 
 //TODO: pare this down to only necessary imports
 
 export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer{
-  protected gpuHashTable: GPUHashTable;
+  protected gpuHashTable: GPUHashTable<any>;
 
   constructor(
       chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,

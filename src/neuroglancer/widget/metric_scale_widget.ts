@@ -1,3 +1,4 @@
+import {MetricKeyData} from 'neuroglancer/util/metric_color_util.ts';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 
@@ -44,10 +45,3 @@ export class MetricScaleWidget extends RefCounted {
 
   disposed() { removeFromParent(this.element); }
 };
-
-export class MetricKeyData{
-  min: number;
-  max: number;
-  chromaScale: any;
-  name: string;
-}

@@ -22,7 +22,7 @@ import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {MeshLayer} from 'neuroglancer/mesh/frontend';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {SegmentSelectionState, SegmentationDisplayState} from 'neuroglancer/segmentation_display_state';
+import {SegmentSelectionState, SegmentationDisplayState, Uint64MapEntry} from 'neuroglancer/segmentation_display_state/frontend';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
 import {trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {CustomColorSegmentationRenderLayer} from 'neuroglancer/sliceview/custom_color_segmentation_renderlayer';
@@ -30,14 +30,11 @@ import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_rende
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {MetricKeyData} from 'neuroglancer/widget/metric_scale_widget';
+import {MetricKeyData, mapMetricsToColors} from 'neuroglancer/util/metric_color_util';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 import {MetricDropdown} from 'neuroglancer/layer_dropdown';
-import {iteratee, minBy, maxBy} from 'lodash';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-
-var chroma:any = require('chroma-js');//needs to be imported this way due to export style differences
 
 require('./segmentation_user_layer.css');
 
@@ -52,7 +49,7 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
   constructor(public manager: LayerListSpecification, x: any, metricData: any) {
     super(manager, x);
     this.metricKeyData.name = metricData['metricName'];
-    let IDColorMap = this.mapMetricsToColors(metricData['IDColorMap']);
+    let IDColorMap = mapMetricsToColors(metricData['IDColorMap'], this.metricKeyData);
 
     let colorPath = this.colorPath = this.volumePath + '#';
 
@@ -100,32 +97,6 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
 
   }
 
-  mapMetricsToColors(IdMetricMap: any): Map<string, Uint64>{
-    let metricKeyData = this.metricKeyData;
-    let colors = ['Yellow', 'aquamarine', 'deepskyblue', 'mediumorchid'];
-    let metricIteratee = function(el:ArrayLike<number>){
-      return el[1];//metric value
-    }
-    let min = metricKeyData.min = minBy(IdMetricMap, metricIteratee)[1];
-    let max = metricKeyData.max = maxBy(IdMetricMap, metricIteratee)[1];
-    let scale = metricKeyData.chromaScale = chroma!.scale(colors).domain([min, max]);
-
-    for(let metricArr of IdMetricMap){
-      let metricVal = metricArr[1];
-      let rgb = (scale(metricVal)).rgba();
-      metricArr[1] = (rgb[3]<<24)+(rgb[2]<<16)+(rgb[1]<<8)+ rgb[0]//convert color to 32bit little-endian value
-      //make data key
-      let idUint64 = new Uint64();
-      idUint64.parseString(metricArr[0].toString())
-      metricArr[0] = idUint64.low + ',' + idUint64.high;
-      //convert val to Uint64 with rand high values
-      let randHigh = Math.floor(Math.random()*Math.pow(2,32));
-      metricArr[1] = new Uint64(metricArr[1], randHigh)
-    }
-
-    let IDColorMap = new Map<string, Uint64>(IdMetricMap);
-    return IDColorMap;
-  }
 
   getValueAt(position: Float32Array, pickedRenderLayer: RenderLayer|null, pickedObject: Uint64) {
     let result: any;

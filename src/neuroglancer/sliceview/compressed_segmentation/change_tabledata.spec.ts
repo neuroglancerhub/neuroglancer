@@ -2,7 +2,7 @@ import {encodeChannel} from 'neuroglancer/sliceview/compressed_segmentation/enco
 import {updateLookupTableData} from 'neuroglancer/sliceview/compressed_segmentation/change_tabledata';
 import {Uint32ArrayBuilder} from 'neuroglancer/util/uint32array_builder.ts';
 import {Uint64} from 'neuroglancer/util/uint64';
-fdescribe('change_tabledata uint64', () => {
+describe('change_tabledata uint64', () => {
 
    describe('change_tabledata ', () => {
     it('base', () => {

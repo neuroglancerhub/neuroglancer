@@ -30,6 +30,7 @@ import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
 import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {zip, range} from 'lodash';
 
 export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(new Promise(function(resolve) { resolve(getVolume(x)); }), {
