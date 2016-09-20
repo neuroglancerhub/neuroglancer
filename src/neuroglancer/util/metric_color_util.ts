@@ -25,9 +25,8 @@ export function mapMetricsToColors(IdMetricMap: any, metricKeyData:MetricKeyData
       let randHigh = Math.floor(Math.random()*Math.pow(2,32));
       metricArr[1] = new Uint64(metricArr[1], randHigh)
   }
-
-    return new Map<string, Uint64>(IdMetricMap);
-    
+    metricKeyData.IDColorMap = new Map<string, Uint64>(IdMetricMap); 
+    return metricKeyData.IDColorMap;
 }
 
 export class MetricKeyData{

@@ -12,15 +12,23 @@ import {Chunk} from 'neuroglancer/chunk_manager/frontend';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {HashTableBase} from 'neuroglancer/gpu_hash/hash_table';
+import {MetricKeyData} from 'neuroglancer/util/metric_color_util';
+import {chain} from 'lodash';
+
 
 //TODO: pare this down to only necessary imports
 
 export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer{
   protected gpuHashTable: GPUHashTable<any>;
+  protected currentMetricName: string;
+  //data transformation function applied to chunk data
+  protected fn = function(IDColorMap: any, chunk:Chunk){
+      updateLookupTableData(chunk.data, IDColorMap, 1, chunk.source.chunkFormat.subchunkSize, chunk.chunkDataSize);
+  };
 
   constructor(
       chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,
-      public IDColorMap: Map<string, Uint64>,
+      public metrics : Map<string, MetricKeyData>,
       public displayState: SegmentationMetricUserLayer,
       public selectedAlpha = trackableAlphaValue(0.5),
       public notSelectedAlpha = trackableAlphaValue(0)) {
@@ -30,15 +38,45 @@ export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer{
     this.displayState = Object.assign({}, displayState);
     this.displayState.visibleSegments = Uint64Set.makeWithCounterpart(displayState.manager.worker);
     this.gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
-    
-    multiscaleSourcePromise.then(chunkSource => {
+    this.currentMetricName = metrics.keys().next().value;
+    let metricKeyData = this.metrics.get(this.currentMetricName);
+
+    multiscaleSourcePromise.then(function(chunkSource) {
+      this.chunkSource = chunkSource;
       let transforms = chunkManager.dataTransformFns; 
-      let fn = function(IDColorMap: any, chunk:Chunk){
-        updateLookupTableData(chunk.data, IDColorMap, 1, chunk.source.chunkFormat.subchunkSize, chunk.chunkDataSize);
-      }.bind({}, this.IDColorMap);
+      let fn = this.fn.bind({}, metricKeyData.IDColorMap);//apply IDColorMap
       transforms.set(chunkSource.dataInstanceKey, fn);
-      
-    });
+
+    }.bind(this));
+
+  }
+
+  updateDataTransformation(metricName: string){
+    let {chunkSource, chunkManager} = this;
+    if(this.currentMetricName === metricName){
+      return;
+    }
+    this.currentMetricName = metricName;
+
+    let metricKeyData = this.metrics.get(metricName);
+
+    let fn = this.fn.bind({}, metricKeyData.IDColorMap);//apply IDColorMap
+    
+    chain(chunkSource.getSources(chunkManager))
+      .flatten()
+      .each(function(chunkSource){
+        for(let chunk of chunkSource.chunks.values()){
+        let dataStash = new Uint32Array(chunk.data.buffer.slice(0));
+        fn(chunk);
+        chunk.copyToGPU(chunkSource.gl);
+        chunk.data = dataStash;
+        }
+
+      }).value();
+    let transforms = chunkManager.dataTransformFns; 
+    transforms.set(chunkSource.dataInstanceKey, fn);
+
+    this.setReady(true);//updates layer
 
   }
 
@@ -84,7 +122,7 @@ export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer{
   }
 
   getColorVal(id: Uint64) {
-    let colorVal = this.IDColorMap.get(String(id.low) + ',' + String(id.high))
+    let colorVal = this.metrics.get(this.currentMetricName).IDColorMap.get(String(id.low) + ',' + String(id.high))
     return colorVal ? colorVal : new Uint64();
   }
 }

@@ -34,45 +34,75 @@ import {MetricKeyData, mapMetricsToColors} from 'neuroglancer/util/metric_color_
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 import {MetricDropdown} from 'neuroglancer/layer_dropdown';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {TrackableValue} from 'neuroglancer/trackable_value';
+import {each} from 'lodash';
 
 require('./segmentation_user_layer.css');
 
 export class SegmentationMetricUserLayer extends SegmentationUserLayer {
   colorPath: string|undefined;
-  metricKeyData: MetricKeyData = new MetricKeyData();
-  showMetrics: TrackableBoolean = new TrackableBoolean(false, false);
   metricLayer: CustomColorSegmentationRenderLayer;
   selectedAlphaStash: number;
   notSelectedAlphaStash: number;
+  segLayers: Map<string, SegmentationRenderLayer> = new Map<string, SegmentationRenderLayer>();
+  visibleLayer: SegmentationRenderLayer;
+  currentLayerName: TrackableValue<string>;
+  prevLayerName: string;
 
   constructor(public manager: LayerListSpecification, x: any, metricData: any) {
     super(manager, x);
-    this.metricKeyData.name = metricData['metricName'];
-    let IDColorMap = mapMetricsToColors(metricData['IDColorMap'], this.metricKeyData);
 
-    let colorPath = this.colorPath = this.volumePath + '#';
+    //bookkeeping and setup for toggling the color state
+    this.visibleLayer = this.segmentationLayer;
+    this.currentLayerName = new TrackableValue<string>('Random Colors');
+    this.prevLayerName = this.currentLayerName.value;
+    this.segLayers.set('Random Colors', this.segmentationLayer);
+    this.segmentationLayer.layerPosition = 0;
+
 
     if(this.volumePath != undefined){
-      //promise for color renderlayer
-      let colorPromise = getVolumeWithStatusMessage(this.colorPath);
+        let metrics = new Map();
 
-      //assumption: seg and metric layers are the top two layers
-      this.metricLayer = new CustomColorSegmentationRenderLayer(
-          manager.chunkManager, colorPromise, IDColorMap, this);
-      this.addRenderLayer(this.metricLayer);
-
-      this.hideLayer(this.metricLayer);
-      this.visibleSegments.changed.add(this.syncMetricVisibleSegments, this);
+        each(metricData, function (metricMap, metricName){
+          let metricKeyData = new MetricKeyData();
+          metricKeyData.name = metricName;
+          mapMetricsToColors(metricMap, metricKeyData);
+          metrics.set(metricName, metricKeyData);
+        }.bind(this));
+        //use the first metric map
+        this.metricLayer = this.addMetricLayer(metrics);
+        //start by showing the segmentation layer
+        this.hideLayer(this.metricLayer);
     }
 
 
   }
 
+  addMetricLayer(metrics){
+    let {manager} = this;
+
+    //promise for color renderlayer--gets its own copy of the data
+    let colorPath = this.colorPath = this.volumePath + '#';
+    let colorPromise = getVolumeWithStatusMessage(this.colorPath);
+    
+    let metricLayer = new CustomColorSegmentationRenderLayer(
+        manager.chunkManager, colorPromise, metrics, this);
+    
+    for(let name of metrics.keys()){
+      this.segLayers.set(name, metricLayer);
+    }
+    
+    this.addRenderLayer(metricLayer);
+    metricLayer.layerPosition = this.renderLayers.length - 1;
+
+    this.visibleSegments.changed.add(this.syncMetricVisibleSegments, this);
+
+    return metricLayer;
+  }
+
   toJSON() {
     let x: any = super.toJSON()
     x['type'] = 'metric';
-    x['metricData'] = {'metricName': this.metricKeyData.name}
     if(!x['selectedAlpha']){
       x['selectedAlpha'] = this.selectedAlphaStash;
     }
@@ -97,6 +127,15 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
 
   }
 
+  updateVisibleSegmentsOnMetricChange(){
+    let metricVisibleSegments = this.metricLayer.displayState.visibleSegments;
+    metricVisibleSegments.clear();
+    for(let segment of this.visibleSegments.hashTable.keys()){
+      let colorSegment = this.metricLayer.getColorVal(segment);
+      metricVisibleSegments.add(colorSegment);
+    }
+
+  }
 
   getValueAt(position: Float32Array, pickedRenderLayer: RenderLayer|null, pickedObject: Uint64) {
     let result: any;
@@ -106,28 +145,49 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
 
   }
 
-  toggleUserLayer(){
-    if(this.showMetrics.value){
-      this.showLayer(this.metricLayer);
-      this.hideLayer(this.segmentationLayer);
-    }
-    else{
-      this.showLayer(this.segmentationLayer);
-      this.hideLayer(this.metricLayer);
-    }
+  shouldUpdateMetrics(){
+    let newLayer = this.segLayers.get(this.currentLayerName.value);
+    return (newLayer instanceof CustomColorSegmentationRenderLayer &&
+            this.currentLayerName.value !== this.metricLayer.currentMetricName);
   }
-  showLayer(layer: SegmentationRenderLayer){
-      //make sure this layer is in front to avoid blending hidden layers
-      this.renderLayers[1] = this.renderLayers[0];
-      this.renderLayers[0] = layer;
-      layer.selectedAlpha.value = this.selectedAlphaStash;
-      layer.notSelectedAlpha.value = this.notSelectedAlphaStash;
+
+  shouldUpdateLayers(){
+    let newLayer = this.segLayers.get(this.currentLayerName.value);
+    return this.visibleLayer !== newLayer;
+  }
+
+  updateCurrentSegLayer(){
+    if(this.currentLayerName.value === this.prevLayerName){
+      return;
+    }
+
+    if(this.shouldUpdateMetrics()){
+      //just update metrics on the metricLayer
+      this.metricLayer.updateDataTransformation(this.currentLayerName.value);
+      this.updateVisibleSegmentsOnMetricChange();
+    }
+    if(this.shouldUpdateLayers()){
+      //swap alphas 
+      let oldLayer = this.visibleLayer;
+      this.visibleLayer = this.segLayers.get(this.currentLayerName.value);; 
+
+      this.visibleLayer.selectedAlpha.value = oldLayer.selectedAlpha.value;
+      this.visibleLayer.notSelectedAlpha.value = oldLayer.notSelectedAlpha.value;
+      this.hideLayer(oldLayer); 
+
+      //reorder layers to avoid blending hidden layers
+      oldLayer.layerPosition = this.visibleLayer.layerPosition;
+      this.visibleLayer.layerPosition = 0;
+      this.renderLayers[oldLayer.layerPosition] = oldLayer;
+      this.renderLayers[0] = this.visibleLayer;
+    }
+      //update the view
       this.layersChanged.dispatch();
+
+      //update history
+      this.prevLayerName = this.currentLayerName.value;
   }
   hideLayer(layer: SegmentationRenderLayer){
-      this.selectedAlphaStash = layer.selectedAlpha.value;
-      this.notSelectedAlphaStash= layer.notSelectedAlpha.value;
-
       layer.selectedAlpha.value = 0;
       layer.notSelectedAlpha.value = 0;
   }

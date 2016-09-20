@@ -107,10 +107,15 @@ export class ChunkQueueManager extends SharedObject {
           case ChunkState.GPU_MEMORY:
             let dataInstanceKey = chunk.source.parameters.dataInstanceKey;
             let fn = this.getTransformFn(source.chunkManager.dataTransformFns, dataInstanceKey);
+            let dataStash = undefined;
             if(fn){
+              dataStash = new Uint32Array(chunk.data.buffer.slice(0));
               fn(chunk);
             }
             chunk.copyToGPU(this.gl);
+            if(dataStash){
+              chunk.data = dataStash;
+            }
             this.visibleChunksChanged.dispatch();
             break;
           case ChunkState.SYSTEM_MEMORY:

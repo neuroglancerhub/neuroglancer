@@ -36,7 +36,6 @@ export class MetricScaleWidget extends RefCounted {
     max.className = 'metric-val-max';
     max.appendChild(document.createTextNode(metricKeyData.max))
 
-    element.appendChild(document.createTextNode(metricKeyData.name + ' scale:'));
     element.appendChild(barElement);
     element.appendChild(min);
     element.appendChild(max);
