@@ -92,6 +92,7 @@ export class PerspectiveViewSkeletonLayer extends PerspectiveViewRenderLayer {
     this.registerDisposer(base);
     this.registerSignalBinding(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
+    this.visibilityCount.addDependency(base.visibilityCount);
   }
   get gl() { return this.base.gl; }
 
@@ -112,6 +113,7 @@ export class SliceViewPanelSkeletonLayer extends SliceViewPanelRenderLayer {
     this.registerDisposer(base);
     this.registerSignalBinding(base.redrawNeeded.add(() => { this.redrawNeeded.dispatch(); }));
     this.setReady(true);
+    this.visibilityCount.addDependency(base.visibilityCount);
   }
   get gl() { return this.base.gl; }
 
@@ -124,6 +126,9 @@ export class SkeletonLayer extends RefCounted {
   private tempMat = mat4.create();
   skeletonShaderManager = new SkeletonShaderManager();
   redrawNeeded = new Signal();
+  private sharedObject: SegmentationLayerSharedObject;
+
+  get visibilityCount () { return this.sharedObject.visibilityCount; }
 
   constructor(
       public chunkManager: ChunkManager, public source: SkeletonSource,
@@ -131,7 +136,7 @@ export class SkeletonLayer extends RefCounted {
     super();
 
     registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
-    let sharedObject =
+    let sharedObject = this.sharedObject =
         this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
     sharedObject.RPC_TYPE_ID = SKELETON_LAYER_RPC_ID;
     sharedObject.initializeCounterpartWithChunkManager({
@@ -147,15 +152,17 @@ export class SkeletonLayer extends RefCounted {
     if (lineWidth === undefined) {
       lineWidth = pickingOnly ? 5 : 1;
     }
-    let {gl, skeletonShaderManager} = this;
+    let {gl, skeletonShaderManager, source} = this;
     shader.bind();
 
     let objectToDataMatrix = this.tempMat;
     mat4.identity(objectToDataMatrix);
-    mat4.scale(objectToDataMatrix, objectToDataMatrix, this.voxelSizeObject.size);
+    if (source.skeletonVertexCoordinatesInVoxels) {
+      mat4.scale(objectToDataMatrix, objectToDataMatrix, this.voxelSizeObject.size);
+    }
     skeletonShaderManager.beginLayer(gl, shader, renderContext, objectToDataMatrix);
 
-    let skeletons = this.source.chunks;
+    let skeletons = source.chunks;
 
     let {pickIDs} = renderContext;
 
@@ -176,27 +183,23 @@ export class SkeletonLayer extends RefCounted {
 };
 
 export class SkeletonChunk extends Chunk {
-  data: Uint8Array;
+  vertexPositions: Float32Array;
+  indices: Uint32Array;
   vertexBuffer: Buffer;
   indexBuffer: Buffer;
   numIndices: number;
 
   constructor(source: SkeletonSource, x: any) {
     super(source);
-    this.data = x['data'];
+    this.vertexPositions = x['vertexPositions'];
+    let indices = this.indices = x['indices'];
+    this.numIndices = indices.length;
   }
 
   copyToGPU(gl: GL) {
     super.copyToGPU(gl);
-    let {data} = this;
-    let dv = new DataView(data.buffer);
-    let numVertices = dv.getInt32(0, true);
-    let positions = new Float32Array(data.buffer, 4, numVertices * 3);
-    let indices = new Uint32Array(data.buffer, 4 * (numVertices * 3) + 4);
-
-    this.vertexBuffer = Buffer.fromData(gl, positions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.indexBuffer = Buffer.fromData(gl, indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    this.numIndices = indices.length;
+    this.vertexBuffer = Buffer.fromData(gl, this.vertexPositions, gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    this.indexBuffer = Buffer.fromData(gl, this.indices, gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
   }
 
   freeGPUMemory(gl: GL) {
@@ -209,6 +212,12 @@ export class SkeletonChunk extends Chunk {
 export class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
   getChunk(x: any) { return new SkeletonChunk(this, x); }
+
+  /**
+   * Specifies whether the skeleton vertex coordinates are specified in units of voxels rather than
+   * nanometers.
+   */
+  get skeletonVertexCoordinatesInVoxels () { return true; }
 };
 
 export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
