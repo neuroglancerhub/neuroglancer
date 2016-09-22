@@ -84,9 +84,14 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     //promise for color renderlayer--gets its own copy of the data
     let colorPath = this.colorPath = this.volumePath + '#';
     let colorPromise = getVolumeWithStatusMessage(this.colorPath);
-    
+
     let metricLayer = new CustomColorSegmentationRenderLayer(
         manager.chunkManager, colorPromise, metrics, this);
+    
+    //delay fetching data for this layer until it's visible (improves load time perf)
+    colorPromise.then(function(volume){
+      metricLayer.setReady(false);
+    }.bind(this));
     
     for(let name of metrics.keys()){
       this.segLayers.set(name, metricLayer);
@@ -167,10 +172,12 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
       this.updateVisibleSegmentsOnMetricChange();
     }
     if(this.shouldUpdateLayers()){
-      //swap alphas 
       let oldLayer = this.visibleLayer;
-      this.visibleLayer = this.segLayers.get(this.currentLayerName.value);; 
+      this.visibleLayer = this.segLayers.get(this.currentLayerName.value);
+      //only update data for the metric layer if it's the visible layer 
+      this.metricLayer.setReady(this.visibleLayer instanceof CustomColorSegmentationRenderLayer)
 
+      //swap alphas 
       this.visibleLayer.selectedAlpha.value = oldLayer.selectedAlpha.value;
       this.visibleLayer.notSelectedAlpha.value = oldLayer.notSelectedAlpha.value;
       this.hideLayer(oldLayer); 
@@ -181,11 +188,11 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
       this.renderLayers[oldLayer.layerPosition] = oldLayer;
       this.renderLayers[0] = this.visibleLayer;
     }
-      //update the view
-      this.layersChanged.dispatch();
+    //update the view
+    this.layersChanged.dispatch();
 
-      //update history
-      this.prevLayerName = this.currentLayerName.value;
+    //update history
+    this.prevLayerName = this.currentLayerName.value;
   }
   hideLayer(layer: SegmentationRenderLayer){
       layer.selectedAlpha.value = 0;
