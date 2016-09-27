@@ -4,7 +4,7 @@ import {each} from 'lodash';
 
 export function decodeSwcSkeletonChunk(chunk: SkeletonChunk, swc_str: string, endianness:Endianness) {
   let swc_objects:Array<PointObj> = parseSwc(swc_str);
-  console.log(swc_objects);
+
   if(swc_objects.length < 2){
     throw new Error(`ERROR parsing swc file`);
   }

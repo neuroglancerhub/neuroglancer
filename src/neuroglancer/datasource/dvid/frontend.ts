@@ -20,10 +20,11 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {DVIDSourceParameters, SkeletonSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
@@ -50,6 +51,7 @@ export class DataInstanceInfo {
 };
 
 const DVIDVolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
+const SkeletonSource = parameterizedSkeletonSource(SkeletonSourceParameters);
 
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
@@ -473,4 +475,28 @@ registerDataSourceFactory('dvid', {
   description: 'DVID',
   volumeCompleter: volumeCompleter,
   getVolume: getVolume,
+  getSkeletonSource: getSkeletonSourceByUrl,
 });
+
+export function getSkeletonSource(chunkManager: ChunkManager, parameters: SkeletonSourceParameters) {
+  return SkeletonSource.get(chunkManager, parameters);
+}
+
+//example: http://emdata1:7000/d5053e99753848e599a641925aa2d38f/bodies1104_skeletons/
+const skeletonSourcePattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+_skeletons)$/;
+
+function getSkeletonSourceParameters(url: string) {
+
+  let match = url.match(skeletonSourcePattern);
+  if (match === null) {
+    throw new Error(`Invalid DVID skeleton URL: ${url}`);
+  }
+  let baseUrls = [match[1]];
+  let nodeKey = match[2];
+  let dataInstanceKey = match[3];
+  return { baseUrls: baseUrls, nodeKey: nodeKey, dataInstanceKey: dataInstanceKey};
+}
+
+export function getSkeletonSourceByUrl(chunkManager: ChunkManager, url: string) {
+  return getSkeletonSource(chunkManager, getSkeletonSourceParameters(url));
+}

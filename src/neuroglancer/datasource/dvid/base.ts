@@ -42,3 +42,15 @@ export class TileChunkSourceParameters extends DVIDSourceParameters {
     return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/${parameters['dims']}/${parameters['level']}/${TileEncoding[parameters['encoding']]}`;
   }
 }
+
+export class SkeletonSourceParameters extends DVIDSourceParameters {
+  static RPC_ID = 'dvid/SkeletonSource';
+  bodyId: string;
+
+  static stringify(parameters: DVIDSourceParameters) {
+    return `dvid:skeleton:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}`;
+
+  }
+
+};
+
