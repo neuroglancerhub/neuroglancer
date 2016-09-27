@@ -47,7 +47,6 @@ export class TileChunkSourceParameters extends DVIDSourceParameters {
 
 export class SkeletonSourceParameters extends DVIDSourceParameters {
   static RPC_ID = 'dvid/SkeletonSource';
-  bodyId: string;
 
   static stringify(parameters: DVIDSourceParameters) {
     return `dvid:skeleton:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}`;
