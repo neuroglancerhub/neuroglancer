@@ -113,6 +113,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
         'baseUrls': parameters.baseUrls,
         'nodeKey': parameters.nodeKey,
         'dataInstanceKey': dataInstanceKey,
+        'volumeType': this.volumeType,
       };
       let alternatives =
           VolumeChunkSpecification
