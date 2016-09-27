@@ -169,12 +169,11 @@ export function getMeshSource(chunkManager: ChunkManager, parameters: MeshSource
 }
 
 export class SkeletonSource extends BaseSkeletonSource {
-  get skeletonVertexCoordinatesInVoxels () {
-    return false;
-  }
+  get skeletonVertexCoordinatesInVoxels() { return false; }
 };
 
-export function getSkeletonSource(chunkManager: ChunkManager, parameters: SkeletonSourceParameters) {
+export function getSkeletonSource(
+    chunkManager: ChunkManager, parameters: SkeletonSourceParameters) {
   return SkeletonSource.get(chunkManager, parameters);
 }
 

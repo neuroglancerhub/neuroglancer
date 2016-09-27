@@ -136,7 +136,7 @@ function decodeSkeletonChunk(chunk: SkeletonChunk, response: ArrayBuffer) {
   }
   decodeSkeletonVertexPositionsAndIndices(
       chunk, response, Endianness.LITTLE, /*vertexByteOffset=*/16, numVertices,
-    /*indexByteOffset=*/undefined, /*numEdges=*/numEdges);
+      /*indexByteOffset=*/undefined, /*numEdges=*/numEdges);
 }
 
 @registerChunkSource(SkeletonSourceParameters)

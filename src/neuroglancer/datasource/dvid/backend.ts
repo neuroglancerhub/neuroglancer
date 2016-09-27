@@ -15,15 +15,15 @@
  */
 
 import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {decodeSwcSkeletonChunk} from 'neuroglancer/sliceview/decode_swc_skeleton';
-import {TileChunkSourceParameters, SkeletonSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {SkeletonSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
-import {ParameterizedSkeletonSource, SkeletonChunk, decodeSkeletonVertexPositionsAndIndices} from 'neuroglancer/skeleton/backend';
+import {decodeSwcSkeletonChunk} from 'neuroglancer/sliceview/decode_swc_skeleton';
+import {Endianness} from 'neuroglancer/util/endian';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {Endianness, convertEndian32} from 'neuroglancer/util/endian';
 
 const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
   [TileEncoding.JPEG, decodeJpegChunk],
@@ -70,17 +70,16 @@ class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourcePara
 export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourceParameters> {
   download(chunk: SkeletonChunk) {
     const params = this.parameters;
-    //example: http://emdata1:7000/api/node/d5053e99753848e599a641925aa2d38f/bodies1104_skeletons/key/102160_swc
+    // example:
+    // http://emdata1:7000/api/node/d5053e99753848e599a641925aa2d38f/bodies1104_skeletons/key/102160_swc
     const path =
         `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/key/${chunk.objectId}_swc`;
     handleChunkDownloadPromise(
-        chunk, sendHttpRequest(
-          openShardedHttpRequest(params.baseUrls, path), 
-          'text'),
+        chunk, sendHttpRequest(openShardedHttpRequest(params.baseUrls, path), 'text'),
         decodeSkeletonChunk);
   }
 };
 
-function decodeSkeletonChunk(chunk:SkeletonChunk, result:string){
+function decodeSkeletonChunk(chunk: SkeletonChunk, result: string) {
   decodeSwcSkeletonChunk(chunk, result, Endianness.LITTLE);
 }

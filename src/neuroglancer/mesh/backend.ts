@@ -189,9 +189,10 @@ export function computeVertexNormals(positions: Float32Array, indices: Uint32Arr
  * array.
  */
 export function decodeVertexPositionsAndIndices(
-    chunk: {vertexPositions: Float32Array|null, indices: Uint32Array|null}, verticesPerPrimitive: number,
-    data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number, numVertices: number,
-    indexByteOffset?: number, numPrimitives?: number) {
+    chunk: {vertexPositions: Float32Array | null, indices: Uint32Array | null},
+    verticesPerPrimitive: number, data: ArrayBuffer, endianness: Endianness,
+    vertexByteOffset: number, numVertices: number, indexByteOffset?: number,
+    numPrimitives?: number) {
   let vertexPositions = new Float32Array(data, vertexByteOffset, numVertices * 3);
   convertEndian32(vertexPositions, endianness);
 

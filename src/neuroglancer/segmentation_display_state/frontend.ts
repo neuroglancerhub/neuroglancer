@@ -119,7 +119,6 @@ export function forEachSegmentToDraw<SegmentData>(
 }
 
 export class SegmentationLayerSharedObject extends SharedObject {
-
   visibilityCount = new UseCount();
 
   constructor(public chunkManager: ChunkManager, public displayState: SegmentationDisplayState) {

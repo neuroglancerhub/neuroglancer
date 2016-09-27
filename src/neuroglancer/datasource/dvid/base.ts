@@ -49,8 +49,5 @@ export class SkeletonSourceParameters extends DVIDSourceParameters {
 
   static stringify(parameters: DVIDSourceParameters) {
     return `dvid:skeleton:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}`;
-
   }
-
 };
-

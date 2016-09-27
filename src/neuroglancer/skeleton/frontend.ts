@@ -128,7 +128,7 @@ export class SkeletonLayer extends RefCounted {
   redrawNeeded = new Signal();
   private sharedObject: SegmentationLayerSharedObject;
 
-  get visibilityCount () { return this.sharedObject.visibilityCount; }
+  get visibilityCount() { return this.sharedObject.visibilityCount; }
 
   constructor(
       public chunkManager: ChunkManager, public source: SkeletonSource,
@@ -217,7 +217,7 @@ export class SkeletonSource extends ChunkSource {
    * Specifies whether the skeleton vertex coordinates are specified in units of voxels rather than
    * nanometers.
    */
-  get skeletonVertexCoordinatesInVoxels () { return true; }
+  get skeletonVertexCoordinatesInVoxels() { return true; }
 };
 
 export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
