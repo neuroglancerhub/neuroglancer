@@ -105,17 +105,7 @@ export class ChunkQueueManager extends SharedObject {
       if (newState !== oldState) {
         switch (newState) {
           case ChunkState.GPU_MEMORY:
-            let dataInstanceKey = chunk.source.parameters.dataInstanceKey;
-            let fn = this.getTransformFn(source.chunkManager.dataTransformFns, dataInstanceKey);
-            let dataStash = undefined;
-            if(fn){
-              dataStash = new Uint32Array(chunk.data.buffer.slice(0));
-              fn(chunk);
-            }
             chunk.copyToGPU(this.gl);
-            if(dataStash){
-              chunk.data = dataStash;
-            }
             this.visibleChunksChanged.dispatch();
             break;
           case ChunkState.SYSTEM_MEMORY:
@@ -132,17 +122,6 @@ export class ChunkQueueManager extends SharedObject {
     } else {
       this.pendingChunkUpdatesTail = null;
     }
-  }
-
-  private getTransformFn(dataTransformFns: Map<string, (chunk: Chunk) => void>, dataKey:string){
-    // allow key matching when dataKey contains the key--allows for handling multiscale
-    // without needing to register new transform functions
-    for(let key of dataTransformFns.keys()){
-      if(dataKey.includes(key)){
-        return dataTransformFns.get(key)
-      }
-    }
-    return null;
   }
 
 };
@@ -169,7 +148,6 @@ registerRPC('Chunk.update', function(x) {
 export class ChunkManager extends SharedObject {
   chunkSourceCache: Map<any, Memoize<string, ChunkSource>> =
       new Map<any, Memoize<string, ChunkSource>>();
-  dataTransformFns: Map<string, (chunk: Chunk) => void> = new Map<string, (chunk: Chunk) => void>();
 
   constructor(public chunkQueueManager: ChunkQueueManager) {
     super();

@@ -320,6 +320,9 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
   chunkFormatHandler: ChunkFormatHandler;
 
   chunks: Map<string, VolumeChunk>;
+  // Optional front-end data transformation function, applied just before copying chunk data to the GPU
+  // currently transforms are only supported for CompressedSegmentationChunks
+  transform: ((chunk: Chunk) => void)|undefined;
 
   constructor(chunkManager: ChunkManager, public spec: VolumeChunkSpecification) {
     super(chunkManager);

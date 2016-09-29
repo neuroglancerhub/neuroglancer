@@ -63,39 +63,34 @@ export class MetricDropdown extends SegmentationDropdown {
        this.updateDropdown();
        this.layer.updateCurrentSegLayer();
     }.bind(this)));
-
-    //add metric scale widget
-    this.metricScaleWidget = this.registerDisposer( new MetricScaleWidget(layer.metricLayer.metrics.get(layer.metricLayer.currentMetricName)));
-    this.metricScaleWidget.element.style.display = 'none';
-    element.appendChild(this.metricScaleWidget.element);
   }
 
   updateDropdown(){
     if(this.layer.shouldUpdateLayers()){
-      this.toggleSlidersAndMetricWidget();
+      this.toggleSliders();
     }
-    if(this.layer.shouldUpdateMetrics()){
-      
+    if(this.metricScaleWidget){
       this.metricScaleWidget.dispose()
-      this.metricScaleWidget = this.registerDisposer( new MetricScaleWidget(this.layer.metricLayer.metrics.get(this.layer.currentLayerName.value)));
-      this.element.appendChild(this.metricScaleWidget.element);
-
     }
+    let metric = this.layer.metricLayer.metrics.get(this.layer.currentLayerName.value);
+    if(metric){
+      this.metricScaleWidget = this.registerDisposer( new MetricScaleWidget(metric));
+      this.element.appendChild(this.metricScaleWidget.element);
+    }
+
   }
 
-  toggleSlidersAndMetricWidget(){
+  toggleSliders(){
     if(this.layer.visibleLayer !== this.layer.metricLayer) {
       //new layer is the metric layer
       this.metricSelectedAlphaWidget.element.style.display = 'flex';
       this.metricNotSelectedAlphaWidget.element.style.display = 'flex';
-      this.metricScaleWidget.element.style.display = 'block'
       this.selectedAlphaWidget.element.style.display = 'none';
       this.notSelectedAlphaWidget.element.style.display = 'none';
     }
     else {
       this.metricSelectedAlphaWidget.element.style.display = 'none';
       this.metricNotSelectedAlphaWidget.element.style.display = 'none';
-      this.metricScaleWidget.element.style.display = 'none';     
       this.selectedAlphaWidget.element.style.display = 'flex';
       this.notSelectedAlphaWidget.element.style.display = 'flex';
     }

@@ -82,13 +82,13 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     let {manager} = this;
 
     //promise for color renderlayer--gets its own copy of the data
-    let colorPath = this.colorPath = this.volumePath + '#';
-    let colorPromise = getVolumeWithStatusMessage(this.colorPath);
+    let colorPromise = getVolumeWithStatusMessage(this.volumePath);
 
     let metricLayer = new CustomColorSegmentationRenderLayer(
         manager.chunkManager, colorPromise, metrics, this);
+    metricLayer.currentMetricName = 'Random Colors'
     
-    //delay fetching data for this layer until it's visible (improves load time perf)
+    //don't bother rendering the layer since it's not visible
     colorPromise.then(function(volume){
       metricLayer.setReady(false);
     }.bind(this));
@@ -150,10 +150,9 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
 
   }
 
-  shouldUpdateMetrics(){
+  shouldUpdateMetricSegments(){
     let newLayer = this.segLayers.get(this.currentLayerName.value);
-    return (newLayer instanceof CustomColorSegmentationRenderLayer &&
-            this.currentLayerName.value !== this.metricLayer.currentMetricName);
+    return (newLayer instanceof CustomColorSegmentationRenderLayer);
   }
 
   shouldUpdateLayers(){
@@ -165,10 +164,9 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     if(this.currentLayerName.value === this.prevLayerName){
       return;
     }
-
-    if(this.shouldUpdateMetrics()){
+    this.metricLayer.updateDataTransformation(this.currentLayerName.value);
+    if(this.shouldUpdateMetricSegments()){
       //just update metrics on the metricLayer
-      this.metricLayer.updateDataTransformation(this.currentLayerName.value);
       this.updateVisibleSegmentsOnMetricChange();
     }
     if(this.shouldUpdateLayers()){

@@ -66,12 +66,7 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
     } else {
       // volumeType is SEGMENTATION
-      //handle metric data
       let dataInstanceKey = params['dataInstanceKey'];
-      let hashIndex = dataInstanceKey.lastIndexOf('#')
-      if(hashIndex !== -1){
-        dataInstanceKey = dataInstanceKey.replace('#', '');
-      }
       return `/api/node/${params['nodeKey']}/${dataInstanceKey}/raw/0_1_2/${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip`;
     }
   }
