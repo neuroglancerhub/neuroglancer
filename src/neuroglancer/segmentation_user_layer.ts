@@ -15,8 +15,8 @@
  */
 
 import {getMeshSource, getSkeletonSource} from 'neuroglancer/datasource/factory';
-import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {SegmentationDropdown, MetricDropdown} from 'neuroglancer/layer_dropdown';
+import {UserLayer} from 'neuroglancer/layer';
+import {SegmentationDropdown} from 'neuroglancer/layer_dropdown';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
@@ -27,13 +27,10 @@ import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {PerspectiveViewSkeletonLayer, SkeletonLayer, SliceViewPanelSkeletonLayer} from 'neuroglancer/skeleton/frontend';
 import {trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_renderlayer';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RangeWidget} from 'neuroglancer/widget/range';
-import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
-import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
 require('./segmentation_user_layer.css');
 
@@ -192,4 +189,3 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
     }
   }
 };
-

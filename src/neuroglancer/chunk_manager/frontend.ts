@@ -123,7 +123,6 @@ export class ChunkQueueManager extends SharedObject {
       this.pendingChunkUpdatesTail = null;
     }
   }
-
 };
 
 registerRPC('Chunk.update', function(x) {

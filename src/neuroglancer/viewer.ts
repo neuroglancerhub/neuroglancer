@@ -278,8 +278,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
     keyCommands.set('toggle-axis-lines', function() { this.showAxisLines.toggle(); });
     keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
-    keyCommands.set(
-        'toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
+    keyCommands.set('toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
 
     // This needs to happen after the global keyboard shortcut handler for the viewer has been
     // registered, so that it has priority.

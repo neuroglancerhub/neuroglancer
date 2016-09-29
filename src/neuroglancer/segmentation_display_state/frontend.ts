@@ -18,13 +18,13 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {ON_VISIBILITY_CHANGE_METHOD_ID, VisibleSegmentsState, forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value: Uint64) {}

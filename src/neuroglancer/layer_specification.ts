@@ -19,6 +19,7 @@ import {getVolume} from 'neuroglancer/datasource/factory';
 import {ImageUserLayer} from 'neuroglancer/image_user_layer';
 import {LayerManager, LayerSelectedValues, ManagedUserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
+import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
@@ -28,9 +29,6 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
-import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
-import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {zip, range} from 'lodash';
 
 export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(new Promise(function(resolve) { resolve(getVolume(x)); }), {
@@ -98,7 +96,7 @@ export class LayerListSpecification extends RefCounted implements Trackable {
       throw new Error(`Expected boolean, but received: ${JSON.stringify(x)}.`);
     });
 
-    if(layerType === 'metric'){
+    if (layerType === 'metric') {
       let metricData = spec['metricData'];
       let metricLayer = new SegmentationMetricUserLayer(this, spec, metricData);
       let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
@@ -107,7 +105,7 @@ export class LayerListSpecification extends RefCounted implements Trackable {
 
       return managedLayer;
     }
-    
+
     let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
     managedLayer.visible = visible;
     let sourceUrl = managedLayer.sourceUrl =

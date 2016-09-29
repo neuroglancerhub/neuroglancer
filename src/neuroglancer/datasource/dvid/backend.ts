@@ -21,10 +21,9 @@ import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/slicevie
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
 import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpeg';
-import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
+import {VolumeType} from 'neuroglancer/sliceview/base';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/sliceview/decode_swc_skeleton';
 import {Endianness} from 'neuroglancer/util/endian';
-import {VolumeType} from 'neuroglancer/sliceview/base';
 import {Vec3, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {RPC} from 'neuroglancer/worker_rpc';
