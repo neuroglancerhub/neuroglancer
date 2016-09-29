@@ -31,13 +31,6 @@ export class SegmentationDropdown extends UserLayerDropdown {
         (value: Uint64) => { this.layer.visibleSegments.add(value); }));
     element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
     
-    //add show segments on hover checkbox
-    let showSegmentsOnHoverCheckbox =
-        this.registerDisposer(new TrackableBooleanCheckbox(layer.showSegmentsOnHover));
-    let showSegmentsOnHoverLabel = document.createElement('label');
-    showSegmentsOnHoverLabel.appendChild(document.createTextNode('Show Segments On Hover'));
-    showSegmentsOnHoverLabel.appendChild(showSegmentsOnHoverCheckbox.element);
-    this.element.appendChild(showSegmentsOnHoverLabel);
   }
 };
 
@@ -59,10 +52,10 @@ export class MetricDropdown extends SegmentationDropdown {
     this.metricSelectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
     this.metricNotSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
 
-    this.registerSignalBinding(layer.currentLayerName.changed.add(function () {
+    this.registerSignalBinding(layer.currentLayerName.changed.add(() => {
        this.updateDropdown();
        this.layer.updateCurrentSegLayer();
-    }.bind(this)));
+    }));
   }
 
   updateDropdown(){

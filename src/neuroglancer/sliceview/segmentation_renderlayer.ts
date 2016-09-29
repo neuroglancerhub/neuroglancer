@@ -54,6 +54,7 @@ export class SegmentationRenderLayer extends RenderLayer {
       new EquivalencesHashMap(this.displayState.segmentEquivalences.disjointSets);
   protected gpuEquivalencesHashTable = GPUHashTable.get(this.gl, this.equivalencesHashMap.hashMap);
   protected hasEquivalences: boolean;
+  public layerPosition: number|undefined;
 
   constructor(
       chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,

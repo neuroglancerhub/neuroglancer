@@ -24,6 +24,7 @@ import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value: Uint64) {}
@@ -76,6 +77,7 @@ export class SegmentSelectionState extends RefCounted {
 export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentSelectionState: SegmentSelectionState;
   segmentColorHash: SegmentColorHash;
+  showSegmentsOnHover: TrackableBoolean;
 }
 
 export function registerRedrawWhenSegmentationDisplayStateChanged(

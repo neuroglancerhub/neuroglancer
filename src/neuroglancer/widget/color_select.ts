@@ -8,7 +8,7 @@ export class ColorSelect extends RefCounted {
     element = document.createElement('label');
     select = document.createElement('select');
 
-    constructor(options: ArrayLike<string>, public model: TrackableValue){
+    constructor(options: Array<string>, public model: TrackableValue<string>){
         super();
         let {element, select} = this;
 

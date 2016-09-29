@@ -13,17 +13,19 @@ import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {HashTableBase} from 'neuroglancer/gpu_hash/hash_table';
 import {MetricKeyData} from 'neuroglancer/util/metric_color_util';
-import {chain} from 'lodash';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
-
+import {VolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/frontend';
+import {flatten, each} from 'lodash';
+import {CompressedSegmentationVolumeChunk} from 'neuroglancer/sliceview/compressed_segmentation/chunk_format.ts';
 //TODO: pare this down to only necessary imports
 
 export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer{
   protected gpuHashTable: GPUHashTable<any>;
-  protected currentMetricName: string;
+  public currentMetricName: string;
+  protected chunkSource: MultiscaleVolumeChunkSource;
   //data transformation function applied to chunk data
-  protected fn = function(IDColorMap: any, chunk:Chunk){
-      updateLookupTableData(chunk.data, IDColorMap, 1, chunk.source.chunkFormat.subchunkSize, chunk.chunkDataSize);
+  protected fn = function(IDColorMap: any, chunk:CompressedSegmentationVolumeChunk){
+      updateLookupTableData(chunk.data, IDColorMap, 1, chunk.chunkFormat.subchunkSize, chunk.chunkDataSize);
   };
 
   constructor(
@@ -51,17 +53,17 @@ export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer{
       fn = this.fn.bind({}, metricKeyData.IDColorMap);
     }
 
-    chain(this.sources)
-      .flatten()
-      .each(function(chunkSource){
-        chunkSource.transform = fn;
-        for(let chunk of chunkSource.chunks.values()){
-          if(chunk.state === ChunkState.GPU_MEMORY){
-            chunk.copyToGPU(chunkSource.gl);
-          }
-        }
+    let sourceList = flatten(this.sources!);
 
-      }).value();
+    each(sourceList, function(chunkSource:VolumeChunkSource){
+      chunkSource.transform = fn;
+      for(let chunk of chunkSource.chunks.values()){
+        if(chunk.state === ChunkState.GPU_MEMORY){
+          chunk.copyToGPU(chunkSource.gl);
+        }
+      }
+    });
+
   }
 
   getShaderKey(){

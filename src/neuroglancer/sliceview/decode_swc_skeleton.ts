@@ -14,9 +14,9 @@ export function decodeSwcSkeletonChunk(
   let gl_indices = new Uint32Array(2 * (swc_objects.length - 1));
 
   each(swc_objects, function(swc_obj, i) {
-    gl_vertices[3 * i] = swc_obj.z;
+    gl_vertices[3 * i] = swc_obj.x;
     gl_vertices[3 * i + 1] = swc_obj.y;
-    gl_vertices[3 * i + 2] = swc_obj.x;
+    gl_vertices[3 * i + 2] = swc_obj.z;
 
     if (swc_obj.parent !== -1) {
       gl_indices[2 * (i - 1)] = i;

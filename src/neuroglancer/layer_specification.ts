@@ -100,25 +100,6 @@ export class LayerListSpecification extends RefCounted implements Trackable {
 
     if(layerType === 'metric'){
       let metricData = spec['metricData'];
-
-      //TODO remove me: easier handling of testing data for dev
-      if(!metricData) {
-        metricData = {
-          'Worst': [
-            [333290, 0],
-            [316812, 10],
-            [587230, 10],
-            [331956, 10]
-          ],
-          'Frag':[
-            [333290, 0],
-            [316812, 1],
-            [587230, .25],
-            [331956, .75]
-          ]
-        };
-      }
-
       let metricLayer = new SegmentationMetricUserLayer(this, spec, metricData);
       let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
       managedLayer.layer = metricLayer;

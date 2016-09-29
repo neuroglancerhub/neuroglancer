@@ -52,7 +52,7 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
   segmentationLayer: SegmentationRenderLayer;
   wasDisposed = false;
   dropDownType: string;
-  showSegmentsOnHover: TrackableBoolean = new TrackableBoolean(false, false);
+  showSegmentsOnHover = new TrackableBoolean(false, false);
 
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
@@ -170,6 +170,10 @@ export class SegmentationUserLayer extends UserLayer implements SegmentationDisp
       }
       case 'clear-segments': {
         this.visibleSegments.clear();
+        break;
+      }
+      case 'toggle-show-segments-on-hover': {
+        this.showSegmentsOnHover.toggle();
         break;
       }
       case 'select': {

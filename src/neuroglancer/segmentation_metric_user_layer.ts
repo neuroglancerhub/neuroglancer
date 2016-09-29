@@ -35,6 +35,7 @@ import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 import {MetricDropdown} from 'neuroglancer/layer_dropdown';
 import {TrackableValue} from 'neuroglancer/trackable_value';
+import {verifyString} from 'neuroglancer/util/json';
 import {each} from 'lodash';
 
 require('./segmentation_user_layer.css');
@@ -54,16 +55,16 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
 
     //bookkeeping and setup for toggling the color state
     this.visibleLayer = this.segmentationLayer;
-    this.currentLayerName = new TrackableValue<string>('Random Colors');
+    this.currentLayerName = new TrackableValue<string>('Random Colors', verifyString);
     this.prevLayerName = this.currentLayerName.value;
     this.segLayers.set('Random Colors', this.segmentationLayer);
     this.segmentationLayer.layerPosition = 0;
 
 
     if(this.volumePath != undefined){
-        let metrics = new Map();
+        let metrics = new Map<string, MetricKeyData>();
 
-        each(metricData, function (metricMap, metricName){
+        each(metricData, function (metricMap:any, metricName:string){
           let metricKeyData = new MetricKeyData();
           metricKeyData.name = metricName;
           mapMetricsToColors(metricMap, metricKeyData);
@@ -78,20 +79,20 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
 
   }
 
-  addMetricLayer(metrics){
+  addMetricLayer(metrics:Map<string, MetricKeyData>){
     let {manager} = this;
 
     //promise for color renderlayer--gets its own copy of the data
-    let colorPromise = getVolumeWithStatusMessage(this.volumePath);
+    let colorPromise = getVolumeWithStatusMessage(this.volumePath!);
 
     let metricLayer = new CustomColorSegmentationRenderLayer(
         manager.chunkManager, colorPromise, metrics, this);
     metricLayer.currentMetricName = 'Random Colors'
     
     //don't bother rendering the layer since it's not visible
-    colorPromise.then(function(volume){
+    colorPromise.then((volume) => {
       metricLayer.setReady(false);
-    }.bind(this));
+    });
     
     for(let name of metrics.keys()){
       this.segLayers.set(name, metricLayer);
@@ -171,7 +172,7 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     }
     if(this.shouldUpdateLayers()){
       let oldLayer = this.visibleLayer;
-      this.visibleLayer = this.segLayers.get(this.currentLayerName.value);
+      this.visibleLayer = this.segLayers.get(this.currentLayerName.value)!;
       //only update data for the metric layer if it's the visible layer 
       this.metricLayer.setReady(this.visibleLayer instanceof CustomColorSegmentationRenderLayer)
 
@@ -183,7 +184,7 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
       //reorder layers to avoid blending hidden layers
       oldLayer.layerPosition = this.visibleLayer.layerPosition;
       this.visibleLayer.layerPosition = 0;
-      this.renderLayers[oldLayer.layerPosition] = oldLayer;
+      this.renderLayers[oldLayer.layerPosition!] = oldLayer;
       this.renderLayers[0] = this.visibleLayer;
     }
     //update the view

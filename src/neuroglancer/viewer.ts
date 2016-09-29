@@ -272,13 +272,13 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    for (let command of ['recolor', 'clear-segments']) {
+    for (let command of ['recolor', 'clear-segments', 'toggle-show-segments-on-hover']) {
       keyCommands.set(command, function() { this.layerManager.invokeAction(command); });
     }
 
     keyCommands.set('toggle-axis-lines', function() { this.showAxisLines.toggle(); });
     keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
-    this.keyCommands.set(
+    keyCommands.set(
         'toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
 
     // This needs to happen after the global keyboard shortcut handler for the viewer has been

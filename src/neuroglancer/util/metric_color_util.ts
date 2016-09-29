@@ -34,4 +34,5 @@ export class MetricKeyData{
   max: number;
   chromaScale: any;
   name: string;
+  IDColorMap: Map<string, Uint64>;
 }
