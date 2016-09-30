@@ -50,9 +50,11 @@ export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer 
 
     each(sourceList, function(chunkSource: VolumeChunkSource) {
       chunkSource.transform = fn;
-      for (let chunk of chunkSource.chunks.values()) {
+      for (let [key, chunk] of chunkSource.chunks) {
         if (chunk.state === ChunkState.GPU_MEMORY) {
-          chunk.copyToGPU(chunkSource.gl);
+          chunk.state = ChunkState.SYSTEM_MEMORY;
+          chunkSource.chunkManager.chunkQueueManager.scheduleFrontentChunkUpdate(
+              key, chunk, chunkSource);
         }
       }
     });

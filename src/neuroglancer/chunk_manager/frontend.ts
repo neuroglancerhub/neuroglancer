@@ -63,7 +63,19 @@ export class ChunkQueueManager extends SharedObject {
       'downloadCapacity': capacities.download.toObject()
     });
   }
-
+  scheduleFrontentChunkUpdate(key: string, chunk: Chunk, source: ChunkSource) {
+    let x = {'id': key, 'state': ChunkState.GPU_MEMORY, 'source': source!.rpcId};
+    let queueManager = this;
+    let pendingTail = queueManager.pendingChunkUpdatesTail;
+    if (pendingTail == null) {
+      queueManager.pendingChunkUpdates = x;
+      queueManager.pendingChunkUpdatesTail = x;
+      queueManager.scheduleChunkUpdate();
+    } else {
+      pendingTail.nextUpdate = x;
+      queueManager.pendingChunkUpdatesTail = x;
+    }
+  }
   scheduleChunkUpdate() {
     let deadline = this.chunkUpdateDeadline;
     let delay: number;

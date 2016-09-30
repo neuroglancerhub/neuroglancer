@@ -142,7 +142,6 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     if (this.currentLayerName.value === this.prevLayerName) {
       return;
     }
-    this.metricLayer.updateDataTransformation(this.currentLayerName.value);
     if (this.shouldUpdateMetricSegments()) {
       // just update metrics on the metricLayer
       this.updateVisibleSegmentsOnMetricChange();
@@ -166,6 +165,10 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     }
     // update the view
     this.layersChanged.dispatch();
+
+    this.metricLayer.updateDataTransformation(this.currentLayerName.value);
+
+
 
     // update history
     this.prevLayerName = this.currentLayerName.value;
