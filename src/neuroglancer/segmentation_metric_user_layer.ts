@@ -100,6 +100,17 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     return x;
   }
 
+  addSegment(id:number){
+    const segment = new Uint64();
+    segment.parseString(id.toString());
+    this.visibleSegments.add(segment);
+    
+    if(this.visibleLayer !== this.segmentationLayer){
+      //translate into metric coordinates
+      const metricSegment = this.metricLayer.getColorVal(segment);
+      this.metricLayer.displayState.visibleSegments.add(metricSegment);
+    }
+  }
 
   syncMetricVisibleSegments(x: Uint64|null, added: boolean) {
     let metricVisibleSegments = this.metricLayer.displayState.visibleSegments;
