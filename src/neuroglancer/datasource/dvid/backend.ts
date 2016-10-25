@@ -15,7 +15,7 @@
  */
 
 import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
-import {SkeletonSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {SkeletonSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters, StackParameters} from 'neuroglancer/datasource/dvid/base';
 import {ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
 import {ChunkDecoder} from 'neuroglancer/sliceview/backend_chunk_decoders';
@@ -24,9 +24,16 @@ import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpe
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/sliceview/decode_swc_skeleton';
 import {Endianness} from 'neuroglancer/util/endian';
+<<<<<<< 8255fdc8cbc958164f677c2b54c7dd7b7c3235f5
 import {Vec3, vec3} from 'neuroglancer/util/geom';
+=======
+import {VolumeType} from 'neuroglancer/sliceview/base';
+import {Vec3, vec3, vec4} from 'neuroglancer/util/geom';
+>>>>>>> Offset stack overlay implemented, but some cleanup needed.
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {RPC} from 'neuroglancer/worker_rpc';
+
+import {ParameterizedStackChunkSource} from 'neuroglancer/stack/backend';
 
 const TILE_CHUNK_DECODERS = new Map<TileEncoding, ChunkDecoder>([
   [TileEncoding.JPEG, decodeJpegChunk],
@@ -114,3 +121,17 @@ export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourcePa
 function decodeSkeletonChunk(chunk: SkeletonChunk, result: string) {
   decodeSwcSkeletonChunk(chunk, result, Endianness.LITTLE);
 }
+
+@registerChunkSource(StackParameters)
+class StackChunkSource extends ParameterizedStackChunkSource<StackParameters> {
+
+  getColor(position: string /* vec3Key for chunk position */){
+    let color = this.parameters.colors.get(position);
+    if(!color){
+      color = new Float32Array([0,0,0,0]);
+    }
+    return color;
+  }
+
+};
+

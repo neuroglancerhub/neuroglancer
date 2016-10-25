@@ -20,17 +20,20 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {DVIDSourceParameters, SkeletonSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {DVIDSourceParameters, SkeletonSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters, StackParameters} from 'neuroglancer/datasource/dvid/base';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
 import {parameterizedSkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {Vec3, vec3} from 'neuroglancer/util/geom';
+import {Vec3, vec3, vec4, vec3Key} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {parseArray, parseFixedLengthArray, parseIntVec, stableStringify, verifyFinitePositiveFloat, verifyInt, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {CancellablePromise} from 'neuroglancer/util/promise';
+import {defineParameterizedStackChunkSource, StackChunkSource} from 'neuroglancer/stack/frontend';
+import {chain, map, min, max, each, sortBy} from 'lodash';
+var chroma: any = require('chroma-js');  // needs to be imported this way due to export style differences
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -477,6 +480,7 @@ registerDataSourceFactory('dvid', {
   volumeCompleter: volumeCompleter,
   getVolume: getVolume,
   getSkeletonSource: getSkeletonSourceByUrl,
+  getStackSource: getStackSource
 });
 
 export function getSkeletonSource(
@@ -500,4 +504,154 @@ function getSkeletonSourceParameters(url: string) {
 
 export function getSkeletonSourceByUrl(chunkManager: ChunkManager, url: string) {
   return getSkeletonSource(chunkManager, getSkeletonSourceParameters(url));
+}
+
+//Stacks
+export function getStackSource(path: string, spec: any){
+    return new Promise(function(resolve, reject){
+        // set up source asynchronously
+        window.setTimeout(
+          function() {
+            resolve(new MultiscaleStackChunkSource(spec));
+          }, 0);
+      });
+}
+
+const ParameterizedStackChunkSource = defineParameterizedStackChunkSource(StackParameters);
+
+export class MultiscaleStackChunkSource implements GenericMultiscaleVolumeChunkSource {
+  numChannels = 1;
+  dataType = DataType.FLOAT32;
+  volumeType = VolumeType.STACK;
+  positions: Array<Float32Array>;
+  colors: Map<string, Float32Array>;
+  volumeSpec: VolumeChunkSpecification;
+  chunkWidth: number;
+  stackID: string;
+
+  constructor(spec: any){
+    //TODO: move some of these calculations to the backend thread
+    let stacks = spec.stackData.substacks;
+    let chunkSize = this.chunkWidth = parseInt(stacks[0].width);
+    let dataScaler = spec.dataScaler;
+
+    //only works for isovoxel chunks
+    this.positions = map(stacks, function(stack){return [parseInt(stack.x), parseInt(stack.y), parseInt(stack.z)]});
+    this.coatStack(this.positions);
+    this.stackID = spec.source;
+    //calculate colors--this could be done on the backend instead
+    let minVal = chain(stacks).map('status').min().value();
+    let maxVal = chain(stacks).map('status').max().value();
+    let colorScale = chroma.scale(spec.stackData.colorInterpolate).domain([minVal, maxVal]);
+    let colorMapContents = map(stacks, function(stack){
+      let rgb = colorScale(stack.status).rgb();
+      let color =  new Float32Array([rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0, 1]);
+      let posShift = chunkSize/2;
+      return [vec3Key(vec3.fromValues(stack.x+posShift, stack.y+posShift, stack.z+posShift)), color]//shift point to LUB
+    });
+    this.colors = new Map(colorMapContents);
+    //worth cutting down on loops by doing this all at once?
+    let x = Math.floor((chain(stacks).map('x').min().value() - chunkSize)/chunkSize);
+    let y = Math.floor((chain(stacks).map('y').min().value() - chunkSize)/chunkSize);
+    let z = Math.floor((chain(stacks).map('z').min().value() - chunkSize)/chunkSize);
+    let lowerVoxelBound = vec3.fromValues(x,y,z)
+
+    let limit = map(spec.stackData.stackDimensions, function(coord){
+      return Math.floor(coord/chunkSize);
+    });
+    let upperVoxelBound = vec3.fromValues(limit[0], limit[1], limit[2] - 1);
+
+    let scaledWidth = chunkSize * dataScaler;
+    let voxelSize = vec3.fromValues(scaledWidth, scaledWidth, scaledWidth);
+
+    this.volumeSpec = new VolumeChunkSpecification({
+      voxelSize,
+      chunkDataSize: vec3.fromValues(1, 1, 1),//only represent one voxel per chunk
+      numChannels: this.numChannels,
+      dataType: this.dataType,
+      lowerVoxelBound: lowerVoxelBound,
+      upperVoxelBound: upperVoxelBound,
+      dataScaler: dataScaler,
+      stack: true,
+    });
+
+  }
+
+  /**
+   * Add a coating of subchunk positions with no corresponding colors
+   * This gets around the neuroglancer limitation which allows chunks to bleed
+   * outside of their lower, back, bottom bounderies if there is no abutting chunk
+   */
+  coatStack(positions: Array<any>){
+    let {chunkWidth} = this;
+    let zs = chain(positions).map(function(pos){return pos[2]}).uniq().value();
+    let zMin = min(zs);
+    
+    let zMinMaxYmap = new Map(map(zs, function(z){
+      return [z, [Infinity, -Infinity]];
+    }))
+
+    let zyMap = new Map();
+    let coatPositions = [];
+
+    each(positions, function(pos){
+      //add 'end cap' coating on zMin
+      if(pos[2] === zMin){
+        coatPositions.push([pos[0], pos[1], pos[2] - chunkWidth]);//this seems right, chunks are just drawn over by later chunks
+      }
+      let key = pos[2] + ',' + pos[1]; //'z,y'
+      let row = zyMap.get(key);
+      if(!row){
+        zyMap.set(key, [pos]);
+      }
+      else{
+        row.push(pos)
+      }
+      //find min, max y for each z
+      let currMinMaxY = zMinMaxYmap.get(pos[2]);
+      zMinMaxYmap.set(pos[2], [ Math.min(currMinMaxY[0], pos[1] ), Math.max(currMinMaxY[1], pos[1] )]);
+    });
+
+    //add endcaps on each row in the x direction
+    zyMap.forEach(function(posArray, key){
+      let xMinPos = min(posArray, function(pos){return pos[0]});
+      let xMaxPos = max(posArray, function(pos){return pos[0]});
+
+      coatPositions.push([xMinPos[0] - chunkWidth, xMinPos[1], xMinPos[2]]);
+      coatPositions.push([xMaxPos[0] + chunkWidth, xMaxPos[1], xMaxPos[2]]);
+    });
+
+    //add duplicate rows at ymin, ymax for each z slice
+    let zyKey = '';
+    zMinMaxYmap.forEach(function(minMaxY, z){
+      //add min coat
+      zyKey = z + ',' + minMaxY[0];
+      let positionsToShadow = zyMap.get(zyKey);
+
+      positionsToShadow.forEach(function(pos){
+        coatPositions.push([pos[0], pos[1] - chunkWidth, pos[2]]);
+      });
+
+      //add max coat
+      zyKey = z + ',' + minMaxY[1];
+      positionsToShadow = zyMap.get(zyKey);
+
+      positionsToShadow.forEach(function(pos){
+        coatPositions.push([pos[0], pos[1] + chunkWidth, pos[2]]);
+      });
+    });
+
+    //resort chunks so least x, y, z are drawn first
+    this.positions = sortBy(coatPositions.concat(positions), [function(pos){return pos[2]}, function(pos){return pos[1]}, function(pos){return pos[0]}]);
+  }
+
+  /**
+   * @return Chunk sources for each scale, ordered by increasing minVoxelSize.  For each scale,
+   * there may be alternative sources with different chunk layouts.
+   */
+  getSources(chunkManager: ChunkManager){
+    let sources: StackChunkSource[][] = [[ParameterizedStackChunkSource.get(chunkManager, this.volumeSpec, new StackParameters(this.positions, this.colors, this.stackID))]];
+    return sources;
+  }
+  getMeshSource(chunkManager: ChunkManager){ return null };
 }

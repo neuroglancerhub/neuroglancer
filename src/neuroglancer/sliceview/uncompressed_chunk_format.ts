@@ -268,7 +268,7 @@ export class UncompressedChunkFormatHandler extends RefCounted implements ChunkF
 };
 
 registerChunkFormatHandler((gl: GL, spec: VolumeChunkSpecification) => {
-  if (spec.compressedSegmentationBlockSize == null) {
+  if (spec.compressedSegmentationBlockSize == null && !spec.stack) {
     return new UncompressedChunkFormatHandler(gl, spec);
   }
   return null;

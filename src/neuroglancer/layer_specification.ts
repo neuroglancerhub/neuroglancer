@@ -29,6 +29,8 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {Signal} from 'signals';
+import {StackUserLayer} from 'neuroglancer/stack_user_layer';
+import {max, map} from 'lodash';
 
 export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(new Promise(function(resolve) { resolve(getVolume(x)); }), {
@@ -138,6 +140,8 @@ export class LayerListSpecification extends RefCounted implements Trackable {
         managedLayer.layer = new ImageUserLayer(this, spec);
       } else if (layerType === 'segmentation') {
         managedLayer.layer = new SegmentationUserLayer(this, spec);
+      } else if (layerType === 'stack'){
+        managedLayer.layer = new StackUserLayer(this, spec);
       } else {
         throw new Error('Layer type not specified.');
       }

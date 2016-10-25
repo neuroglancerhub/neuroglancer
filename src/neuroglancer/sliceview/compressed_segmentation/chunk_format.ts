@@ -234,7 +234,7 @@ export class CompressedSegmentationChunkFormatHandler extends RefCounted impleme
 };
 
 registerChunkFormatHandler((gl: GL, spec: VolumeChunkSpecification) => {
-  if (spec.compressedSegmentationBlockSize != null) {
+  if (spec.compressedSegmentationBlockSize != null && ! spec.stack) {
     return new CompressedSegmentationChunkFormatHandler(gl, spec);
   }
   return null;

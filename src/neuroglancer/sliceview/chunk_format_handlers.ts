@@ -16,3 +16,4 @@
 
 import 'neuroglancer/sliceview/uncompressed_chunk_format';
 import 'neuroglancer/sliceview/compressed_segmentation/chunk_format';
+import 'neuroglancer/stack/chunk_format';
