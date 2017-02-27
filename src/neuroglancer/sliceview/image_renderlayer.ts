@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {VolumeSourceOptions} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource, SliceView} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
-import {TrackableValue} from 'neuroglancer/trackable_value';
-import {verifyString} from 'neuroglancer/util/json';
+import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {makeTrackableFragmentMain, makeWatchableShaderError, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
@@ -31,16 +31,23 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 const glsl_COLORMAPS = require<string>('neuroglancer/webgl/colormaps.glsl');
 
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
-  return new TrackableValue<string>(value, verifyString);
+  return makeTrackableFragmentMain(value);
 }
 
 export class ImageRenderLayer extends RenderLayer {
-  constructor(
-      chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,
-      public opacity = trackableAlphaValue(0.5), public fragmentMain = getTrackableFragmentMain()) {
-    super(chunkManager, multiscaleSourcePromise);
-    this.registerSignalBinding(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));
-    this.registerSignalBinding(fragmentMain.changed.add(() => {
+  fragmentMain: TrackableFragmentMain;
+  opacity: TrackableAlphaValue;
+  constructor(multiscaleSource: MultiscaleVolumeChunkSource, {
+    opacity = trackableAlphaValue(0.5),
+    fragmentMain = getTrackableFragmentMain(),
+    shaderError = makeWatchableShaderError(),
+    volumeSourceOptions = <VolumeSourceOptions>{},
+  } = {}) {
+    super(multiscaleSource, {shaderError, volumeSourceOptions});
+    this.fragmentMain = fragmentMain;
+    this.opacity = opacity;
+    this.registerDisposer(opacity.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(fragmentMain.changed.add(() => {
       this.shaderUpdated = true;
       this.redrawNeeded.dispatch();
     }));

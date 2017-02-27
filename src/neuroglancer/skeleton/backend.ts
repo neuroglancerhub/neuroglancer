@@ -20,9 +20,9 @@ import {decodeVertexPositionsAndIndices} from 'neuroglancer/mesh/backend';
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {SKELETON_LAYER_RPC_ID} from 'neuroglancer/skeleton/base';
-import {Endianness, convertEndian32} from 'neuroglancer/util/endian';
+import {Endianness} from 'neuroglancer/util/endian';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const SKELETON_CHUNK_PRIORITY = 60;
 
@@ -58,7 +58,7 @@ export class SkeletonChunk extends Chunk {
   }
 };
 
-export class SkeletonSource extends ChunkSource {
+export abstract class SkeletonSource extends ChunkSource {
   chunks: Map<string, SkeletonChunk>;
   getChunk(objectId: Uint64) {
     const key = getObjectKey(objectId);
@@ -72,7 +72,7 @@ export class SkeletonSource extends ChunkSource {
   }
 };
 
-export class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
+export abstract class ParameterizedSkeletonSource<Parameters> extends SkeletonSource {
   parameters: Parameters;
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -87,8 +87,9 @@ export class SkeletonLayer extends SegmentationLayerSharedObjectCounterpart {
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = this.registerDisposer(rpc.getRef<SkeletonSource>(options['source']));
-    this.registerSignalBinding(
-        this.chunkManager.recomputeChunkPriorities.add(this.updateChunkPriorities, this));
+    this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
+      this.updateChunkPriorities();
+    }));
   }
 
   private updateChunkPriorities() {

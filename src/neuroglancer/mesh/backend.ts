@@ -20,11 +20,12 @@ import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base'
 import {SegmentationLayerSharedObjectCounterpart} from 'neuroglancer/segmentation_display_state/backend';
 import {getObjectKey} from 'neuroglancer/segmentation_display_state/base';
 import {forEachVisibleSegment} from 'neuroglancer/segmentation_display_state/base';
-import {Endianness, convertEndian32} from 'neuroglancer/util/endian';
+import {CancellationToken} from 'neuroglancer/util/cancellation';
+import {convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RPC, registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, RPC} from 'neuroglancer/worker_rpc';
 
 const MESH_OBJECT_MANIFEST_CHUNK_PRIORITY = 100;
 const MESH_OBJECT_FRAGMENT_CHUNK_PRIORITY = 50;
@@ -172,7 +173,7 @@ export function computeVertexNormals(positions: Float32Array, indices: Uint32Arr
   // Normalize all vertex normals.
   let numVertices = vertexNormals.length;
   for (let i = 0; i < numVertices; i += 3) {
-    let vec = vertexNormals.subarray(i, 3);
+    let vec = <vec3>vertexNormals.subarray(i, 3);
     vec3.normalize(vec, vec);
   }
   return vertexNormals;
@@ -189,9 +190,10 @@ export function computeVertexNormals(positions: Float32Array, indices: Uint32Arr
  * array.
  */
 export function decodeVertexPositionsAndIndices(
-    chunk: {vertexPositions: Float32Array|null, indices: Uint32Array|null}, verticesPerPrimitive: number,
-    data: ArrayBuffer, endianness: Endianness, vertexByteOffset: number, numVertices: number,
-    indexByteOffset?: number, numPrimitives?: number) {
+    chunk: {vertexPositions: Float32Array | null, indices: Uint32Array | null},
+    verticesPerPrimitive: number, data: ArrayBuffer, endianness: Endianness,
+    vertexByteOffset: number, numVertices: number, indexByteOffset?: number,
+    numPrimitives?: number) {
   let vertexPositions = new Float32Array(data, vertexByteOffset, numVertices * 3);
   convertEndian32(vertexPositions, endianness);
 
@@ -266,7 +268,8 @@ export abstract class MeshSource extends ChunkSource {
     return chunk;
   }
 
-  abstract downloadFragment(chunk: FragmentChunk): void;
+  abstract downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken):
+      Promise<void>;
 };
 
 export abstract class ParameterizedMeshSource<Parameters> extends MeshSource {
@@ -280,7 +283,9 @@ export abstract class ParameterizedMeshSource<Parameters> extends MeshSource {
 @registerSharedObject(FRAGMENT_SOURCE_RPC_ID)
 export class FragmentSource extends ChunkSource {
   meshSource: MeshSource|null = null;
-  download(chunk: FragmentChunk) { this.meshSource!.downloadFragment(chunk); }
+  download(chunk: FragmentChunk, cancellationToken: CancellationToken) {
+    return this.meshSource!.downloadFragment(chunk, cancellationToken);
+  }
 };
 
 @registerSharedObject(MESH_LAYER_RPC_ID)
@@ -290,8 +295,9 @@ class MeshLayer extends SegmentationLayerSharedObjectCounterpart {
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.source = this.registerDisposer(rpc.getRef<MeshSource>(options['source']));
-    this.registerSignalBinding(
-        this.chunkManager.recomputeChunkPriorities.add(this.updateChunkPriorities, this));
+    this.registerDisposer(this.chunkManager.recomputeChunkPriorities.add(() => {
+      this.updateChunkPriorities();
+    }));
   }
 
   private updateChunkPriorities() {

@@ -74,7 +74,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
         element, 'dblclick', () => { this.viewer.layerManager.invokeAction('select'); });
   }
 
-  onMouseout(event: MouseEvent) {
+  onMouseout(_event: MouseEvent) {
     let {mouseState} = this.viewer;
     mouseState.updater = undefined;
     mouseState.setActive(false);
@@ -101,6 +101,15 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     mouseState.triggerUpdate();
   }
 
+  disposed() {
+    let {mouseState} = this.viewer;
+    if (mouseState.updater === this.mouseStateUpdater) {
+      mouseState.updater = undefined;
+      mouseState.setActive(false);
+    }
+    super.disposed();
+  }
+
   abstract zoomByMouse(factor: number): void;
 
   onMousewheel(e: WheelEvent) {
@@ -119,12 +128,23 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     e.preventDefault();
   }
 
+  abstract startDragViewport(e: MouseEvent): void;
+
   onMousedown(e: MouseEvent) {
     if (e.target !== this.element) {
       return;
     }
     this.onMousemove(e);
-    if (e.button === 2) {
+    if (e.button === 0) {
+      if (e.ctrlKey) {
+        let {mouseState} = this.viewer;
+        if (mouseState.updateUnconditionally()) {
+          this.viewer.layerManager.invokeAction('annotate');
+        }
+      } else {
+        this.startDragViewport(e);
+      }
+    } else if (e.button === 2) {
       let {mouseState} = this.viewer;
       if (mouseState.updateUnconditionally()) {
         let position = this.navigationState.pose.position;

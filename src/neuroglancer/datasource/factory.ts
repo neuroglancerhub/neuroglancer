@@ -17,9 +17,10 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
+import {VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {CompletionWithDescription, applyCompletionOffset} from 'neuroglancer/util/completion';
-import {CancellablePromise, cancellableThen} from 'neuroglancer/util/promise';
+import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {applyCompletionOffset, CompletionWithDescription} from 'neuroglancer/util/completion';
 
 export type Completion = CompletionWithDescription;
 
@@ -60,12 +61,28 @@ export function suggestLayerNameBasedOnSeparator(path: string, separator?: strin
   return path.substring(groupIndex);
 }
 
+export interface GetVolumeOptions {
+  /**
+   * Hint regarding the usage of the volume.
+   */
+  volumeType?: VolumeType;
+}
+
 export interface DataSourceFactory {
   description?: string;
-  getVolume?: (path: string) => Promise<MultiscaleVolumeChunkSource>;
-  getMeshSource?: (chunkManager: ChunkManager, path: string, lod: number) => MeshSource;
-  getSkeletonSource?: (chunkManager: ChunkManager, path: string) => SkeletonSource;
-  volumeCompleter?: (value: string) => CancellablePromise<CompletionResult>;
+  getVolume?:
+      (chunkManager: ChunkManager, path: string, options: GetVolumeOptions,
+       cancellationToken:
+           CancellationToken) => Promise<MultiscaleVolumeChunkSource>| MultiscaleVolumeChunkSource;
+  getMeshSource?:
+      (chunkManager: ChunkManager, path: string,
+       cancellationToken: CancellationToken) => Promise<MeshSource>| MeshSource;
+  getSkeletonSource?:
+      (chunkManager: ChunkManager, path: string,
+       cancellationToken: CancellationToken) => Promise<SkeletonSource>| SkeletonSource;
+  volumeCompleter?:
+      (value: string, chunkManager: ChunkManager,
+       cancellationToken: CancellationToken) => Promise<CompletionResult>;
 
   /**
    * Returns a suggested layer name for the given volume source.
@@ -100,22 +117,34 @@ function getDataSource(url: string): [DataSourceFactory, string, string] {
   return [factory, m[2], dataSource];
 }
 
-export function getVolume(url: string) {
+export function getVolume(
+    chunkManager: ChunkManager, url: string, options: GetVolumeOptions = {},
+    cancellationToken = uncancelableToken) {
   let [factories, path] = getDataSource(url);
-  return factories.getVolume!(path);
+  return new Promise<MultiscaleVolumeChunkSource>(resolve => {
+    resolve(factories.getVolume!(chunkManager, path, options, cancellationToken));
+  });
 }
 
-export function getMeshSource(chunkManager: ChunkManager, url: string, lod: number = 0) {
+export function getMeshSource(
+    chunkManager: ChunkManager, url: string, cancellationToken = uncancelableToken) {
   let [factories, path] = getDataSource(url);
-  return factories.getMeshSource!(chunkManager, path, lod);
+  return new Promise<MeshSource>(resolve => {
+    resolve(factories.getMeshSource!(chunkManager, path, cancellationToken));
+  });
 }
 
-export function getSkeletonSource(chunkManager: ChunkManager, url: string) {
+export function getSkeletonSource(
+    chunkManager: ChunkManager, url: string, cancellationToken = uncancelableToken) {
   let [factories, path] = getDataSource(url);
-  return factories.getSkeletonSource!(chunkManager, path);
+  return new Promise<SkeletonSource>(resolve => {
+    resolve(factories.getSkeletonSource!(chunkManager, path, cancellationToken));
+  });
 }
 
-export function volumeCompleter(url: string): CancellablePromise<CompletionResult> {
+export function volumeCompleter(
+    url: string, chunkManager: ChunkManager,
+    cancellationToken = uncancelableToken): Promise<CompletionResult> {
   // Check if url matches a protocol.  Note that protocolPattern always matches.
   let protocolMatch = url.match(protocolPattern)!;
   let protocol = protocolMatch[1];
@@ -134,9 +163,8 @@ export function volumeCompleter(url: string): CancellablePromise<CompletionResul
   if (factory !== undefined) {
     let subCompleter = factory.volumeCompleter;
     if (subCompleter !== undefined) {
-      return cancellableThen(
-          subCompleter(protocolMatch[2]),
-          completions => applyCompletionOffset(protocol.length + 3, completions));
+      return subCompleter(protocolMatch[2], chunkManager, cancellationToken)
+          .then(completions => applyCompletionOffset(protocol.length + 3, completions));
     }
   }
   return Promise.reject<CompletionResult>(null);

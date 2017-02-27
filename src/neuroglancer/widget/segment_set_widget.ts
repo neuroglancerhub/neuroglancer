@@ -48,10 +48,12 @@ export class SegmentSetWidget extends RefCounted {
 
     itemContainer.appendChild(clearButton);
 
-    this.registerSignalBinding(
-        displayState.visibleSegments.changed.add(this.handleSetChanged, this));
-    this.registerSignalBinding(
-        displayState.segmentColorHash.changed.add(this.handleColorChanged, this));
+    this.registerDisposer(displayState.visibleSegments.changed.add((x, add) => {
+      this.handleSetChanged(x, add);
+    }));
+    this.registerDisposer(displayState.segmentColorHash.changed.add(() => {
+      this.handleColorChanged();
+    }));
 
     for (let x of displayState.visibleSegments) {
       this.addElement(x.toString());
@@ -71,7 +73,7 @@ export class SegmentSetWidget extends RefCounted {
       // Cleared.
       let {itemContainer, clearButton} = this;
       while (true) {
-        let lastElement = itemContainer.lastElementChild;
+        let lastElement = itemContainer.lastElementChild!;
         if (lastElement === clearButton) {
           break;
         }
@@ -83,7 +85,7 @@ export class SegmentSetWidget extends RefCounted {
     } else {
       let s = x.toString();
       let itemElement = items.get(s)!;
-      itemElement.parentElement.removeChild(itemElement);
+      itemElement.parentElement!.removeChild(itemElement);
       items.delete(s);
     }
   }
@@ -128,4 +130,4 @@ export class SegmentSetWidget extends RefCounted {
     }
     super.disposed();
   }
-};
+}

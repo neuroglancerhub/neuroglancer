@@ -15,15 +15,18 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
+import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {LayerSelectedValues, UserLayer} from 'neuroglancer/layer';
 import {SegmentColorHash} from 'neuroglancer/segment_color';
-import {ON_VISIBILITY_CHANGE_METHOD_ID, VisibleSegmentsState, forEachVisibleSegment, getObjectKey} from 'neuroglancer/segmentation_display_state/base';
+import {forEachVisibleSegment, getObjectKey, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
+import {shareVisibility} from 'neuroglancer/shared_visibility_count/frontend';
+import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {vec3} from 'neuroglancer/util/geom';
+import {vec4} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
 import {SharedObject} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
+import {NullarySignal} from 'neuroglancer/util/signal';
 
 export class Uint64MapEntry {
   constructor(public key: Uint64, public value: Uint64) {}
@@ -33,7 +36,7 @@ export class Uint64MapEntry {
 export class SegmentSelectionState extends RefCounted {
   selectedSegment = new Uint64();
   hasSelectedSegment = false;
-  changed = new Signal();
+  changed = new NullarySignal();
 
   set(value: Uint64|null|undefined) {
     if (value == null) {
@@ -59,7 +62,7 @@ export class SegmentSelectionState extends RefCounted {
 
   bindTo(layerSelectedValues: LayerSelectedValues, userLayer: UserLayer) {
     let temp = new Uint64();
-    this.registerSignalBinding(layerSelectedValues.changed.add(() => {
+    this.registerDisposer(layerSelectedValues.changed.add(() => {
       let value = layerSelectedValues.get(userLayer);
       if (typeof value === 'number') {
         temp.low = value;
@@ -78,31 +81,61 @@ export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentColorHash: SegmentColorHash;
 }
 
+export interface SegmentationDisplayStateWithAlpha extends SegmentationDisplayState {
+  objectAlpha: TrackableAlphaValue;
+}
+
+export interface SegmentationDisplayState3D extends SegmentationDisplayStateWithAlpha {
+  objectToDataTransform: CoordinateTransform;
+}
+
 export function registerRedrawWhenSegmentationDisplayStateChanged(
-    displayState: SegmentationDisplayState, renderLayer: {redrawNeeded: Signal}&RefCounted) {
-  let dispatchRedrawNeeded = () => { renderLayer.redrawNeeded.dispatch(); };
-  renderLayer.registerSignalBinding(
-      displayState.segmentColorHash.changed.add(dispatchRedrawNeeded));
-  renderLayer.registerSignalBinding(displayState.visibleSegments.changed.add(dispatchRedrawNeeded));
-  renderLayer.registerSignalBinding(
-      displayState.segmentEquivalences.changed.add(dispatchRedrawNeeded));
-  renderLayer.registerSignalBinding(
+    displayState: SegmentationDisplayState, renderLayer: {redrawNeeded: NullarySignal}&RefCounted) {
+  const dispatchRedrawNeeded = renderLayer.redrawNeeded.dispatch;
+  renderLayer.registerDisposer(displayState.segmentColorHash.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerDisposer(displayState.visibleSegments.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerDisposer(displayState.segmentEquivalences.changed.add(dispatchRedrawNeeded));
+  renderLayer.registerDisposer(
       displayState.segmentSelectionState.changed.add(dispatchRedrawNeeded));
+}
+
+export function registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(
+    displayState: SegmentationDisplayStateWithAlpha,
+    renderLayer: {redrawNeeded: NullarySignal}&RefCounted) {
+  registerRedrawWhenSegmentationDisplayStateChanged(displayState, renderLayer);
+  renderLayer.registerDisposer(
+      displayState.objectAlpha.changed.add(renderLayer.redrawNeeded.dispatch));
+}
+
+export function registerRedrawWhenSegmentationDisplayState3DChanged(
+    displayState: SegmentationDisplayState3D,
+    renderLayer: {redrawNeeded: NullarySignal}&RefCounted) {
+  registerRedrawWhenSegmentationDisplayStateWithAlphaChanged(displayState, renderLayer);
+  renderLayer.registerDisposer(
+      displayState.objectToDataTransform.changed.add(renderLayer.redrawNeeded.dispatch));
 }
 
 /**
  * Temporary value used by getObjectColor.
  */
-const tempColor = vec3.create();
+const tempColor = vec4.create();
 
-export function getObjectColor(displayState: SegmentationDisplayState, objectId: Uint64) {
+/**
+ * Returns the alpha-premultiplied color to use.
+ */
+export function getObjectColor(
+    displayState: SegmentationDisplayState, objectId: Uint64, alpha: number = 1) {
   const color = tempColor;
+  color[3] = alpha;
   displayState.segmentColorHash.compute(color, objectId);
   if (displayState.segmentSelectionState.isSelected(objectId)) {
     for (let i = 0; i < 3; ++i) {
       color[i] = color[i] * 0.5 + 0.5;
     }
   }
+  color[0] *= alpha;
+  color[1] *= alpha;
+  color[2] *= alpha;
   return color;
 }
 
@@ -119,7 +152,6 @@ export function forEachSegmentToDraw<SegmentData>(
 }
 
 export class SegmentationLayerSharedObject extends SharedObject {
-
   visibilityCount = new UseCount();
 
   constructor(public chunkManager: ChunkManager, public displayState: SegmentationDisplayState) {
@@ -127,21 +159,11 @@ export class SegmentationLayerSharedObject extends SharedObject {
   }
 
   initializeCounterpartWithChunkManager(options: any) {
-    let {displayState, visibilityCount} = this;
+    let {displayState} = this;
     options['chunkManager'] = this.chunkManager.rpcId;
     options['visibleSegments'] = displayState.visibleSegments.rpcId;
     options['segmentEquivalences'] = displayState.segmentEquivalences.rpcId;
     super.initializeCounterpart(this.chunkManager.rpc!, options);
-
-    visibilityCount.becameNonZero.add(() => {
-      if (this.rpc != null) {
-        this.rpc.invoke(ON_VISIBILITY_CHANGE_METHOD_ID, {'id': this.rpcId, 'visible': true});
-      }
-    });
-    visibilityCount.becameZero.add(() => {
-      if (this.rpc != null) {
-        this.rpc.invoke(ON_VISIBILITY_CHANGE_METHOD_ID, {'id': this.rpcId, 'visible': false});
-      }
-    });
+    shareVisibility(this);
   }
 }

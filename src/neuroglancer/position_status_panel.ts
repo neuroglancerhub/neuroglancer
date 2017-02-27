@@ -44,29 +44,29 @@ export class PositionStatusPanel extends RefCounted {
       positionElements.push(input);
       let nextInputIsChange = false;
       this.registerEventListener(
-          input, 'change', (event: Event) => { this.handleCoordinateChange(); });
-      this.registerEventListener(input, 'input', (event: Event) => {
+          input, 'change', (_event: Event) => { this.handleCoordinateChange(); });
+      this.registerEventListener(input, 'input', (_event: Event) => {
         if (nextInputIsChange) {
           this.handleCoordinateChange();
           nextInputIsChange = false;
         }
         return true;
       });
-      this.registerEventListener(input, 'wheel', (event: WheelEvent) => {
+      this.registerEventListener(input, 'wheel', (_event: WheelEvent) => {
         nextInputIsChange = true;
         input.focus();
         return true;
       });
-      this.registerEventListener(input, 'keydown', (event: MouseEvent) => {
+      this.registerEventListener(input, 'keydown', (_event: MouseEvent) => {
         nextInputIsChange = false;
         return true;
       });
-      this.registerEventListener(input, 'mousedown', (event: MouseEvent) => {
+      this.registerEventListener(input, 'mousedown', (_event: MouseEvent) => {
         nextInputIsChange = true;
         return true;
       });
-      this.registerEventListener(input, 'click', (event: MouseEvent) => { return true; });
-      this.registerEventListener(input, 'blur', (event: MouseEvent) => {
+      this.registerEventListener(input, 'click', (_event: MouseEvent) => { return true; });
+      this.registerEventListener(input, 'blur', (_event: MouseEvent) => {
         nextInputIsChange = false;
         return true;
       });
@@ -77,8 +77,12 @@ export class PositionStatusPanel extends RefCounted {
 
     let {navigationState, mouseState} = viewer;
 
-    this.registerSignalBinding(navigationState.pose.changed.add(this.handleChange, this));
-    this.registerSignalBinding(mouseState.changed.add(this.handleChange, this));
+    this.registerDisposer(navigationState.pose.changed.add(() => {
+      this.handleChange();
+    }));
+    this.registerDisposer(mouseState.changed.add(() => {
+      this.handleChange();
+    }));
     this.handleChange();
   }
 

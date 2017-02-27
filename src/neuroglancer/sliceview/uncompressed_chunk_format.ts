@@ -15,24 +15,24 @@
  */
 
 import {DataType, VolumeChunkSpecification} from 'neuroglancer/sliceview/base';
-import {ChunkFormatHandler, VolumeChunkSource, registerChunkFormatHandler} from 'neuroglancer/sliceview/frontend';
+import {ChunkFormatHandler, registerChunkFormatHandler, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {SingleTextureChunkFormat, SingleTextureVolumeChunk} from 'neuroglancer/sliceview/single_texture_chunk_format';
 import {TypedArray, TypedArrayConstructor} from 'neuroglancer/util/array';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {Vec3, vec3Key} from 'neuroglancer/util/geom';
+import {vec2, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {GL} from 'neuroglancer/webgl/context';
-import {OneDimensionalTextureAccessHelper, compute3dTextureLayout, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
+import {compute1dTextureFormat, compute3dTextureLayout, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData} from 'neuroglancer/webgl/one_dimensional_texture_access';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {glsl_float, glsl_uint16, glsl_uint32, glsl_uint64, glsl_uint8} from 'neuroglancer/webgl/shader_lib';
+import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 
 class TextureLayout extends RefCounted {
-  textureWidth: number;
+  dataWidth: number;
   textureHeight: number;
-  textureAccessCoefficients: Float32Array;
+  textureAccessCoefficients: vec2;
   channelStride: number;
 
-  constructor(gl: GL, public chunkDataSize: Vec3, texelsPerElement: number, numChannels: number) {
+  constructor(gl: GL, public chunkDataSize: vec3, texelsPerElement: number, numChannels: number) {
     super();
     const dataPointsPerChannel = chunkDataSize[0] * chunkDataSize[1] * chunkDataSize[2];
     this.channelStride = dataPointsPerChannel;
@@ -41,7 +41,7 @@ class TextureLayout extends RefCounted {
         chunkDataSize[2] * numChannels);
   }
 
-  static get(gl: GL, chunkDataSize: Vec3, texelsPerElement: number, numChannels: number) {
+  static get(gl: GL, chunkDataSize: vec3, texelsPerElement: number, numChannels: number) {
     return gl.memoize.get(
         `sliceview.UncompressedTextureLayout:${vec3Key(chunkDataSize)},${texelsPerElement},${numChannels}`,
         () => new TextureLayout(gl, chunkDataSize, texelsPerElement, numChannels));
@@ -61,54 +61,18 @@ export class ChunkFormat extends SingleTextureChunkFormat<TextureLayout> {
     return gl.memoize.get(key, () => new ChunkFormat(gl, dataType, numChannels, key));
   }
 
-  constructor(gl: GL, public dataType: DataType, public numChannels: number, key: string) {
+  constructor(_gl: GL, public dataType: DataType, public numChannels: number, key: string) {
     super(key);
-    switch (dataType) {
-      case DataType.UINT8:
-        this.texelsPerElement = 1;
-        this.textureFormat = gl.LUMINANCE;
-        this.texelType = gl.UNSIGNED_BYTE;
-        this.arrayElementsPerTexel = 1;
-        this.arrayConstructor = Uint8Array;
-        break;
-      case DataType.UINT16:
-        this.texelsPerElement = 1;
-        this.textureFormat = gl.LUMINANCE_ALPHA;
-        this.texelType = gl.UNSIGNED_BYTE;
-        this.arrayElementsPerTexel = 2;
-        this.arrayConstructor = Uint8Array;
-        break;
-      case DataType.UINT64:
-        this.texelsPerElement = 2;
-        this.textureFormat = gl.RGBA;
-        this.texelType = gl.UNSIGNED_BYTE;
-        this.arrayElementsPerTexel = 4;
-        this.arrayConstructor = Uint8Array;
-        break;
-      case DataType.UINT32:
-        this.texelsPerElement = 1;
-        this.textureFormat = gl.RGBA;
-        this.texelType = gl.UNSIGNED_BYTE;
-        this.arrayElementsPerTexel = 4;
-        this.arrayConstructor = Uint8Array;
-        break;
-      case DataType.FLOAT32:
-        this.texelsPerElement = 1;
-        this.textureFormat = gl.LUMINANCE;
-        this.texelType = gl.FLOAT;
-        this.arrayElementsPerTexel = 1;
-        this.arrayConstructor = Float32Array;
-        break;
-      default:
-        throw new Error('Unsupported dataType: ' + dataType);
-    }
-    this.textureAccessHelper =
-        new OneDimensionalTextureAccessHelper('chunkData', this.texelsPerElement);
+    compute1dTextureFormat(this, dataType);
+    this.textureAccessHelper = new OneDimensionalTextureAccessHelper('chunkData');
   }
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
-    this.textureAccessHelper.defineShader(builder);
+    let {textureAccessHelper} = this;
+    textureAccessHelper.defineShader(builder);
+    builder.addFragmentCode(
+        textureAccessHelper.getAccessor('readVolumeData', 'uVolumeChunkSampler', this.dataType));
 
     let {numChannels} = this;
     if (numChannels > 1) {
@@ -128,62 +92,12 @@ float getIndexIntoChunk (int channelIndex) {
   return chunkDataPosition.x + uChunkDataSize.x * (chunkDataPosition.y + uChunkDataSize.y * chunkDataPosition.z) + getChannelOffset(channelIndex);
 }
 `);
-    switch (this.dataType) {
-      case DataType.UINT8:
-        builder.addFragmentCode(glsl_uint8);
-        builder.addFragmentCode(`
-uint8_t getDataValue (int channelIndex) {
-  uint8_t result;
-  vec4 temp;
-  ${this.textureAccessHelper.readTextureValue}(uVolumeChunkSampler, getIndexIntoChunk(channelIndex), temp);
-  result.value = temp.x;
-  return result;
+    const shaderType = getShaderType(this.dataType);
+    builder.addFragmentCode(`
+${shaderType} getDataValue (int channelIndex) {
+  return readVolumeData(getIndexIntoChunk(channelIndex));
 }
 `);
-        break;
-      case DataType.FLOAT32:
-        builder.addFragmentCode(glsl_float);
-        builder.addFragmentCode(`
-float getDataValue (int channelIndex) {
-  vec4 temp;
-  ${this.textureAccessHelper.readTextureValue}(uVolumeChunkSampler, getIndexIntoChunk(channelIndex), temp);
-  return temp.x;
-}
-`);
-        break;
-      case DataType.UINT16:
-        builder.addFragmentCode(glsl_uint16);
-        builder.addFragmentCode(`
-uint16_t getDataValue (int channelIndex) {
-  uint16_t result;
-  vec4 temp;
-  ${this.textureAccessHelper.readTextureValue}(uVolumeChunkSampler, getIndexIntoChunk(channelIndex), temp);
-  result.value = temp.xw;
-  return result;
-}
-`);
-        break;
-      case DataType.UINT32:
-        builder.addFragmentCode(glsl_uint32);
-        builder.addFragmentCode(`
-uint32_t getDataValue (int channelIndex) {
-  uint32_t result;
-  ${this.textureAccessHelper.readTextureValue}(uVolumeChunkSampler, getIndexIntoChunk(channelIndex), result.value);
-  return result;
-}
-`);
-        break;
-      case DataType.UINT64:
-        builder.addFragmentCode(glsl_uint64);
-        builder.addFragmentCode(`
-uint64_t getDataValue (int channelIndex) {
-  uint64_t result;
-  ${this.textureAccessHelper.readTextureValue}(uVolumeChunkSampler, getIndexIntoChunk(channelIndex), result.low, result.high);
-  return result;
-}
-`);
-        break;
-    }
   }
 
   /**
@@ -196,14 +110,12 @@ uint64_t getDataValue (int channelIndex) {
     this.textureAccessHelper.setupTextureLayout(gl, shader, textureLayout);
   }
 
-  getTextureLayout(gl: GL, chunkDataSize: Vec3) {
+  getTextureLayout(gl: GL, chunkDataSize: vec3) {
     return TextureLayout.get(gl, chunkDataSize, this.texelsPerElement, this.numChannels);
   }
 
   setTextureData(gl: GL, textureLayout: TextureLayout, data: TypedArray) {
-    setOneDimensionalTextureData(
-        gl, textureLayout, data, this.arrayElementsPerTexel, this.textureFormat, this.texelType,
-        this.arrayConstructor);
+    setOneDimensionalTextureData(gl, textureLayout, this, data);
   }
 };
 
@@ -230,7 +142,7 @@ export class UncompressedVolumeChunk extends SingleTextureVolumeChunk<Uint8Array
     this.chunkFormat.setTextureData(gl, textureLayout, this.data);
   }
 
-  getChannelValueAt(dataPosition: Vec3, channel: number): number|Uint64 {
+  getChannelValueAt(dataPosition: vec3, channel: number): number|Uint64 {
     let {chunkFormat} = this;
     let chunkDataSize = this.chunkDataSize;
     let index = dataPosition[0] +

@@ -15,8 +15,8 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
-import {Signal} from 'signals';
 
 export abstract class RenderedPanel extends RefCounted {
   gl: GL;
@@ -24,7 +24,7 @@ export abstract class RenderedPanel extends RefCounted {
     super();
     this.gl = context.gl;
     this.registerEventListener(
-        element, 'mouseenter', (event: MouseEvent) => { this.context.setActivePanel(this); });
+        element, 'mouseenter', (_event: MouseEvent) => { this.context.setActivePanel(this); });
     context.addPanel(this);
   }
 
@@ -46,7 +46,7 @@ export abstract class RenderedPanel extends RefCounted {
 
   abstract onResize(): void;
 
-  onKeyCommand(action: string) { return false; }
+  onKeyCommand(_action: string) { return false; }
 
   abstract draw(): void;
 
@@ -59,8 +59,8 @@ export abstract class RenderedPanel extends RefCounted {
 export class DisplayContext extends RefCounted {
   canvas = document.createElement('canvas');
   gl: GL;
-  updateStarted = new Signal();
-  updateFinished = new Signal();
+  updateStarted = new NullarySignal();
+  updateFinished = new NullarySignal();
   panels = new Set<RenderedPanel>();
   activePanel: RenderedPanel|null = null;
   private updatePending: number|null = null;
@@ -149,6 +149,13 @@ export class DisplayContext extends RefCounted {
         panel.setGLViewport();
         panel.draw();
       }
+
+      // Ensure the alpha buffer is set to 1.
+      gl.disable(gl.SCISSOR_TEST);
+      this.gl.clearColor(1.0, 1.0, 1.0, 1.0);
+      this.gl.colorMask(false, false, false, true);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.gl.colorMask(true, true, true, true);
     }
     this.updateFinished.dispatch();
   }

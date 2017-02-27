@@ -19,7 +19,9 @@ export class Uint8ArrayBuilder {
   length = 0;
   data: Uint8Array;
 
-  constructor(initialCapacity: number = 16) { this.data = new Uint8Array(initialCapacity); }
+  constructor(initialCapacity: number = 16) {
+    this.data = new Uint8Array(initialCapacity);
+  }
 
   resize(newLength: number) {
     let {data} = this;
@@ -36,13 +38,22 @@ export class Uint8ArrayBuilder {
     return new Uint8Array(data.buffer, data.byteOffset, this.length);
   }
 
-  shrinkToFit() { this.data = new Uint8Array(this.view); }
+  shrinkToFit() {
+    this.data = new Uint8Array(this.view);
+  }
 
-  clear() { this.length = 0; }
+  clear() {
+    this.length = 0;
+  }
 
   appendArray(other: ArrayLike<number>) {
     let {length} = this;
     this.resize(length + other.length);
     this.data.set(other, length);
   }
-};
+
+  eraseRange(start: number, end: number) {
+    this.data.copyWithin(start, end, this.length);
+    this.length -= (end - start);
+  }
+}

@@ -17,16 +17,15 @@
 import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkPriorityTier, ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Disposable} from 'neuroglancer/util/disposable';
 import {LinkedListOperations} from 'neuroglancer/util/linked_list';
-import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
-import {RPC, SharedObjectCounterpart, registerSharedObject} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
-
-import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
-import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
 import LinkedList0 from 'neuroglancer/util/linked_list.0';
 import LinkedList1 from 'neuroglancer/util/linked_list.1';
-import {rpc} from 'neuroglancer/worker_rpc_context';
-import {CancellablePromise, cancelPromise} from 'neuroglancer/util/promise';
+import {StringMemoize} from 'neuroglancer/util/memoize';
+import {ComparisonFunction, PairingHeapOperations} from 'neuroglancer/util/pairing_heap';
+import PairingHeap0 from 'neuroglancer/util/pairing_heap.0';
+import PairingHeap1 from 'neuroglancer/util/pairing_heap.1';
+import {CancellationTokenSource, CancellationToken} from 'neuroglancer/util/cancellation';
+import {NullarySignal} from 'neuroglancer/util/signal';
+import {initializeSharedObjectCounterpart, registerSharedObject, RPC, SharedObject, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -43,6 +42,8 @@ export class Chunk implements Disposable {
 
   key: string|null = null;
   state = ChunkState.NEW;
+
+  error: any = null;
 
   /**
    * Specifies existing priority within priority tier.  Only meaningful if priorityTier in
@@ -68,9 +69,10 @@ export class Chunk implements Disposable {
   backendOnly = false;
 
   /**
-   * Must be set to a non-null value by ChunkSource.prototype.download.
+   * Cancellation token used to cancel the pending download.  Set to undefined except when state !==
+   * DOWNLOADING.  This should not be accessed by code outside this module.
    */
-  cancelDownload: (() => void)|null = null;
+  downloadCancellationToken: CancellationTokenSource|undefined = undefined;
 
   initialize(key: string) {
     this.key = key;
@@ -79,6 +81,7 @@ export class Chunk implements Disposable {
     this.priorityTier = ChunkPriorityTier.RECENT;
     this.newPriority = Number.NEGATIVE_INFINITY;
     this.newPriorityTier = ChunkPriorityTier.RECENT;
+    this.error = null;
   }
 
   /**
@@ -94,19 +97,25 @@ export class Chunk implements Disposable {
     this.newPriority = Number.NEGATIVE_INFINITY;
   }
 
-  dispose() { this.source = null; }
+  dispose() {
+    this.source = null;
+    this.error = null;
+  }
 
   get chunkManager() { return (<ChunkSource>this.source).chunkManager; }
 
   get queueManager() { return (<ChunkSource>this.source).chunkManager.queueManager; }
 
-  downloadFailed() { this.queueManager.updateChunkState(this, ChunkState.FAILED); }
+  downloadFailed(error: any) {
+    this.error = error;
+    this.queueManager.updateChunkState(this, ChunkState.FAILED);
+  }
 
   downloadSucceeded() { this.queueManager.updateChunkState(this, ChunkState.SYSTEM_MEMORY_WORKER); }
 
   freeSystemMemory() {}
 
-  serialize(msg: any, transfers: any[]) {
+  serialize(msg: any, _transfers: any[]) {
     msg['id'] = this.key;
     msg['source'] = (<ChunkSource>this.source).rpcId;
     msg['new'] = true;
@@ -123,17 +132,16 @@ interface ChunkConstructor<T extends Chunk> {
   new (): T;
 }
 
-export abstract class ChunkSource extends SharedObjectCounterpart {
-  chunkManager: ChunkManager;
+/**
+ * Base class inherited by both ChunkSource, for implementing the backend part of chunk sources that
+ * also have a frontend-part, as well as other chunk sources, such as the GenericFileSource, that
+ * has only a backend part.
+ */
+export abstract class ChunkSourceBase extends SharedObject {
   chunks: Map<string, Chunk> = new Map<string, Chunk>();
   freeChunks: Chunk[] = new Array<Chunk>();
 
-  constructor(rpc: RPC, options: any) {
-    super(rpc, options);
-    // No need to add a reference, since the owner counterpart will hold a reference to the owner
-    // counterpart of chunkManager.
-    this.chunkManager = (<ChunkManager>rpc.get(options['chunkManager']));
-  }
+  constructor(public chunkManager: ChunkManager) { super(); }
 
   getNewChunk_<T extends Chunk>(chunkType: ChunkConstructor<T>): T {
     let freeChunks = this.freeChunks;
@@ -149,7 +157,16 @@ export abstract class ChunkSource extends SharedObjectCounterpart {
     return chunk;
   }
 
-  download(chunk: Chunk) {}
+  /**
+   * Begin downloading the specified the chunk.  The returned promise should resolve when the
+   * downloaded data has been successfully decoded and stored in the chunk, or rejected if the
+   * download or decoding fails.
+   *
+   * @param chunk Chunk to download.
+   * @param cancellationToken If this token is canceled, the download/decoding should be aborted if
+   * possible.
+   */
+  abstract download(chunk: Chunk, cancellationToken: CancellationToken): Promise<void>;
 
   /**
    * Adds the specified chunk to the chunk cache.
@@ -179,46 +196,41 @@ export abstract class ChunkSource extends SharedObjectCounterpart {
       this.dispose();
     }
   }
-};
-
-export function handleChunkDownloadPromise<ChunkType extends Chunk, Result>(
-    chunk: ChunkType, promise: CancellablePromise<Result>,
-    chunkDecoder: (chunk: ChunkType, result: Result) => void) {
-  chunk.cancelDownload = function() {
-    chunk.cancelDownload = null;
-    cancelPromise(promise);
-  };
-  promise.then(
-      response => {
-        if (chunk.cancelDownload === null) {
-          // Download was cancelled.
-          return;
-        }
-        chunk.cancelDownload = null;
-        try {
-          chunkDecoder.call(undefined, chunk, response);
-          chunk.downloadSucceeded();
-        } catch (e) {
-          console.log(`Failed to decode chunk ${chunk}: ${e}`);
-          chunk.downloadFailed();
-        }
-      },
-      function(xhr) {
-        if (chunk.cancelDownload === null) {
-          // Download was cancelled.
-          return;
-        }
-        chunk.cancelDownload = null;
-        chunk.downloadFailed();
-        console.log(`Download failed for chunk ${chunk}`);
-      });
 }
 
-const enum ChunkPriorityQueueType {
-  // Queue finds lowest priority chunks.
-  MIN = 0,
-  // Queue finds highest priority chunks.
-  MAX = 1
+export abstract class ChunkSource extends ChunkSourceBase {
+  constructor(rpc: RPC, options: any) {
+    // No need to add a reference, since the owner counterpart will hold a reference to the owner
+    // counterpart of chunkManager.
+    const chunkManager = <ChunkManager>rpc.get(options['chunkManager']);
+    super(chunkManager);
+    initializeSharedObjectCounterpart(this, rpc, options);
+  }
+}
+
+function startChunkDownload(chunk: Chunk) {
+  const downloadCancellationToken = chunk.downloadCancellationToken = new CancellationTokenSource();
+  chunk.source!.download(chunk, downloadCancellationToken)
+      .then(
+          () => {
+            if (chunk.downloadCancellationToken === downloadCancellationToken) {
+              chunk.downloadCancellationToken = undefined;
+              chunk.downloadSucceeded();
+            }
+          },
+          (error: any) => {
+            if (chunk.downloadCancellationToken === downloadCancellationToken) {
+              chunk.downloadCancellationToken = undefined;
+              chunk.downloadFailed(error);
+              console.log(`Error retrieving chunk ${chunk}: ${error}`);
+            }
+          });
+}
+
+function cancelChunkDownload(chunk: Chunk) {
+  const token = chunk.downloadCancellationToken!;
+  chunk.downloadCancellationToken = undefined;
+  token.cancel();
 }
 
 class ChunkPriorityQueue {
@@ -534,14 +546,14 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   freeChunkGPUMemory(chunk: Chunk) {
-    rpc.invoke(
+    this.rpc!.invoke(
         'Chunk.update',
         {'id': chunk.key, 'state': ChunkState.SYSTEM_MEMORY, 'source': chunk.source!.rpcId});
   }
 
   freeChunkSystemMemory(chunk: Chunk) {
     if (chunk.state === ChunkState.SYSTEM_MEMORY_WORKER) {
-      rpc.invoke(
+      this.rpc!.invoke(
           'Chunk.update',
           {'id': chunk.key, 'state': ChunkState.EXPIRED, 'source': chunk.source!.rpcId});
     } else {
@@ -550,6 +562,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 
   copyChunkToGPU(chunk: Chunk) {
+    let rpc = this.rpc!;
     if (chunk.state === ChunkState.SYSTEM_MEMORY) {
       rpc.invoke(
           'Chunk.update',
@@ -568,7 +581,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
     function evict(chunk: Chunk) {
       switch (chunk.state) {
         case ChunkState.DOWNLOADING:
-          chunk.cancelDownload!();
+          cancelChunkDownload(chunk);
           break;
         case ChunkState.GPU_MEMORY:
           queueManager.freeChunkGPUMemory(chunk);
@@ -605,7 +618,7 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
         return;
       }
       this.updateChunkState(promotionCandidate, ChunkState.DOWNLOADING);
-      promotionCandidate.source!.download(promotionCandidate);
+      startChunkDownload(promotionCandidate);
     }
   }
 
@@ -627,6 +640,12 @@ export class ChunkQueueManager extends SharedObjectCounterpart {
   }
 };
 
+/*
+ * Priority to use for handlers add to recomputeChunkPriorities that should execute last, because
+ * they depend on the result of another handler.
+ */
+export const RECOMPUTE_CHUNK_PRIORITIES_LAST = -1000;
+
 @registerSharedObject(CHUNK_MANAGER_RPC_ID)
 export class ChunkManager extends SharedObjectCounterpart {
   queueManager: ChunkQueueManager;
@@ -644,7 +663,15 @@ export class ChunkManager extends SharedObjectCounterpart {
 
   private updatePending: number|null = null;
 
-  recomputeChunkPriorities = new Signal();
+  recomputeChunkPriorities = new NullarySignal();
+
+  /**
+   * Dispatched immediately after recomputeChunkPriorities is dispatched.
+   * This signal should be used for handlers that depend on the result of another handler.
+   */
+  recomputeChunkPrioritiesLate = new NullarySignal();
+
+  memoize = new StringMemoize();
 
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
@@ -667,6 +694,7 @@ export class ChunkManager extends SharedObjectCounterpart {
   private recomputeChunkPriorities_() {
     this.updatePending = null;
     this.recomputeChunkPriorities.dispatch();
+    this.recomputeChunkPrioritiesLate.dispatch();
     this.updateQueueState([ChunkPriorityTier.VISIBLE]);
   };
 

@@ -17,7 +17,7 @@
 import {WritableArrayLike} from 'neuroglancer/util/array';
 import {vec3} from 'neuroglancer/util/geom';
 
-export function verifyFloat(obj: any) {
+export function verifyFloat(obj: any): number {
   let t = typeof obj;
   if (t === 'number' || t === 'string') {
     let x = parseFloat('' + obj);
@@ -28,7 +28,7 @@ export function verifyFloat(obj: any) {
   throw new Error(`Expected floating-point number, but received: ${JSON.stringify(obj)}.`);
 }
 
-export function verifyFiniteFloat(obj: any) {
+export function verifyFiniteFloat(obj: any): number {
   let x = verifyFloat(obj);
   if (Number.isFinite(x)) {
     return x;
@@ -36,7 +36,7 @@ export function verifyFiniteFloat(obj: any) {
   throw new Error(`Expected finite floating-point number, but received: ${x}.`);
 }
 
-export function verifyFinitePositiveFloat(obj: any) {
+export function verifyFinitePositiveFloat(obj: any): number {
   let x = verifyFiniteFloat(obj);
   if (x > 0) {
     return x;
@@ -45,7 +45,7 @@ export function verifyFinitePositiveFloat(obj: any) {
 }
 
 export function parseXYZ<A extends WritableArrayLike<number>>(
-    out: A, obj: any, validator = verifyFloat): A {
+    out: A, obj: any, validator: (x: any) => number = verifyFloat): A {
   verifyObject(obj);
   let keys = Object.keys(obj);
   keys.sort();
@@ -228,7 +228,7 @@ function convertStringLiteral(
       s += m[1];
       s += '\\';
       s += quoteReplace;
-      inner = inner.substr(m.index + m[0].length);
+      inner = inner.substr(m.index! + m[0].length);
     }
     s += quoteReplace;
     return s;
@@ -272,7 +272,7 @@ function convertJsonHelper(x: string, desiredCommaChar: string, desiredQuoteChar
       replacement = '';
     } else {
       before = x.substr(0, m.index);
-      x = x.substr(m.index + m[0].length);
+      x = x.substr(m.index! + m[0].length);
       let originalString = m[1];
       if (originalString !== undefined) {
         replacement =
@@ -313,7 +313,7 @@ export function pythonLiteralToJSON(x: string) {
       replacement = '';
     } else {
       before = x.substr(0, m.index);
-      x = x.substr(m.index + m[0].length);
+      x = x.substr(m.index! + m[0].length);
       let singleQuoteString = m[1];
       if (singleQuoteString !== undefined) {
         replacement = normalizeStringLiteral(singleQuoteString);
@@ -402,6 +402,13 @@ export function verifyOptionalString(obj: any): string|undefined {
   return verifyString(obj);
 }
 
+export function verifyOptionalInt(obj: any): number|undefined {
+  if (obj === undefined) {
+    return undefined;
+  }
+  return verifyInt(obj);
+}
+
 export function verifyObjectProperty<T>(
     obj: any, propertyName: string, validator: (value: any) => T): T {
   let value = obj.hasOwnProperty(propertyName) ? obj[propertyName] : undefined;
@@ -453,7 +460,7 @@ export function parseQueryStringParameters(queryString: string) {
       if (m === null) {
         throw new Error(`Invalid query string part: ${JSON.stringify(part)}.`);
       }
-      result[m[1]] = m[2];
+      result[m[1]] = decodeURIComponent(m[2]);
     }
     return result;
   }

@@ -18,7 +18,7 @@ export class $TYPE$Builder {
   length = 0;
   data: $TYPE$;
 
-  constructor (initialCapacity: number = 16) {
+  constructor(initialCapacity: number = 16) {
     this.data = new $TYPE$(initialCapacity);
   }
 
@@ -32,22 +32,27 @@ export class $TYPE$Builder {
     this.length = newLength;
   }
 
-  get view () {
+  get view() {
     let {data} = this;
     return new $TYPE$(data.buffer, data.byteOffset, this.length);
   }
 
-  shrinkToFit () {
+  shrinkToFit() {
     this.data = new $TYPE$(this.view);
   }
 
-  clear () {
+  clear() {
     this.length = 0;
   }
 
-  appendArray (other: ArrayLike<number>) {
+  appendArray(other: ArrayLike<number>) {
     let {length} = this;
     this.resize(length + other.length);
     this.data.set(other, length);
   }
-};
+
+  eraseRange(start: number, end: number) {
+    this.data.copyWithin(start, end, this.length);
+    this.length -= (end - start);
+  }
+}

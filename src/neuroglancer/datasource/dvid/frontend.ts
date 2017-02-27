@@ -22,14 +22,13 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {DVIDSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {CompletionResult, registerDataSourceFactory} from 'neuroglancer/datasource/factory';
-import {DataType, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
+import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
+import {defineParameterizedVolumeChunkSource, MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
-import {Vec3, vec3} from 'neuroglancer/util/geom';
+import {mat4, vec3} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, stableStringify, verifyFinitePositiveFloat, verifyInt, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
-import {CancellablePromise} from 'neuroglancer/util/promise';
+import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyInt, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -43,19 +42,19 @@ export class DataInstanceBaseInfo {
     verifyObject(obj);
     verifyObjectProperty(obj, 'TypeName', verifyString);
   }
-};
+}
 
 export class DataInstanceInfo {
   constructor(public obj: any, public name: string, public base: DataInstanceBaseInfo) {}
-};
+}
 
 const DVIDVolumeChunkSource = defineParameterizedVolumeChunkSource(VolumeChunkSourceParameters);
 
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
-  lowerVoxelBound: Vec3;
-  upperVoxelBound: Vec3;
-  voxelSize: Vec3;
+  lowerVoxelBound: vec3;
+  upperVoxelBound: vec3;
+  voxelSize: vec3;
   numChannels: number;
   numLevels: number;
   constructor(
@@ -90,7 +89,9 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     this.numChannels = 1;
   }
 
-  getSources(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
+  getSources(
+      chunkManager: ChunkManager, parameters: DVIDSourceParameters,
+      volumeSourceOptions: VolumeSourceOptions) {
     let sources: VolumeChunkSource[][] = [];
     for (let level = 0; level < this.numLevels; ++level) {
       let voxelSize = vec3.scale(vec3.create(), this.voxelSize, Math.pow(2, level));
@@ -118,10 +119,11 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
                 voxelSize: voxelSize,
                 dataType: this.dataType,
                 numChannels: this.numChannels,
-                chunkLayoutOffset: vec3.multiply(vec3.create(), lowerVoxelBound, voxelSize),
+                transform: mat4.fromTranslation(
+                    mat4.create(), vec3.multiply(vec3.create(), lowerVoxelBound, voxelSize)),
                 baseVoxelOffset: lowerVoxelBound,
                 upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
-                volumeType: this.volumeType,
+                volumeType: this.volumeType, volumeSourceOptions,
               })
               .map(
                   spec => { return DVIDVolumeChunkSource.get(chunkManager, spec, volParameters); });
@@ -129,15 +131,15 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     }
     return sources;
   }
-};
+}
 
 export class TileLevelInfo {
   /**
    * Resolution of the two downsampled dimensions in the tile plane.  The tile depth is equal to the
    * base voxel size in that dimension.
    */
-  resolution: Vec3;
-  tileSize: Vec3;
+  resolution: vec3;
+  tileSize: vec3;
 
   constructor(obj: any) {
     verifyObject(obj);
@@ -146,7 +148,7 @@ export class TileLevelInfo {
     this.tileSize = verifyObjectProperty(
         obj, 'TileSize', x => parseFixedLengthArray(vec3.create(), x, verifyPositiveInt));
   }
-};
+}
 
 /**
  * Dimensions for which tiles are computed.
@@ -172,12 +174,12 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
   /**
    * Base voxel size (nm).
    */
-  voxelSize: Vec3;
+  voxelSize: vec3;
 
   levels: Map<string, TileLevelInfo>;
 
-  lowerVoxelBound: Vec3;
-  upperVoxelBound: Vec3;
+  lowerVoxelBound: vec3;
+  upperVoxelBound: vec3;
 
   constructor(obj: any, name: string, base: DataInstanceBaseInfo) {
     super(obj, name, base);
@@ -206,7 +208,9 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
     }
   }
 
-  getSources(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
+  getSources(
+      chunkManager: ChunkManager, parameters: DVIDSourceParameters,
+      volumeSourceOptions: VolumeSourceOptions) {
     let sources: VolumeChunkSource[][] = [];
     let {numChannels, dataType, encoding} = this;
     for (let [level, levelInfo] of this.levels) {
@@ -225,11 +229,11 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
           upperVoxelBound[i] =
               Math.ceil(this.upperVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
         }
-        let spec = new VolumeChunkSpecification({
+        let spec = VolumeChunkSpecification.make({
           voxelSize,
           chunkDataSize,
           numChannels: numChannels,
-          dataType: dataType, lowerVoxelBound, upperVoxelBound
+          dataType: dataType, lowerVoxelBound, upperVoxelBound, volumeSourceOptions,
         });
         return TileChunkSource.get(chunkManager, spec, {
           'baseUrls': parameters.baseUrls,
@@ -244,7 +248,7 @@ export class TileDataInstanceInfo extends DataInstanceInfo {
     }
     return sources;
   }
-};
+}
 
 export function parseDataInstance(
     obj: any, name: string, instanceNames: Array<string>): DataInstanceInfo {
@@ -302,7 +306,7 @@ export class RepositoryInfo {
       this.vnodes.add(key);
     }
   }
-};
+}
 
 export function parseRepositoriesInfo(obj: any) {
   try {
@@ -348,24 +352,20 @@ export class ServerInfo {
     }
     return this.repositories.get(matches[0])!;
   }
-};
+}
 
-const cachedServerInfo = new Map<string, Promise<ServerInfo>>();
-export function getServerInfo(baseUrls: string[]) {
-  let cacheKey = stableStringify(baseUrls);
-  let result = cachedServerInfo.get(cacheKey);
-  if (result === undefined) {
-    result = sendHttpRequest(openShardedHttpRequest(baseUrls, '/api/repos/info', 'GET'), 'json')
-                 .then(response => new ServerInfo(response));
+export function getServerInfo(chunkManager: ChunkManager, baseUrls: string[]) {
+  return chunkManager.memoize.getUncounted({type: 'dvid:getServerInfo', baseUrls}, () => {
+    let result = sendHttpRequest(openShardedHttpRequest(baseUrls, '/api/repos/info', 'GET'), 'json')
+                     .then(response => new ServerInfo(response));
     const description = `repository info for DVID server ${baseUrls[0]}`;
     StatusMessage.forPromise(result, {
       initialMessage: `Retrieving ${description}.`,
       delay: true,
       errorPrefix: `Error retrieving ${description}: `,
     });
-    cachedServerInfo.set(cacheKey, result);
-  }
-  return result;
+    return result;
+  });
 }
 
 export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunkSource {
@@ -374,55 +374,56 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
   get volumeType() { return this.info.volumeType; }
 
   constructor(
-      public baseUrls: string[], public nodeKey: string, public dataInstanceKey: string,
-      public info: VolumeDataInstanceInfo|TileDataInstanceInfo) {}
+      public chunkManager: ChunkManager, public baseUrls: string[], public nodeKey: string,
+      public dataInstanceKey: string, public info: VolumeDataInstanceInfo|TileDataInstanceInfo) {}
 
-  getSources(chunkManager: ChunkManager) {
-    return this.info.getSources(chunkManager, {
-      'baseUrls': this.baseUrls,
-      'nodeKey': this.nodeKey,
-      'dataInstanceKey': this.dataInstanceKey,
-    });
+  getSources(volumeSourceOptions: VolumeSourceOptions) {
+    return this.info.getSources(
+        this.chunkManager, {
+          'baseUrls': this.baseUrls,
+          'nodeKey': this.nodeKey,
+          'dataInstanceKey': this.dataInstanceKey,
+        },
+        volumeSourceOptions);
   }
 
   /**
    * Meshes are not supported.
    */
-  getMeshSource(chunkManager: ChunkManager): null { return null; }
-};
+  getMeshSource(): null { return null; }
+}
 
-let existingVolumes = new Map<string, MultiscaleVolumeChunkSource>();
-export function getShardedVolume(baseUrls: string[], nodeKey: string, dataInstanceKey: string) {
-  return getServerInfo(baseUrls).then(serverInfo => {
+export function getShardedVolume(
+    chunkManager: ChunkManager, baseUrls: string[], nodeKey: string, dataInstanceKey: string) {
+  return getServerInfo(chunkManager, baseUrls).then(serverInfo => {
     let repositoryInfo = serverInfo.getNode(nodeKey);
     if (repositoryInfo === undefined) {
       throw new Error(`Invalid node: ${JSON.stringify(nodeKey)}.`);
     }
-    let dataInstanceInfo = repositoryInfo.dataInstances.get(dataInstanceKey);
+    const dataInstanceInfo = repositoryInfo.dataInstances.get(dataInstanceKey);
     if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo) &&
         !(dataInstanceInfo instanceof TileDataInstanceInfo)) {
       throw new Error(`Invalid data instance ${dataInstanceKey}.`);
     }
-    let cacheKey = stableStringify(
-        {'baseUrls': baseUrls, 'nodeKey': repositoryInfo.uuid, 'dataInstanceKey': dataInstanceKey});
-    let result = existingVolumes.get(cacheKey);
-    if (result === undefined) {
-      result = new MultiscaleVolumeChunkSource(
-          baseUrls, repositoryInfo.uuid, dataInstanceKey, dataInstanceInfo);
-      existingVolumes.set(cacheKey, result);
-    }
-    return result;
+    return chunkManager.memoize.getUncounted(
+        {
+          type: 'dvid:MultiscaleVolumeChunkSource',
+          baseUrls,
+          nodeKey: repositoryInfo.uuid, dataInstanceKey,
+        },
+        () => new MultiscaleVolumeChunkSource(
+            chunkManager, baseUrls, repositoryInfo.uuid, dataInstanceKey, dataInstanceInfo));
   });
 }
 
 const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)$/;
 
-export function getVolume(url: string) {
+export function getVolume(chunkManager: ChunkManager, url: string) {
   let match = url.match(urlPattern);
   if (match === null) {
     throw new Error(`Invalid DVID URL: ${JSON.stringify(url)}.`);
   }
-  return getShardedVolume([match[1]], match[2], match[3]);
+  return getShardedVolume(chunkManager, [match[1]], match[2], match[3]);
 }
 
 export function completeInstanceName(
@@ -454,7 +455,8 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
   return applyCompletionOffset(nodeKey.length + 1, completeInstanceName(repository, match[2]));
 }
 
-export function volumeCompleter(url: string): CancellablePromise<CompletionResult> {
+export function volumeCompleter(
+    url: string, chunkManager: ChunkManager): Promise<CompletionResult> {
   const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/(.*)$/;
   let match = url.match(curUrlPattern);
   if (match === null) {
@@ -464,9 +466,10 @@ export function volumeCompleter(url: string): CancellablePromise<CompletionResul
   let baseUrl = match[1];
   let baseUrls = [baseUrl];
   let path = match[2];
-  return getServerInfo(baseUrls).then(
-      serverInfo =>
-          applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path)));
+  return getServerInfo(chunkManager, baseUrls)
+      .then(
+          serverInfo =>
+              applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path)));
 }
 
 registerDataSourceFactory('dvid', {

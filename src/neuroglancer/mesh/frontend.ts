@@ -17,59 +17,65 @@
 import {ChunkSourceParametersConstructor, ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {FRAGMENT_SOURCE_RPC_ID, MESH_LAYER_RPC_ID} from 'neuroglancer/mesh/base';
-import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer, perspectivePanelEmit} from 'neuroglancer/perspective_panel';
-import {SegmentationDisplayState, SegmentationLayerSharedObject, forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayStateChanged} from 'neuroglancer/segmentation_display_state/frontend';
-import {Mat4, Vec3, identityMat4, vec3, vec4} from 'neuroglancer/util/geom';
+import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
+import {forEachSegmentToDraw, getObjectColor, registerRedrawWhenSegmentationDisplayState3DChanged, SegmentationDisplayState3D, SegmentationLayerSharedObject} from 'neuroglancer/segmentation_display_state/frontend';
+import {mat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
+import {getObjectId} from 'neuroglancer/util/object_id';
 import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
+import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {setVec4FromUint32} from 'neuroglancer/webgl/shader_lib';
-import {RPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
+import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 
 export class MeshShaderManager {
-  private tempLightVec = vec4.create();
+  private tempLightVec = new Float32Array(4);
   private tempPickID = new Float32Array(4);
   constructor() {}
 
   defineShader(builder: ShaderBuilder) {
     builder.addAttribute('highp vec3', 'aVertexPosition');
     builder.addAttribute('highp vec3', 'aVertexNormal');
-    builder.addVarying('highp vec3', 'vColor');
+    builder.addVarying('highp vec4', 'vColor');
     builder.addUniform('highp vec4', 'uLightDirection');
-    builder.addUniform('highp vec3', 'uColor');
+    builder.addUniform('highp vec4', 'uColor');
     builder.addUniform('highp mat4', 'uModelMatrix');
     builder.addUniform('highp mat4', 'uProjection');
     builder.addUniform('highp vec4', 'uPickID');
-    builder.require(perspectivePanelEmit);
     builder.setVertexMain(`
 gl_Position = uProjection * (uModelMatrix * vec4(aVertexPosition, 1.0));
 vec3 normal = (uModelMatrix * vec4(aVertexNormal, 0.0)).xyz;
 float lightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
-vColor = lightingFactor * uColor;
+vColor = vec4(lightingFactor * uColor.rgb, uColor.a);
 `);
-    builder.setFragmentMain(`emit(vec4(vColor, 1.0), uPickID);`);
+    builder.setFragmentMain(`emit(vColor, uPickID);`);
   }
 
   beginLayer(gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext) {
     let {dataToDevice, lightDirection, ambientLighting, directionalLighting} = renderContext;
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, dataToDevice);
-    let lightVec = this.tempLightVec;
+    let lightVec = <vec3>this.tempLightVec;
     vec3.scale(lightVec, lightDirection, directionalLighting);
     lightVec[3] = ambientLighting;
     gl.uniform4fv(shader.uniform('uLightDirection'), lightVec);
   }
 
-  beginObject(
-      gl: GL, shader: ShaderProgram, objectToDataMatrix: Mat4, color: Vec3, pickID: number) {
-    gl.uniformMatrix4fv(shader.uniform('uModelMatrix'), false, objectToDataMatrix);
-    gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
-    gl.uniform3fv(shader.uniform('uColor'), color);
+  setColor(gl: GL, shader: ShaderProgram, color: vec4) {
+    gl.uniform4fv(shader.uniform('uColor'), color);
   }
 
-  getShader(gl: GL) {
-    return gl.memoize.get('mesh/MeshShaderManager', () => {
+  setPickID(gl: GL, shader: ShaderProgram, pickID: number) {
+    gl.uniform4fv(shader.uniform('uPickID'), setVec4FromUint32(this.tempPickID, pickID));
+  }
+
+  beginObject(gl: GL, shader: ShaderProgram, objectToDataMatrix: mat4) {
+    gl.uniformMatrix4fv(shader.uniform('uModelMatrix'), false, objectToDataMatrix);
+  }
+
+  getShader(gl: GL, emitter: ShaderModule) {
+    return gl.memoize.get(`mesh/MeshShaderManager:${getObjectId(emitter)}`, () => {
       let builder = new ShaderBuilder(gl);
+      builder.require(emitter);
       this.defineShader(builder);
       return builder.build();
     });
@@ -94,15 +100,15 @@ vColor = lightingFactor * uColor;
 
 export class MeshLayer extends PerspectiveViewRenderLayer {
   private meshShaderManager = new MeshShaderManager();
-  private shader = this.registerDisposer(this.meshShaderManager.getShader(this.gl));
+  private shaders = new Map<ShaderModule, ShaderProgram>();
   private sharedObject: SegmentationLayerSharedObject;
 
   constructor(
       public chunkManager: ChunkManager, public source: MeshSource,
-      public displayState: SegmentationDisplayState) {
+      public displayState: SegmentationDisplayState3D) {
     super();
 
-    registerRedrawWhenSegmentationDisplayStateChanged(displayState, this);
+    registerRedrawWhenSegmentationDisplayState3DChanged(displayState, this);
 
     let sharedObject = this.sharedObject =
         this.registerDisposer(new SegmentationLayerSharedObject(chunkManager, displayState));
@@ -114,10 +120,32 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
     this.visibilityCount.addDependency(sharedObject.visibilityCount);
   }
 
+  private getShader(emitter: ShaderModule) {
+    let {shaders} = this;
+    let shader = shaders.get(emitter);
+    if (shader === undefined) {
+      shader = this.registerDisposer(this.meshShaderManager.getShader(this.gl, emitter));
+      shaders.set(emitter, shader);
+    }
+    return shader;
+  }
+
+  get isTransparent() { return this.displayState.objectAlpha.value < 1.0; }
+
   get gl() { return this.chunkManager.chunkQueueManager.gl; }
 
   draw(renderContext: PerspectiveViewRenderContext) {
-    let {gl, shader, displayState, meshShaderManager} = this;
+    if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
+      // No need for a separate pick ID pass.
+      return;
+    }
+    let {gl, displayState, meshShaderManager} = this;
+    let alpha = Math.min(1.0, displayState.objectAlpha.value);
+    if (alpha <= 0.0) {
+      // Skip drawing.
+      return;
+    }
+    let shader = this.getShader(renderContext.emitter);
     shader.bind();
     meshShaderManager.beginLayer(gl, shader, renderContext);
 
@@ -125,12 +153,16 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
     let {pickIDs} = renderContext;
 
-    const objectToDataMatrix = identityMat4;
+    const objectToDataMatrix = this.displayState.objectToDataTransform.transform;
 
     forEachSegmentToDraw(displayState, objectChunks, (rootObjectId, objectId, fragments) => {
-      meshShaderManager.beginObject(
-          gl, shader, objectToDataMatrix, getObjectColor(displayState, rootObjectId),
-          pickIDs.register(this, objectId));
+      if (renderContext.emitColor) {
+        meshShaderManager.setColor(gl, shader, getObjectColor(displayState, rootObjectId, alpha));
+      }
+      if (renderContext.emitPickID) {
+        meshShaderManager.setPickID(gl, shader, pickIDs.registerUint64(this, objectId));
+      }
+      meshShaderManager.beginObject(gl, shader, objectToDataMatrix);
       for (let fragment of fragments) {
         if (fragment.state === ChunkState.GPU_MEMORY) {
           meshShaderManager.drawFragment(gl, shader, fragment);
@@ -140,7 +172,7 @@ export class MeshLayer extends PerspectiveViewRenderLayer {
 
     meshShaderManager.endLayer(gl, shader);
   }
-};
+}
 
 export class FragmentChunk extends Chunk {
   vertexPositions: Float32Array;

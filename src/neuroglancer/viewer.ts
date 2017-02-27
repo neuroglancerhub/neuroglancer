@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import * as debounce from 'lodash/debounce';
+import debounce from 'lodash/debounce';
 import {AvailableCapacity} from 'neuroglancer/chunk_manager/base';
 import {ChunkManager, ChunkQueueManager} from 'neuroglancer/chunk_manager/frontend';
 import {DisplayContext} from 'neuroglancer/display_context';
@@ -24,128 +24,23 @@ import {LayerDialog} from 'neuroglancer/layer_dialog';
 import {LayerPanel} from 'neuroglancer/layer_panel';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
 import * as L from 'neuroglancer/layout';
-import {NavigationState, OrientationState, Pose} from 'neuroglancer/navigation_state';
+import {NavigationState, Pose} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
-import {PerspectivePanel} from 'neuroglancer/perspective_panel';
 import {PositionStatusPanel} from 'neuroglancer/position_status_panel';
-import {SliceView} from 'neuroglancer/sliceview/frontend';
-import {SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {delayHashUpdate, registerTrackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {removeChildren} from 'neuroglancer/util/dom';
-import {Mat4, Quat, quat} from 'neuroglancer/util/geom';
+import {vec3} from 'neuroglancer/util/geom';
 import {GlobalKeyboardShortcutHandler, KeySequenceMap} from 'neuroglancer/util/keyboard_shortcut_handler';
+import {NullarySignal} from 'neuroglancer/util/signal';
+import {CompoundTrackable} from 'neuroglancer/util/trackable';
+import {DataDisplayLayout, LAYOUTS} from 'neuroglancer/viewer_layouts';
 import {ViewerState} from 'neuroglancer/viewer_state';
 import {RPC} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
 
 require('./viewer.css');
 require('./help_button.css');
 require('neuroglancer/noselect.css');
-
-export class FourPanelLayout extends RefCounted {
-  constructor(public rootElement: HTMLElement, public viewer: Viewer) {
-    super();
-
-    let sliceViews = viewer.makeOrthogonalSliceViews();
-    let {display} = viewer;
-
-    let perspectiveViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
-      navigationState: viewer.perspectiveNavigationState,
-      showSliceViews: viewer.showPerspectiveSliceViews,
-      showAxisLines: viewer.showAxisLines,
-    };
-
-    let sliceViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
-      navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
-      showScaleBar: viewer.showScaleBar,
-    };
-
-    let sliceViewerStateWithoutScaleBar = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
-      navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
-      showScaleBar: new TrackableBoolean(false, false),
-    };
-    let mainDisplayContents = [
-      L.withFlex(1, L.box('column', [
-        L.withFlex(1, L.box('row', [
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            this.registerDisposer(new SliceViewPanel(display, element, sliceViews[0], sliceViewerState));
-          }),
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            this.registerDisposer(new SliceViewPanel(display, element, sliceViews[1], sliceViewerStateWithoutScaleBar));
-          })
-        ])),
-        L.withFlex(1, L.box('row', [
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            let perspectivePanel = this.registerDisposer(
-                new PerspectivePanel(display, element, perspectiveViewerState));
-            for (let sliceView of sliceViews) {
-              perspectivePanel.sliceViews.add(sliceView.addRef());
-            }
-          }),
-          L.withFlex(1, element => {
-            element.className = 'gllayoutcell noselect';
-            this.registerDisposer(new SliceViewPanel(display, element, sliceViews[2], sliceViewerStateWithoutScaleBar));
-          })
-        ])),
-      ]))
-    ];
-    L.box('row', mainDisplayContents)(rootElement);
-    display.onResize();
-  }
-
-  disposed() {
-    removeChildren(this.rootElement);
-    super.disposed();
-  }
-};
-
-export class SinglePanelLayout extends RefCounted {
-  constructor(public rootElement: HTMLElement, public viewer: Viewer) {
-    super();
-    let sliceView = viewer.makeSliceView();
-    let sliceViewerState = {
-      mouseState: viewer.mouseState,
-      layerManager: viewer.layerManager,
-      navigationState: viewer.navigationState,
-      showAxisLines: viewer.showAxisLines,
-      showScaleBar: viewer.showScaleBar,
-    };
-
-    L.box('row', [L.withFlex(1, element => {
-            this.registerDisposer(
-                new SliceViewPanel(viewer.display, element, sliceView, sliceViewerState));
-          })])(rootElement);
-    viewer.display.onResize();
-  }
-
-  disposed() {
-    removeChildren(this.rootElement);
-    super.disposed();
-  }
-};
-
-interface DataDisplayLayout extends RefCounted {
-  rootElement: HTMLElement;
-}
-
-export const LAYOUTS: [string, (element: HTMLElement, viewer: Viewer) => DataDisplayLayout][] = [
-  ['4panel', (element, viewer) => new FourPanelLayout(element, viewer)],
-  ['xy', (element, viewer) => new SinglePanelLayout(element, viewer)],
-];
 
 export function getLayoutByName(obj: any) {
   let layout = LAYOUTS.find(x => x[0] === obj);
@@ -174,7 +69,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
   worker = new RPC(new Worker('chunk_worker.bundle.js'));
-  resetInitiated = new Signal();
+  resetInitiated = new NullarySignal();
 
   chunkQueueManager = new ChunkQueueManager(this.worker, this.display.gl, {
     gpuMemory: new AvailableCapacity(1e6, 1e9),
@@ -189,12 +84,13 @@ export class Viewer extends RefCounted implements ViewerState {
       this.navigationState.voxelSize);
   layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
 
+  state = new CompoundTrackable();
+
   constructor(public display: DisplayContext) {
     super();
 
-    // Delay hash update after each redraw to try to prevent noticeable lag in Chrome.
-    this.registerSignalBinding(display.updateStarted.add(this.onUpdateDisplay, this));
-    this.registerSignalBinding(display.updateFinished.add(this.onUpdateDisplayFinished, this));
+    this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
+    this.registerDisposer(display.updateFinished.add(() => { this.onUpdateDisplayFinished(); }));
 
     // Prevent contextmenu on rightclick, as this inteferes with our use
     // of the right mouse button.
@@ -203,25 +99,30 @@ export class Viewer extends RefCounted implements ViewerState {
       return false;
     });
 
+    const {state} = this;
+    state.add('layers', this.layerSpecification);
+    state.add('navigation', this.navigationState);
+    state.add('showAxisLines', this.showAxisLines);
+    state.add('showScaleBar', this.showScaleBar);
 
-    registerTrackable('layers', this.layerSpecification);
-    registerTrackable('navigation', this.navigationState);
-    registerTrackable('showAxisLines', this.showAxisLines);
-    registerTrackable('showScaleBar', this.showScaleBar);
+    state.add('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
+    state.add('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
+    state.add('showSlices', this.showPerspectiveSliceViews);
+    state.add('layout', this.layoutName);
 
-    registerTrackable('perspectiveOrientation', this.perspectiveNavigationState.pose.orientation);
-    registerTrackable('perspectiveZoom', this.perspectiveNavigationState.zoomFactor);
-    registerTrackable('showSlices', this.showPerspectiveSliceViews);
-    registerTrackable('layout', this.layoutName);
-
-    this.registerSignalBinding(
-        this.navigationState.changed.add(this.handleNavigationStateChanged, this));
+    this.registerDisposer(
+      this.navigationState.changed.add(() => { this.handleNavigationStateChanged(); }));
 
     this.layerManager.initializePosition(this.navigationState.position);
 
+    this.registerDisposer(
+        this.layerSpecification.voxelCoordinatesSet.add((voxelCoordinates: vec3) => {
+          this.navigationState.position.setVoxelCoordinates(voxelCoordinates);
+        }));
+
     // Debounce this call to ensure that a transient state does not result in the layer dialog being
     // shown.
-    this.layerManager.layersChanged.add(this.registerCancellable(debounce(() => {
+    const maybeResetState = this.registerCancellable(debounce(() => {
       if (this.layerManager.managedLayers.length === 0) {
         // No layers, reset state.
         this.navigationState.reset();
@@ -232,12 +133,14 @@ export class Viewer extends RefCounted implements ViewerState {
           new LayerDialog(this.layerSpecification);
         }
       }
-    })));
+    }));
+    this.layerManager.layersChanged.add(maybeResetState);
+    maybeResetState();
 
-    this.registerSignalBinding(this.chunkQueueManager.visibleChunksChanged.add(
+    this.registerDisposer(this.chunkQueueManager.visibleChunksChanged.add(
         () => { this.layerSelectedValues.handleLayerChange(); }));
 
-    this.chunkQueueManager.visibleChunksChanged.add(display.scheduleRedraw, display);
+    this.chunkQueueManager.visibleChunksChanged.add(() => { display.scheduleRedraw(); });
 
     this.makeUI();
 
@@ -280,12 +183,6 @@ export class Viewer extends RefCounted implements ViewerState {
     keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
     this.keyCommands.set(
         'toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
-
-    // This needs to happen after the global keyboard shortcut handler for the viewer has been
-    // registered, so that it has priority.
-    if (this.layerManager.managedLayers.length === 0) {
-      new LayerDialog(this.layerSpecification);
-    }
   }
 
   private makeUI() {
@@ -332,7 +229,6 @@ export class Viewer extends RefCounted implements ViewerState {
   get gl() { return this.display.gl; }
 
   onUpdateDisplay() {
-    delayHashUpdate();
     this.chunkQueueManager.chunkUpdateDeadline = null;
   }
 
@@ -350,43 +246,6 @@ export class Viewer extends RefCounted implements ViewerState {
     return false;
   }
 
-  makeSliceView(baseToSelf?: Quat) {
-    let navigationState: NavigationState;
-    if (baseToSelf === undefined) {
-      navigationState = this.navigationState;
-    } else {
-      navigationState = new NavigationState(
-          new Pose(
-              this.navigationState.pose.position,
-              OrientationState.makeRelative(this.navigationState.pose.orientation, baseToSelf)),
-          this.navigationState.zoomFactor);
-    }
-    return new SliceView(this.gl, this.chunkManager, this.layerManager, navigationState);
-  }
-
-  makeOrthogonalSliceViews() {
-    let {gl, layerManager} = this;
-    let sliceViews = new Array<SliceView>();
-    let addSliceView = (mat?: Mat4) => { sliceViews.push(this.makeSliceView(mat)); };
-    addSliceView();
-    addSliceView(quat.rotateX(quat.create(), quat.create(), Math.PI / 2));
-    addSliceView(quat.rotateY(quat.create(), quat.create(), Math.PI / 2));
-    // {
-    //   let mat = mat4.create();
-    //   mat4.identity(mat);
-    //   mat4.rotateX(mat, mat, Math.PI / 2);
-    //   addSliceView(mat);
-    // }
-
-    // {
-    //   let mat = mat4.create();
-    //   mat4.identity(mat);
-    //   mat4.rotateY(mat, mat, Math.PI / 2);
-    //   addSliceView(mat);
-    // }
-    return sliceViews;
-  }
-
   private handleNavigationStateChanged() {
     let {chunkQueueManager} = this;
     if (chunkQueueManager.chunkUpdateDeadline === null) {
@@ -394,4 +253,4 @@ export class Viewer extends RefCounted implements ViewerState {
     }
     this.mouseState.stale = true;
   }
-};
+}

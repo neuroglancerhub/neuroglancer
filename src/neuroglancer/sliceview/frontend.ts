@@ -19,20 +19,21 @@ import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/front
 import {LayerManager} from 'neuroglancer/layer';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {NavigationState} from 'neuroglancer/navigation_state';
-import {DataType, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
+import {DataType, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as VolumeChunkSourceInterface, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {Mat4, Vec3, Vec4, mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {mat4, rectifyTransformMatrixIfAxisAligned, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {stableStringify} from 'neuroglancer/util/json';
+import {getObjectId} from 'neuroglancer/util/object_id';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {Buffer} from 'neuroglancer/webgl/buffer';
 import {GL} from 'neuroglancer/webgl/context';
-import {OffscreenFramebuffer} from 'neuroglancer/webgl/offscreen';
+import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {RPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
+import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
+import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
 
 export type VolumeChunkKey = string;
 
@@ -40,6 +41,8 @@ const tempMat = mat4.create();
 
 @registerSharedObjectOwner(SLICEVIEW_RPC_ID)
 export class SliceView extends SliceViewBase {
+  gl = this.chunkManager.gl;
+
   dataToViewport = mat4.create();
 
   // Transforms viewport coordinates to OpenGL normalized device coordinates
@@ -51,7 +54,7 @@ export class SliceView extends SliceViewBase {
 
   visibleChunks = new Map<ChunkLayout, VolumeChunkKey[]>();
 
-  viewChanged = new Signal();
+  viewChanged = new NullarySignal();
 
   renderingStale = true;
 
@@ -65,22 +68,23 @@ export class SliceView extends SliceViewBase {
 
   newVisibleLayers = new Set<RenderLayer>();
 
-  offscreenFramebuffer = new OffscreenFramebuffer(
-      this.gl, {numDataBuffers: 1, depthBuffer: false, stencilBuffer: true});
+  offscreenFramebuffer = this.registerDisposer(new FramebufferConfiguration(
+      this.gl,
+      {colorBuffers: makeTextureBuffers(this.gl, 1), depthBuffer: new StencilBuffer(this.gl)}));
 
   constructor(
-      public gl: GL, public chunkManager: ChunkManager, public layerManager: LayerManager,
+      public chunkManager: ChunkManager, public layerManager: LayerManager,
       public navigationState: NavigationState) {
     super();
     mat4.identity(this.dataToViewport);
     this.initializeCounterpart(this.chunkManager.rpc!, {'chunkManager': chunkManager.rpcId});
     this.updateVisibleLayers();
 
-    this.registerSignalBinding(
+    this.registerDisposer(
         navigationState.changed.add(() => { this.updateViewportFromNavigationState(); }));
     this.updateViewportFromNavigationState();
 
-    this.registerSignalBinding(layerManager.layersChanged.add(() => {
+    this.registerDisposer(layerManager.layersChanged.add(() => {
       if (!this.visibleLayersStale) {
         if (this.hasValidViewport) {
           this.visibleLayersStale = true;
@@ -90,8 +94,7 @@ export class SliceView extends SliceViewBase {
     }));
 
     this.viewChanged.add(() => { this.renderingStale = true; });
-    this.registerSignalBinding(chunkManager.chunkQueueManager.visibleChunksChanged.add(
-        this.viewChanged.dispatch, this.viewChanged));
+    this.registerDisposer(chunkManager.chunkQueueManager.visibleChunksChanged.add(this.viewChanged.dispatch));
 
     this.updateViewportFromNavigationState();
   }
@@ -123,7 +126,7 @@ export class SliceView extends SliceViewBase {
         visibleLayerList.push(renderLayer);
         if (!visibleLayers.has(renderLayer)) {
           visibleLayers.set(renderLayer.addRef(), []);
-          renderLayer.redrawNeeded.add(this.viewChanged.dispatch, this.viewChanged);
+          renderLayer.redrawNeeded.add(this.viewChanged.dispatch);
           rpcMessage['layerId'] = renderLayer.rpcId;
           rpc.invoke('SliceView.addVisibleLayer', rpcMessage);
           changed = true;
@@ -133,7 +136,7 @@ export class SliceView extends SliceViewBase {
     for (let renderLayer of visibleLayers.keys()) {
       if (!newVisibleLayers.has(renderLayer)) {
         visibleLayers.delete(renderLayer);
-        renderLayer.redrawNeeded.remove(this.viewChanged.dispatch, this.viewChanged);
+        renderLayer.redrawNeeded.remove(this.viewChanged.dispatch);
         rpcMessage['layerId'] = renderLayer.rpcId;
         rpc.invoke('SliceView.removeVisibleLayer', rpcMessage);
         renderLayer.dispose();
@@ -152,7 +155,11 @@ export class SliceView extends SliceViewBase {
 
   onViewportChanged() {
     var {width, height, viewportToDevice, dataToViewport, dataToDevice} = this;
-    mat4.ortho(viewportToDevice, -width / 2, width / 2, height / 2, -height / 2, -1, 1);
+    // FIXME: Make this adjustable.
+    const sliceThickness = 10;
+    mat4.ortho(
+        viewportToDevice, -width / 2, width / 2, height / 2, -height / 2, -sliceThickness,
+        sliceThickness);
     mat4.multiply(dataToDevice, viewportToDevice, dataToViewport);
 
     this.visibleChunksStale = true;
@@ -246,7 +253,7 @@ export class SliceView extends SliceViewBase {
       }
       return visibleChunks;
     }
-    function addChunk(chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: Vec3) {
+    function addChunk(_chunkLayout: ChunkLayout, visibleChunks: string[], positionInChunks: vec3) {
       let key = vec3Key(positionInChunks);
       visibleChunks[visibleChunks.length] = key;
     }
@@ -267,6 +274,14 @@ export interface ChunkFormat {
 
   /**
    * Called on the ChunkFormat of the first source of a RenderLayer.
+   *
+   * This should define a fragment shader function:
+   *
+   *   value_type getDataValue(int channelIndex);
+   *
+   * where value_type is the shader data type corresponding to the chunk data type.  This function
+   * should retrieve the value for channel `channelIndex` at position `getPositionWithinChunk()`
+   * within the chunk.
    */
   defineShader: (builder: ShaderBuilder) => void;
 
@@ -316,6 +331,9 @@ function getChunkFormatHandler(gl: GL, spec: VolumeChunkSpecification) {
   throw new Error('No chunk format handler found.');
 }
 
+const tempChunkGridPosition = vec3.create();
+const tempLocalPosition = vec3.create();
+
 export abstract class VolumeChunkSource extends ChunkSource implements VolumeChunkSourceInterface {
   chunkFormatHandler: ChunkFormatHandler;
 
@@ -334,14 +352,17 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
 
   get chunkFormat() { return this.chunkFormatHandler.chunkFormat; }
 
-  getValueAt(position: Vec3) {
-    let chunkGridPosition = vec3.create();
+  getValueAt(position: vec3) {
+    const chunkGridPosition = tempChunkGridPosition;
+    const localPosition = tempLocalPosition;
     let spec = this.spec;
     let chunkLayout = spec.chunkLayout;
-    let offset = chunkLayout.offset;
     let chunkSize = chunkLayout.size;
+    chunkLayout.globalToLocalSpatial(localPosition, position);
     for (let i = 0; i < 3; ++i) {
-      chunkGridPosition[i] = Math.floor((position[i] - offset[i]) / chunkSize[i]);
+      const chunkSizeValue = chunkSize[i];
+      const localPositionValue = localPosition[i];
+      chunkGridPosition[i] = Math.floor(localPositionValue / chunkSizeValue);
     }
     let key = vec3Key(chunkGridPosition);
     let chunk = <VolumeChunk>this.chunks.get(key);
@@ -349,11 +370,11 @@ export abstract class VolumeChunkSource extends ChunkSource implements VolumeChu
       return null;
     }
     // Reuse temporary variable.
-    let dataPosition = chunkGridPosition;
-    let voxelSize = spec.voxelSize;
+    const dataPosition = chunkGridPosition;
+    const voxelSize = spec.voxelSize;
     for (let i = 0; i < 3; ++i) {
-      dataPosition[i] = Math.floor(
-          (position[i] - offset[i] - chunkGridPosition[i] * chunkSize[i]) / voxelSize[i]);
+      dataPosition[i] =
+          Math.floor((localPosition[i] - chunkGridPosition[i] * chunkSize[i]) / voxelSize[i]);
     }
     let chunkDataSize = chunk.chunkDataSize;
     for (let i = 0; i < 3; ++i) {
@@ -403,8 +424,8 @@ export function defineParameterizedVolumeChunkSource<Parameters>(
 }
 
 export abstract class VolumeChunk extends Chunk {
-  chunkDataSize: Vec3;
-  chunkGridPosition: Vec3;
+  chunkDataSize: vec3;
+  chunkGridPosition: vec3;
   source: VolumeChunkSource;
 
   get chunkFormat() { return this.source.chunkFormat; }
@@ -415,7 +436,7 @@ export abstract class VolumeChunk extends Chunk {
     this.chunkDataSize = x['chunkDataSize'] || source.spec.chunkDataSize;
     this.state = ChunkState.SYSTEM_MEMORY;
   }
-  abstract getChannelValueAt(dataPosition: Vec3, channel: number): any;
+  abstract getChannelValueAt(dataPosition: vec3, channel: number): any;
 };
 
 export interface MultiscaleVolumeChunkSource {
@@ -423,7 +444,9 @@ export interface MultiscaleVolumeChunkSource {
    * @return Chunk sources for each scale, ordered by increasing minVoxelSize.  For each scale,
    * there may be alternative sources with different chunk layouts.
    */
-  getSources: (chunkManager: ChunkManager) => VolumeChunkSource[][];
+  getSources: (options: VolumeSourceOptions) => VolumeChunkSource[][];
+
+  chunkManager: ChunkManager;
 
   numChannels: number;
   dataType: DataType;
@@ -434,29 +457,14 @@ export interface MultiscaleVolumeChunkSource {
    *
    * This only makes sense if volumeType === VolumeType.SEGMENTATION.
    */
-  getMeshSource: (chunkManager: ChunkManager) => MeshSource | null;
+  getMeshSource: () => MeshSource | null;
 }
 
 /**
  * Helper for rendering a SliceView that has been pre-rendered to a texture.
  */
 export class SliceViewRenderHelper extends RefCounted {
-  private copyVertexPositionsBuffer = this.registerDisposer(Buffer.fromData(
-      this.gl, new Float32Array([
-        -1, -1, 0, 1,  //
-        -1, +1, 0, 1,  //
-        +1, +1, 0, 1,  //
-        +1, -1, 0, 1,  //
-      ]),
-      this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
-  private copyTexCoordsBuffer = this.registerDisposer(Buffer.fromData(
-      this.gl, new Float32Array([
-        0, 0,  //
-        0, 1,  //
-        1, 1,  //
-        1, 0,  //
-      ]),
-      this.gl.ARRAY_BUFFER, this.gl.STATIC_DRAW));
+  private copyVertexPositionsBuffer = getSquareCornersBuffer(this.gl);
   private shader: ShaderProgram;
 
   private textureCoordinateAdjustment = new Float32Array(4);
@@ -480,16 +488,15 @@ if (sampledColor.a == 0.0) {
 emit(sampledColor * uColorFactor, vec4(0,0,0,0));
 `);
     builder.addAttribute('vec4', 'aVertexPosition');
-    builder.addAttribute('vec2', 'aTexCoord');
     builder.setVertexMain(`
-vTexCoord = uTextureCoordinateAdjustment.xy + aTexCoord * uTextureCoordinateAdjustment.zw;
+vTexCoord = uTextureCoordinateAdjustment.xy + 0.5 * (aVertexPosition.xy + 1.0) * uTextureCoordinateAdjustment.zw;
 gl_Position = uProjectionMatrix * aVertexPosition;
 `);
     this.shader = this.registerDisposer(builder.build());
   }
 
   draw(
-      texture: WebGLTexture|null, projectionMatrix: Mat4, colorFactor: Vec4, backgroundColor: Vec4,
+      texture: WebGLTexture|null, projectionMatrix: mat4, colorFactor: vec4, backgroundColor: vec4,
       xStart: number, yStart: number, xEnd: number, yEnd: number) {
     let {gl, shader, textureCoordinateAdjustment} = this;
     textureCoordinateAdjustment[0] = xStart;
@@ -505,19 +512,17 @@ gl_Position = uProjectionMatrix * aVertexPosition;
     gl.uniform4fv(shader.uniform('uTextureCoordinateAdjustment'), textureCoordinateAdjustment);
 
     let aVertexPosition = shader.attribute('aVertexPosition');
-    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, 4);
-
-    let aTexCoord = shader.attribute('aTexCoord');
-    this.copyTexCoordsBuffer.bindToVertexAttrib(aTexCoord, 2);
+    this.copyVertexPositionsBuffer.bindToVertexAttrib(aVertexPosition, /*components=*/2);
 
     gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
 
     gl.disableVertexAttribArray(aVertexPosition);
-    gl.disableVertexAttribArray(aTexCoord);
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
-  static get(gl: GL, key: string, emitter: ShaderModule) {
-    return gl.memoize.get(key, () => { return new SliceViewRenderHelper(gl, emitter); });
+  static get(gl: GL, emitter: ShaderModule) {
+    return gl.memoize.get(
+        `sliceview/SliceViewRenderHelper:${getObjectId(emitter)}`,
+        () => new SliceViewRenderHelper(gl, emitter));
   }
-};
+}

@@ -20,6 +20,7 @@ export type Disposer = Disposable | (() => void);
 
 export class RefCounted implements Disposable {
   public refCount = 1;
+  wasDisposed: boolean|undefined;
   private disposers: Disposer[];
   addRef() {
     ++this.refCount;
@@ -47,6 +48,7 @@ export class RefCounted implements Disposable {
       }
       this.disposers = <any>undefined;
     }
+    this.wasDisposed = true;
   }
   disposed() {}
   registerDisposer<T extends Disposer>(f: T): T {
@@ -68,7 +70,6 @@ export class RefCounted implements Disposable {
     }
     return f;
   }
-  registerSignalBinding(binding: SignalBinding) { this.registerDisposer(() => binding.detach()); }
   registerEventListener(target: EventTarget, eventType: string, listener: any, arg?: any) {
     target.addEventListener(eventType, listener, arg);
     this.registerDisposer(() => target.removeEventListener(eventType, listener, arg));
@@ -77,4 +78,8 @@ export class RefCounted implements Disposable {
     this.registerDisposer(() => { cancellable.cancel(); });
     return cancellable;
   }
-};
+}
+
+export class RefCountedValue<T> extends RefCounted {
+  constructor(public value: T) { super(); }
+}

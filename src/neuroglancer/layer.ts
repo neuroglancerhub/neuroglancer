@@ -14,44 +14,56 @@
  * limitations under the License.
  */
 
-import * as debounce from 'lodash/debounce';
-import * as throttle from 'lodash/throttle';
+import debounce from 'lodash/debounce';
+import throttle from 'lodash/throttle';
 import {RenderedPanel} from 'neuroglancer/display_context';
 import {SpatialPosition} from 'neuroglancer/navigation_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {BoundingBox, Vec3, vec3} from 'neuroglancer/util/geom';
-import {SignalBindingUpdater, addSignalBinding, removeSignalBinding} from 'neuroglancer/util/signal_binding_updater';
+import {BoundingBox, vec3} from 'neuroglancer/util/geom';
+import {NullarySignal} from 'neuroglancer/util/signal';
+import {addSignalBinding, removeSignalBinding, SignalBindingUpdater} from 'neuroglancer/util/signal_binding_updater';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {UseCount} from 'neuroglancer/util/use_count';
-import {Signal} from 'signals';
 
 export class RenderLayer extends RefCounted {
   ready = false;
-  layerChanged = new Signal();
-  redrawNeeded = new Signal();
-  readyStateChanged = new Signal();
+  layerChanged = new NullarySignal();
+  redrawNeeded = new NullarySignal();
+  readyStateChanged = new NullarySignal();
   setReady(value: boolean) {
     this.ready = value;
     this.readyStateChanged.dispatch();
     this.layerChanged.dispatch();
   }
 
-  handleAction(action: string) {
+  handleAction(_action: string) {
     // Do nothing by default.
   }
 
-  getValueAt(x: Float32Array): any { return undefined; }
+  getValueAt(_x: Float32Array): any { return undefined; }
 
   /**
    * Base voxel size for this layer, in nanometers per voxel.
    */
-  voxelSize: Vec3|null = null;
+  voxelSize: vec3|null = null;
 
   /**
    * Bounding box for this layer, in nanometers.
    */
   boundingBox: BoundingBox|null = null;
-};
+
+  /**
+   * Transform the stored pickedValue and offset associated with the retrieved pick ID into the
+   * actual value.
+   */
+  transformPickedValue(pickedValue: Uint64, _pickedOffset: number): any { return pickedValue; }
+
+  /**
+   * Optionally updates the mouse state based on the retrived pick information.  This might snap the
+   * 3-d position to the center of the picked point.
+   */
+  updateMouseState(_mouseState: MouseSelectionState, _pickedValue: Uint64, _pickedOffset: number) {}
+}
 
 /**
  * Extends RenderLayer with functionality for tracking the number of panels in which the layer is
@@ -67,9 +79,9 @@ export class UserLayerDropdown extends RefCounted {
 }
 
 export class UserLayer extends RefCounted {
-  layersChanged = new Signal();
-  readyStateChanged = new Signal();
-  specificationChanged = new Signal();
+  layersChanged = new NullarySignal();
+  readyStateChanged = new NullarySignal();
+  specificationChanged = new NullarySignal();
   renderLayers = new Array<RenderLayer>();
   constructor(renderLayers: RenderLayer[] = []) {
     super();
@@ -80,17 +92,20 @@ export class UserLayer extends RefCounted {
     this.renderLayers.push(layer);
     let {layersChanged, readyStateChanged} = this;
     this.registerDisposer(layer);
-    this.registerSignalBinding(layer.layerChanged.add(layersChanged.dispatch, layersChanged));
-    this.registerSignalBinding(
-        layer.readyStateChanged.add(readyStateChanged.dispatch, readyStateChanged));
+    this.registerDisposer(layer.layerChanged.add(layersChanged.dispatch));
+    this.registerDisposer(layer.readyStateChanged.add(readyStateChanged.dispatch));
+    readyStateChanged.dispatch();
     layersChanged.dispatch();
   }
 
-  getValueAt(position: Float32Array, pickedRenderLayer: RenderLayer|null, pickedObject: Uint64) {
+  getValueAt(position: Float32Array, pickState: PickState) {
     let result: any;
     let {renderLayers} = this;
+    let {pickedRenderLayer} = pickState;
     if (pickedRenderLayer !== null && renderLayers.indexOf(pickedRenderLayer) !== -1) {
-      return this.transformPickedValue(pickedObject);
+      result =
+          pickedRenderLayer.transformPickedValue(pickState.pickedValue, pickState.pickedOffset);
+      return this.transformPickedValue(result);
     }
     for (let layer of renderLayers) {
       if (!layer.ready) {
@@ -108,25 +123,19 @@ export class UserLayer extends RefCounted {
 
   toJSON(): any { return null; }
 
-  makeDropdown(element: HTMLDivElement): UserLayerDropdown|undefined { return undefined; }
+  makeDropdown(_element: HTMLDivElement): UserLayerDropdown|undefined { return undefined; }
 
-  handleAction(action: string): void {}
+  handleAction(_action: string): void {}
 };
 
 export class ManagedUserLayer extends RefCounted {
-  readyStateChanged = new Signal();
-  layerChanged = new Signal();
-  specificationChanged = new Signal();
+  readyStateChanged = new NullarySignal();
+  layerChanged = new NullarySignal();
+  specificationChanged = new NullarySignal();
   wasDisposed = false;
   private layer_: UserLayer|null = null;
   get layer() { return this.layer_; }
-
-  private updateSignalBindings(layer: UserLayer, callback: SignalBindingUpdater) {
-    callback(layer.layersChanged, this.handleLayerChanged, this);
-    callback(layer.readyStateChanged, this.readyStateChanged.dispatch, this.readyStateChanged);
-    callback(
-        layer.specificationChanged, this.specificationChanged.dispatch, this.specificationChanged);
-  }
+  private unregisterUserLayer: (() => void) | undefined;
 
   /**
    * If layer is not null, tranfers ownership of a reference.
@@ -134,12 +143,19 @@ export class ManagedUserLayer extends RefCounted {
   set layer(layer: UserLayer|null) {
     let oldLayer = this.layer_;
     if (oldLayer != null) {
-      this.updateSignalBindings(oldLayer, removeSignalBinding);
+      this.unregisterUserLayer!();
       oldLayer.dispose();
     }
     this.layer_ = layer;
     if (layer != null) {
-      this.updateSignalBindings(layer, addSignalBinding);
+      const removers = [
+        layer.layersChanged.add(() => this.handleLayerChanged()),
+        layer.readyStateChanged.add(this.readyStateChanged.dispatch),
+        layer.specificationChanged.add(this.specificationChanged.dispatch)
+      ];
+      this.unregisterUserLayer = () => {
+        removers.forEach(x => x());
+      };
       this.readyStateChanged.dispatch();
       this.handleLayerChanged();
     }
@@ -174,16 +190,16 @@ export class ManagedUserLayer extends RefCounted {
 
 export class LayerManager extends RefCounted {
   managedLayers = new Array<ManagedUserLayer>();
-  layersChanged = new Signal();
-  readyStateChanged = new Signal();
-  specificationChanged = new Signal();
+  layersChanged = new NullarySignal();
+  readyStateChanged = new NullarySignal();
+  specificationChanged = new NullarySignal();
   boundPositions = new WeakSet<SpatialPosition>();
 
-  private updateSignalBindings(layer: ManagedUserLayer, callback: SignalBindingUpdater) {
-    callback(layer.layerChanged, this.layersChanged.dispatch, this.layersChanged);
-    callback(layer.readyStateChanged, this.readyStateChanged.dispatch, this.readyStateChanged);
-    callback(
-        layer.specificationChanged, this.specificationChanged.dispatch, this.specificationChanged);
+  private updateSignalBindings(
+      layer: ManagedUserLayer, callback: SignalBindingUpdater<() => void>) {
+    callback(layer.layerChanged, this.layersChanged.dispatch);
+    callback(layer.readyStateChanged, this.readyStateChanged.dispatch);
+    callback(layer.specificationChanged, this.specificationChanged.dispatch);
   }
 
   /**
@@ -193,6 +209,7 @@ export class LayerManager extends RefCounted {
     this.updateSignalBindings(managedLayer, addSignalBinding);
     this.managedLayers.push(managedLayer);
     this.layersChanged.dispatch();
+    this.readyStateChanged.dispatch();
     return managedLayer;
   }
 
@@ -365,12 +382,19 @@ export class LayerManager extends RefCounted {
 
 const MOUSE_STATE_UPDATE_INTERVAL = 50;
 
-export class MouseSelectionState {
-  changed = new Signal();
+export interface PickState {
+  pickedRenderLayer: RenderLayer|null;
+  pickedValue: Uint64;
+  pickedOffset: number;
+}
+
+export class MouseSelectionState implements PickState {
+  changed = new NullarySignal();
   position = vec3.create();
   active = false;
   pickedRenderLayer: RenderLayer|null = null;
   pickedValue = new Uint64(0, 0);
+  pickedOffset = 0;
 
   updater: ((mouseState: MouseSelectionState) => boolean)|undefined = undefined;
 
@@ -408,16 +432,20 @@ export class MouseSelectionState {
       this.changed.dispatch();
     }
   }
-};
+}
 
 export class LayerSelectedValues extends RefCounted {
   values = new Map<UserLayer, any>();
-  changed = new Signal();
+  changed = new NullarySignal();
   needsUpdate = true;
   constructor(public layerManager: LayerManager, public mouseState: MouseSelectionState) {
     super();
-    this.registerSignalBinding(mouseState.changed.add(this.handleChange, this));
-    this.registerSignalBinding(layerManager.layersChanged.add(() => { this.handleLayerChange(); }));
+    this.registerDisposer(mouseState.changed.add(() => {
+      this.handleChange();
+    }));
+    this.registerDisposer(layerManager.layersChanged.add(() => {
+      this.handleLayerChange();
+    }));
   }
 
   /**
@@ -448,9 +476,7 @@ export class LayerSelectedValues extends RefCounted {
       for (let layer of this.layerManager.managedLayers) {
         let userLayer = layer.layer;
         if (layer.visible && userLayer) {
-          values.set(
-              userLayer,
-              userLayer.getValueAt(position, mouseState.pickedRenderLayer, mouseState.pickedValue));
+          values.set(userLayer, userLayer.getValueAt(position, mouseState));
         }
       }
     }
@@ -466,7 +492,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
     RefCounted {
   private visibleLayers = new Set<RenderLayerType>();
   private newVisibleLayers = new Set<RenderLayerType>();
-  private updatePending: number|null = null;
+  private throttledUpdateVisibleLayers = throttle(() => { this.updateVisibleLayers(); }, 0);
 
   constructor(
       public layerManager: LayerManager,
@@ -474,32 +500,26 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
       private layerAdded: (layer: RenderLayerType) => void,
       private layerRemoved: (layer: RenderLayerType) => void) {
     super();
-    this.registerSignalBinding(layerManager.layersChanged.add(this.handleLayersChanged, this));
+    this.registerDisposer(layerManager.layersChanged.add(() => {
+      this.handleLayersChanged();
+    }));
     this.updateVisibleLayers();
   }
 
-  private handleLayersChanged() {
-    if (this.updatePending === null) {
-      this.updatePending = setTimeout(() => {
-        this.updatePending = null;
-        this.updateVisibleLayers();
-      }, 0);
-    }
-  }
+  private handleLayersChanged() { this.throttledUpdateVisibleLayers(); }
 
   disposed() {
-    this.cancelUpdate();
-    this.visibleLayers.forEach(this.layerRemoved);
+    this.throttledUpdateVisibleLayers.cancel();
+    this.visibleLayers.forEach(layer => { this.onLayerRemoved(layer); });
     this.visibleLayers.clear();
     super.disposed();
   }
 
-  private cancelUpdate() {
-    let {updatePending} = this;
-    if (updatePending !== null) {
-      clearTimeout(updatePending);
-      updatePending = null;
-    }
+  private onLayerRemoved(renderLayer: RenderLayerType) {
+    let {layerRemoved} = this;
+    layerRemoved(renderLayer);
+    renderLayer.visibilityCount.dec();
+    renderLayer.dispose();
   }
 
   private updateVisibleLayers() {
@@ -509,7 +529,7 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
         let typedLayer = <RenderLayerType>renderLayer;
         newVisibleLayers.add(typedLayer);
         if (!visibleLayers.has(typedLayer)) {
-          visibleLayers.add(typedLayer);
+          visibleLayers.add(typedLayer.addRef());
           typedLayer.visibilityCount.inc();
           layerAdded(typedLayer);
         }
@@ -518,34 +538,31 @@ export class VisibleRenderLayerTracker<RenderLayerType extends VisibilityTracked
     for (let renderLayer of visibleLayers) {
       if (!newVisibleLayers.has(renderLayer)) {
         visibleLayers.delete(renderLayer);
-        layerRemoved(renderLayer);
-        renderLayer.visibilityCount.dec();
+        this.onLayerRemoved(renderLayer);
       }
     }
     newVisibleLayers.clear();
   }
 
   getVisibleLayers() {
-    if (this.updatePending !== null) {
-      this.cancelUpdate();
-      this.updateVisibleLayers();
-    }
+    (<any>this.throttledUpdateVisibleLayers).flush();
     return this.visibleLayers;
   }
-};
+}
 
 export function
 makeRenderedPanelVisibleLayerTracker<RenderLayerType extends VisibilityTrackedRenderLayer>(
     layerManager: LayerManager, renderLayerType: {new (...args: any[]): RenderLayerType},
     panel: RenderedPanel) {
+  const removalFunctions = new Map<RenderLayerType, () => void>();
   return panel.registerDisposer(new VisibleRenderLayerTracker(
       layerManager, renderLayerType,
       layer => {
-        layer.redrawNeeded.add(panel.scheduleRedraw, panel);
+        removalFunctions.set(layer, layer.redrawNeeded.add(() => panel.scheduleRedraw()));
         panel.scheduleRedraw();
       },
       layer => {
-        layer.redrawNeeded.remove(panel.scheduleRedraw, panel);
+        removalFunctions.get(layer)!();
         panel.scheduleRedraw();
       }));
 }

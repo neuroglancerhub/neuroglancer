@@ -15,26 +15,28 @@
  */
 
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
-import {getVolume} from 'neuroglancer/datasource/factory';
-import {ImageUserLayer} from 'neuroglancer/image_user_layer';
-import {LayerManager, LayerSelectedValues, ManagedUserLayer} from 'neuroglancer/layer';
+import {getVolume, GetVolumeOptions} from 'neuroglancer/datasource/factory';
+import {LayerManager, LayerSelectedValues, ManagedUserLayer, UserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
-import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
-import {Trackable} from 'neuroglancer/url_hash_state';
 import {RefCounted} from 'neuroglancer/util/disposable';
+import {vec3} from 'neuroglancer/util/geom';
 import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
+import {NullarySignal, Signal} from 'neuroglancer/util/signal';
+import {Trackable} from 'neuroglancer/util/trackable';
 import {RPC} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
 
-export function getVolumeWithStatusMessage(x: string): Promise<MultiscaleVolumeChunkSource> {
-  return StatusMessage.forPromise(new Promise(function(resolve) { resolve(getVolume(x)); }), {
-    initialMessage: `Retrieving metadata for volume ${x}.`,
-    delay: true,
-    errorPrefix: `Error retrieving metadata for volume ${x}: `,
-  });
+export function getVolumeWithStatusMessage(
+    chunkManager: ChunkManager, x: string,
+    options: GetVolumeOptions = {}): Promise<MultiscaleVolumeChunkSource> {
+  return StatusMessage.forPromise(
+      new Promise(function(resolve) { resolve(getVolume(chunkManager, x, options)); }), {
+        initialMessage: `Retrieving metadata for volume ${x}.`,
+        delay: true,
+        errorPrefix: `Error retrieving metadata for volume ${x}: `,
+      });
 }
 
 export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
@@ -59,14 +61,15 @@ export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
 };
 
 export class LayerListSpecification extends RefCounted implements Trackable {
-  changed = new Signal();
+  changed = new NullarySignal();
+  voxelCoordinatesSet = new Signal<(coordinates: vec3) => void>();
+
   constructor(
       public layerManager: LayerManager, public chunkManager: ChunkManager, public worker: RPC,
       public layerSelectedValues: LayerSelectedValues, public voxelSize: VoxelSize) {
     super();
-    this.registerSignalBinding(layerManager.layersChanged.add(this.changed.dispatch, this.changed));
-    this.registerSignalBinding(
-        layerManager.specificationChanged.add(this.changed.dispatch, this.changed));
+    this.registerDisposer(layerManager.layersChanged.add(this.changed.dispatch));
+    this.registerDisposer(layerManager.specificationChanged.add(this.changed.dispatch));
   }
 
   reset() { this.layerManager.clear(); }
@@ -101,32 +104,25 @@ export class LayerListSpecification extends RefCounted implements Trackable {
       if (sourceUrl === undefined) {
         throw new Error(`Either layer 'type' or 'source' URL must be specified.`);
       }
-      let volumeSourcePromise = getVolumeWithStatusMessage(sourceUrl);
+      let volumeSourcePromise = getVolumeWithStatusMessage(this.chunkManager, sourceUrl);
       volumeSourcePromise.then(source => {
         if (this.layerManager.managedLayers.indexOf(managedLayer) === -1) {
           // Layer was removed before promise became ready.
           return;
         }
-        switch (source.volumeType) {
-          case VolumeType.IMAGE: {
-            let userLayer = new ImageUserLayer(this, spec);
-            managedLayer.layer = userLayer;
-          } break;
-          case VolumeType.SEGMENTATION: {
-            let userLayer = new SegmentationUserLayer(this, spec);
-            managedLayer.layer = userLayer;
-          } break;
-          default:
-            throw new Error('Unsupported source type.');
+        let layerConstructor = volumeLayerTypes.get(source.volumeType);
+        if (layerConstructor !== undefined) {
+          managedLayer.layer = new layerConstructor(this, spec);
+        } else {
+          throw new Error(`Unsupported volume type: ${VolumeType[source.volumeType]}.`);
         }
       });
     } else {
-      if (layerType === 'image') {
-        managedLayer.layer = new ImageUserLayer(this, spec);
-      } else if (layerType === 'segmentation') {
-        managedLayer.layer = new SegmentationUserLayer(this, spec);
+      let layerConstructor = layerTypes.get(layerType);
+      if (layerConstructor !== undefined) {
+        managedLayer.layer = new layerConstructor(this, spec);
       } else {
-        throw new Error('Layer type not specified.');
+        throw new Error(`Unsupported layer type: ${JSON.stringify(layerType)}.`);
       }
     }
     return managedLayer;
@@ -144,4 +140,27 @@ export class LayerListSpecification extends RefCounted implements Trackable {
     }
     return result;
   }
-};
+
+  /**
+   * Called by user layers to indicate that a voxel position has been selected interactively.
+   */
+  setVoxelCoordinates(voxelCoordinates: vec3) {
+    this.voxelCoordinatesSet.dispatch(voxelCoordinates);
+  }
+}
+
+interface UserLayerConstructor {
+  new (manager: LayerListSpecification, x: any): UserLayer;
+}
+
+const layerTypes = new Map<string, UserLayerConstructor>();
+const volumeLayerTypes = new Map<VolumeType, UserLayerConstructor>();
+
+export function registerLayerType(name: string, layerConstructor: UserLayerConstructor) {
+  layerTypes.set(name, layerConstructor);
+}
+
+export function registerVolumeLayerType(
+    volumeType: VolumeType, layerConstructor: UserLayerConstructor) {
+  volumeLayerTypes.set(volumeType, layerConstructor);
+}

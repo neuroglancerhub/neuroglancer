@@ -15,10 +15,10 @@
  */
 
 import {AvailableCapacity, CHUNK_MANAGER_RPC_ID, CHUNK_QUEUE_MANAGER_RPC_ID, ChunkState} from 'neuroglancer/chunk_manager/base';
-import {Memoize} from 'neuroglancer/util/memoize';
+import {Memoize, StringMemoize} from 'neuroglancer/util/memoize';
+import {NullarySignal} from 'neuroglancer/util/signal';
 import {GL} from 'neuroglancer/webgl/context';
-import {RPC, SharedObject, registerRPC, registerSharedObjectOwner} from 'neuroglancer/worker_rpc';
-import {Signal} from 'signals';
+import {registerRPC, registerSharedObjectOwner, RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 const DEBUG_CHUNK_UPDATES = false;
 
@@ -28,18 +28,14 @@ export abstract class Chunk {
 
   get gl() { return this.source.gl; }
 
-  copyToGPU(gl: GL) { this.state = ChunkState.GPU_MEMORY; }
+  copyToGPU(_gl: GL) { this.state = ChunkState.GPU_MEMORY; }
 
-  freeGPUMemory(gl: GL) { this.state = ChunkState.SYSTEM_MEMORY; }
+  freeGPUMemory(_gl: GL) { this.state = ChunkState.SYSTEM_MEMORY; }
 };
-
-interface ChunkConstructor {
-  new (source: ChunkSource, update: any): Chunk;
-}
 
 @registerSharedObjectOwner(CHUNK_QUEUE_MANAGER_RPC_ID)
 export class ChunkQueueManager extends SharedObject {
-  visibleChunksChanged = new Signal();
+  visibleChunksChanged = new NullarySignal();
   pendingChunkUpdates: any = null;
   pendingChunkUpdatesTail: any = null;
 
@@ -149,6 +145,10 @@ export class ChunkManager extends SharedObject {
   chunkSourceCache: Map<any, Memoize<string, ChunkSource>> =
       new Map<any, Memoize<string, ChunkSource>>();
 
+  memoize = new StringMemoize();
+
+  get gl() { return this.chunkQueueManager.gl; }
+
   constructor(public chunkQueueManager: ChunkQueueManager) {
     super();
     this.registerDisposer(chunkQueueManager.addRef());
@@ -169,11 +169,13 @@ export class ChunkManager extends SharedObject {
       return value;
     });
   }
-};
+}
 
 export abstract class ChunkSource extends SharedObject {
   chunks = new Map<string, Chunk>();
-  backendOnly: boolean;
+  /**
+   * Does not transfer ownership of a reference to chunkManager.
+   */
   constructor(public chunkManager: ChunkManager) {
     super();
     this.registerDisposer(chunkManager.addRef());
@@ -193,5 +195,5 @@ export abstract class ChunkSource extends SharedObject {
   /**
    * Default implementation for use with backendOnly chunk sources.
    */
-  getChunk(x: any): Chunk { throw new Error('Not implemented.'); }
+  getChunk(_x: any): Chunk { throw new Error('Not implemented.'); }
 };

@@ -22,7 +22,7 @@
 
 import {TypedArrayConstructor} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
-import {Endianness, convertEndian16, convertEndian32} from 'neuroglancer/util/endian';
+import {convertEndian16, convertEndian32, Endianness} from 'neuroglancer/util/endian';
 import {pythonLiteralParse} from 'neuroglancer/util/json';
 
 interface SupportedDataType {
@@ -36,7 +36,7 @@ interface SupportedDataType {
 const supportedDataTypes = new Map<string, SupportedDataType>();
 supportedDataTypes.set('|u1', {
   arrayConstructor: Uint8Array,
-  fixEndianness: array => {},
+  fixEndianness: () => {},
   javascriptElementsPerArrayElement: 1,
   elementBytes: 1,
   dataType: DataType.UINT8,

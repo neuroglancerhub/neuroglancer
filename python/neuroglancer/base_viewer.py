@@ -32,12 +32,12 @@ class Layer(object):
                  name=None,
                  default_voxel_size=(1, 1, 1),
                  voxel_size=None,
+                 voxel_offset=None,
                  offset=None,
                  shader=None,
                  visible=None,
                  **kwargs):
-        if offset is None:
-            offset = (0, 0, 0)
+        if offset is None and voxel_offset is None:
             if hasattr(data, 'attrs'):
                 if 'resolution' in data.attrs:
                     voxel_size = tuple(data.attrs['resolution'])[::-1]
@@ -45,7 +45,8 @@ class Layer(object):
                     offset = tuple(data.attrs['offset'])[::-1]
         if voxel_size is None:
             voxel_size = default_voxel_size
-        self.volume = volume.ServedVolume(data=data, offset=offset, voxel_size=voxel_size, **kwargs)
+        self.volume = volume.ServedVolume(
+            data=data, offset=offset, voxel_offset=voxel_offset, voxel_size=voxel_size, **kwargs)
         self.name = name
         extra_args = self.extra_args = dict()
         if shader is not None:
@@ -60,12 +61,16 @@ class Layer(object):
 
 
 class BaseViewer(object):
-    def __init__(self, voxel_size=(1, 1, 1)):
+    def __init__(self, voxel_size=None):
         self.voxel_size = voxel_size
         self.layers = []
 
     def add(self, *args, **kwargs):
-        layer = Layer(*args, default_voxel_size=self.voxel_size, **kwargs)
+        if self.voxel_size is None:
+            default_voxel_size = (1, 1, 1)
+        else:
+            default_voxel_size = self.voxel_size
+        layer = Layer(*args, default_voxel_size=default_voxel_size, **kwargs)
         self.layers.append(layer)
 
     def get_json_state(self):
@@ -84,6 +89,10 @@ class BaseViewer(object):
                     suffix += 1
                 specified_names.add(name)
             layers[name] = layer.get_layer_spec(self.get_server_url())
+        if self.voxel_size is not None:
+            state['navigation'] = collections.OrderedDict()
+            state['navigation']['pose'] = collections.OrderedDict()
+            state['navigation']['pose']['voxelSize'] = list(self.voxel_size)
         return state
 
     def register_volume(self, vol):

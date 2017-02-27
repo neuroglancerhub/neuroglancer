@@ -20,13 +20,12 @@ import {getFortranOrderStrides} from 'neuroglancer/util/array';
 import {TypedArray} from 'neuroglancer/util/array';
 import {DataType} from 'neuroglancer/util/data_type';
 import {Disposable} from 'neuroglancer/util/disposable';
-import {Vec3, Vec4, vec3, vec3Key} from 'neuroglancer/util/geom';
+import {vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {GL} from 'neuroglancer/webgl/context';
 import {fragmentShaderTest} from 'neuroglancer/webgl/shader_testing';
-import {setRawTextureParameters} from 'neuroglancer/webgl/texture';
 
 export function chunkFormatTest<TextureLayout extends Disposable>(
-    dataType: DataType, volumeSize: Vec4,
+    dataType: DataType, volumeSize: vec4,
     getChunkFormatAndTextureLayout:
         (gl: GL) => [SingleTextureChunkFormat<TextureLayout>, TextureLayout],
     rawData: TypedArray, encodedData: TypedArray) {
@@ -90,14 +89,12 @@ gl_FragData[${outputChannel++}] = getDataValue(${channel}).value;
 
          chunkFormat.beginDrawing(gl, shader);
          gl.bindTexture(gl.TEXTURE_2D, texture);
-         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-         setRawTextureParameters(gl);
          chunkFormat.setTextureData(gl, textureLayout, encodedData);
          chunkFormat.setupTextureLayout(gl, shader, textureLayout);
 
 
          // Position within chunk in floating point range [0, chunkDataSize].
-         function checkPosition(positionInChunk: Vec3) {
+         function checkPosition(positionInChunk: vec3) {
            gl.uniform3fv(shader.uniform('vChunkPosition'), positionInChunk);
            chunkFormat.beginDrawing(gl, shader);
            chunkFormat.beginSource(gl, shader);

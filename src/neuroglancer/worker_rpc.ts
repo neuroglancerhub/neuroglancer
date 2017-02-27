@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import {CANCELED, CancellationToken, CancellationTokenSource, makeCancelablePromise, uncancelableToken} from 'neuroglancer/util/cancellation';
 import {RefCounted} from 'neuroglancer/util/disposable';
 
 export type RPCHandler = (this: RPC, x: any) => void;
@@ -26,11 +27,63 @@ const DEBUG = false;
 
 const DEBUG_MESSAGES = false;
 
+const PROMISE_RESPONSE_ID = 'rpc.promise.response';
+const PROMISE_CANCEL_ID = 'rpc.promise.cancel';
+
 var handlers = new Map<string, RPCHandler>();
 
 export function registerRPC(key: string, handler: RPCHandler) {
   handlers.set(key, handler);
 };
+
+export type RPCPromise<T> = Promise<{value: T, transfers?: any[]}>;
+
+export class RPCError extends Error {
+  constructor(public name: string, public message: string) { super(message); }
+}
+
+export function registerPromiseRPC<T>(
+    key: string,
+    handler: (this: RPC, x: any, cancellationToken: CancellationToken) => RPCPromise<T>) {
+  registerRPC(key, function(this: RPC, x: any) {
+    let id = <number>x['id'];
+    const cancellationToken = new CancellationTokenSource();
+    let promise = handler.call(this, x, cancellationToken) as RPCPromise<T>;
+    this.set(id, {promise, cancellationToken});
+    promise.then(
+        ({value, transfers}) => {
+          this.delete(id);
+          this.invoke(PROMISE_RESPONSE_ID, {'id': id, 'value': value}, transfers);
+        },
+        error => {
+          this.delete(id);
+          this.invoke(
+              PROMISE_RESPONSE_ID, {'id': id, 'error': error.message, 'errorName': error.name});
+        });
+  });
+}
+
+registerRPC(PROMISE_CANCEL_ID, function(this: RPC, x: any) {
+  let id = <number>x['id'];
+  let {cancellationToken} = this.get(id);
+  cancellationToken.cancel();
+});
+
+registerRPC(PROMISE_RESPONSE_ID, function(this: RPC, x: any) {
+  let id = <number>x['id'];
+  let {resolve, reject} = this.get(id);
+  this.delete(id);
+  if (x.hasOwnProperty('value')) {
+    resolve(x['value']);
+  } else {
+    const errorName = x['errorName'];
+    if (errorName === CANCELED.name) {
+      reject(CANCELED);
+    } else {
+      reject(new RPCError(x['errorName'], x['error']));
+    }
+  }
+});
 
 interface RPCTarget {
   postMessage(message?: any, ports?: any): void;
@@ -65,12 +118,25 @@ export class RPC {
     obj.addRef();
     return obj;
   }
+
   invoke(name: string, x: any, transfers?: any[]) {
     x.functionName = name;
     if (DEBUG_MESSAGES) {
       console.trace('Sending message', x);
     }
     this.target.postMessage(x, transfers);
+  }
+
+  promiseInvoke<T>(name: string, x: any, cancellationToken = uncancelableToken, transfers?: any[]):
+      Promise<T> {
+    return makeCancelablePromise<T>(cancellationToken, (resolve, reject, token) => {
+      const id = x['id'] = this.newId();
+      this.set(id, {resolve, reject});
+      this.invoke(name, x, transfers);
+      token.add(() => {
+        this.invoke(PROMISE_CANCEL_ID, {'id': id});
+      });
+    });
   }
   newId() { return IS_WORKER ? this.nextId-- : this.nextId++; }
 };
@@ -79,8 +145,8 @@ export class SharedObject extends RefCounted {
   rpc: RPC|null = null;
   rpcId: RpcId|null = null;
   isOwner: boolean|undefined;
-  unreferencedGeneration: number|undefined;
-  referencedGeneration: number|undefined;
+  unreferencedGeneration: number;
+  referencedGeneration: number;
 
   initializeSharedObject(rpc: RPC, rpcId = rpc.newId()) {
     this.rpc = rpc;
@@ -151,15 +217,19 @@ export class SharedObject extends RefCounted {
   RPC_TYPE_ID: string;
 };
 
+export function initializeSharedObjectCounterpart(obj: SharedObject, rpc?: RPC, options: any = {}) {
+  if (rpc != null) {
+    obj.initializeSharedObject(rpc, options['id']);
+  }
+}
+
 /**
  * Base class for defining a SharedObject type that will never be owned.
  */
 export class SharedObjectCounterpart extends SharedObject {
   constructor(rpc?: RPC, options: any = {}) {
     super();
-    if (rpc != null) {
-      this.initializeSharedObject(rpc, options['id']);
-    }
+    initializeSharedObjectCounterpart(this, rpc, options);
   }
 };
 
