@@ -49,6 +49,7 @@ class ServedVolume(object):
                  data,
                  offset=None,
                  voxel_offset=None,
+                 skeletons=None,
                  voxel_size=(1, 1, 1),
                  encoding='npz',
                  max_voxels_per_chunk_log2=None,
@@ -91,6 +92,7 @@ class ServedVolume(object):
         self.token = make_random_token()
         self.max_voxels_per_chunk_log2 = max_voxels_per_chunk_log2
         self.data = data
+        self.skeletons = skeletons
         if voxel_offset is not None:
             if offset is not None:
                 raise ValueError('Must specify at most one of \'offset\' and \'voxel_offset\'.')
@@ -188,7 +190,7 @@ class ServedVolume(object):
             raise ValueError('Invalid scale.')
         shape = scale_info.shape
         downsample_factor = scale_info.downsample_factor
-        for i in xrange(3):
+        for i in range(3):
             if end[i] < start[i] or start[i] < 0 or end[i] > shape[i]:
                 raise ValueError('Out of bounds data request.')
 

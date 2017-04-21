@@ -22,10 +22,10 @@ import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neurogla
 import {RenderedDataPanel} from 'neuroglancer/rendered_data_panel';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
-import {kAxes, mat4, vec3, transformVectorByMat4, vec4} from 'neuroglancer/util/geom';
+import {kAxes, mat4, transformVectorByMat4, vec3, vec4} from 'neuroglancer/util/geom';
 import {startRelativeMouseDrag} from 'neuroglancer/util/mouse_drag';
 import {ViewerState} from 'neuroglancer/viewer_state';
-import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
+import {DepthBuffer, FramebufferConfiguration, makeTextureBuffers, OffscreenCopyHelper, TextureBuffer} from 'neuroglancer/webgl/offscreen';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {glsl_packFloat01ToFixedPoint, unpackFloat01FromFixedPoint} from 'neuroglancer/webgl/shader_lib';
 
@@ -124,11 +124,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     depthBuffer: new DepthBuffer(this.gl)
   }));
 
-  private transparentConfiguration = this.registerDisposer(new FramebufferConfiguration(this.gl, {
-    framebuffer: this.offscreenFramebuffer.framebuffer.addRef(),
-    colorBuffers: makeTextureBuffers(this.gl, 2, this.gl.RGBA, this.gl.FLOAT),
-    depthBuffer: this.offscreenFramebuffer.depthBuffer!.addRef(),
-  }));
+  private transparentConfiguration_: FramebufferConfiguration<TextureBuffer>|undefined;
 
   private offscreenCopyHelper = this.registerDisposer(OffscreenCopyHelper.get(this.gl));
   private transparencyCopyHelper =
@@ -215,11 +211,35 @@ export class PerspectivePanel extends RenderedDataPanel {
   }
 
   startDragViewport(e: MouseEvent) {
-    startRelativeMouseDrag(e, (_event, deltaX, deltaY) => {
-      this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
-      this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
-      this.viewer.navigationState.changed.dispatch();
+    startRelativeMouseDrag(e, (event, deltaX, deltaY) => {
+      if (event.shiftKey) {
+        const temp = tempVec3;
+        const {projectionMat} = this;
+        const {width, height} = this;
+        const {position} = this.viewer.navigationState;
+        const pos = position.spatialCoordinates;
+        vec3.transformMat4(temp, pos, projectionMat);
+        temp[0] = 2 * deltaX / width;
+        temp[1] = -2 * deltaY / height;
+        vec3.transformMat4(pos, temp, this.inverseProjectionMat);
+        position.changed.dispatch();
+      } else {
+        this.navigationState.pose.rotateRelative(kAxes[1], -deltaX / 4.0 * Math.PI / 180.0);
+        this.navigationState.pose.rotateRelative(kAxes[0], deltaY / 4.0 * Math.PI / 180.0);
+        this.viewer.navigationState.changed.dispatch();
+      }
     });
+  }
+
+  private get transparentConfiguration() {
+    let transparentConfiguration = this.transparentConfiguration_;
+    if (transparentConfiguration === undefined) {
+      transparentConfiguration = this.transparentConfiguration_ =
+          this.registerDisposer(new FramebufferConfiguration(this.gl, {
+            colorBuffers: makeTextureBuffers(this.gl, 2, this.gl.RGBA, this.gl.FLOAT),
+          }));
+    }
+    return transparentConfiguration;
   }
 
   draw() {
@@ -294,8 +314,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.depthMask(false);
       gl.enable(gl.BLEND);
 
-      // Compute accumulate and revelage textures.
-      this.transparentConfiguration.bind(width, height);
+      // Compute accumulate and revealage textures.
+      const {transparentConfiguration} = this;
+      transparentConfiguration.bind(width, height);
       this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       renderContext.emitter = perspectivePanelEmitOIT;
@@ -312,8 +333,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       this.offscreenFramebuffer.bindSingle(OffscreenTextures.COLOR);
       gl.blendFunc(gl.ONE_MINUS_SRC_ALPHA, gl.SRC_ALPHA);
       this.transparencyCopyHelper.draw(
-          this.transparentConfiguration.colorBuffers[0].texture,
-          this.transparentConfiguration.colorBuffers[1].texture);
+          transparentConfiguration.colorBuffers[0].texture,
+          transparentConfiguration.colorBuffers[1].texture);
 
       gl.depthMask(true);
       gl.disable(gl.BLEND);
