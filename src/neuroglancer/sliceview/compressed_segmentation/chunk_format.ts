@@ -180,10 +180,17 @@ export class CompressedSegmentationVolumeChunk extends
 
   setTextureData(gl: GL) {
     let {data} = this;
+    let dataStash = this.data;
+    if (this.source.transform !== undefined) {
+      // don't persist chunk data transformations
+      dataStash = new Uint32Array(this.data.buffer.slice(0));
+      this.source.transform(this);
+    }
     let {chunkFormat} = this;
     let textureLayout = this.textureLayout =
         chunkFormat.getTextureLayout(gl, this.chunkDataSize, data.length);
     chunkFormat.setTextureData(gl, textureLayout, data);
+    this.data = dataStash;
   }
 
   getChannelValueAt(dataPosition: vec3, channel: number): Uint64|number {
@@ -223,7 +230,7 @@ export class CompressedSegmentationChunkFormatHandler extends RefCounted impleme
 }
 
 registerChunkFormatHandler((gl: GL, spec: VolumeChunkSpecification) => {
-  if (spec.compressedSegmentationBlockSize != null) {
+  if (spec.compressedSegmentationBlockSize != null && ! spec.stack) {
     return new CompressedSegmentationChunkFormatHandler(gl, spec);
   }
   return null;

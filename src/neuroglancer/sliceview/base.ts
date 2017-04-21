@@ -382,9 +382,60 @@ export class SliceViewBase extends SharedObject {
     let fullyVisibleSources = new Array<VolumeChunkSource>();
 
     this.visibleChunkLayouts.forEach((visibleSources, chunkLayout) => {
+
       let layoutObject = getLayoutObject(chunkLayout);
+      let chunkSize = chunkLayout.size;
+      let offset = chunkLayout.offset;
+
+      //check to see if we have a stackChunkSource
+      let stackSource = undefined;
+      visibleSources.forEach(function(a,source){
+        if(source.spec.stack){
+          stackSource = source;
+        }
+      });
+      if(stackSource){
+        //clone visibleSources
+        visibleSources = new Map(visibleSources.entries())
+        visibleSources.delete(stackSource);
+        //get nm bounds
+        let nmLowerBound = vec3.create();
+        let nmUpperBound = vec3.create();
+        let sources = [stackSource];
+        let spec = stackSource.spec;
+        let nmWidth = spec.voxelSize[0]/spec.dataScaler;
+
+        vec3.scale(nmLowerBound, dataLowerBound, 1/spec.dataScaler)
+        vec3.scale(nmUpperBound, dataUpperBound, 1/spec.dataScaler)
+        let positions = stackSource.parameters.positions;
+        let nmCenter = vec3.create();
+        vec3.scale(nmCenter, center, 1/spec.dataScaler);
+        let chunk_radius = Math.ceil(Math.sqrt(3*Math.pow(nmWidth/2, 2)))
+
+        for(let i=1; i< positions.length; i++){
+          //determine if chunk centered here is likely to intersect plane
+          let position = vec3.fromValues(positions[i][0],positions[i][1],positions[i][2]);
+          let diff = vec3.create();
+          vec3.sub(diff, position, nmCenter);
+          let d = vec3.dot(diff, planeNormal);
+          //pretend chunk is a sphere of center-to-corner radius
+          if(Math.abs(d) <= chunk_radius){
+            vec3.add(position, position, vec3.fromValues(nmWidth/2, nmWidth/2, nmWidth/2));
+            addChunk(chunkLayout, layoutObject, position, sources);//lowerBound == positionInChunks === LUB point of chunk
+          }
+        }
+      }
+
+
+
+      // let planeDistanceToOrigin =
+      //     this.viewportPlaneDistanceToOrigin - vec3.dot(offset, this.viewportAxes[2]);
+
+      // computeSourcesChunkBounds(lowerBound, upperBound, visibleSources.keys());
       computeSourcesChunkBounds(
-          sourcesLowerChunkBound, sourcesUpperChunkBound, visibleSources.keys());
+        sourcesLowerChunkBound, sourcesUpperChunkBound, visibleSources.keys());
+
+
       if (DEBUG_CHUNK_INTERSECTIONS) {
         console.log(
             `Initial sources chunk bounds: ${vec3.str(sourcesLowerChunkBound)}, ${vec3.str(sourcesUpperChunkBound)}`);
@@ -412,11 +463,15 @@ export class SliceViewBase extends SharedObject {
           lowerChunkBound[j] = Math.min(lowerChunkBound[j], Math.floor(localCorner[j]));
           upperChunkBound[j] = Math.max(upperChunkBound[j], Math.floor(localCorner[j]) + 1);
         }
+        // lowerBound[i] =
+        //     Math.max(lowerBound[i], Math.floor((dataLowerBound[i] - offset[i]) / chunkSize[i]));//- 1;
+        // //
+        // upperBound[i] =
+        //     Math.min(upperBound[i], Math.floor((dataUpperBound[i] - offset[i]) / chunkSize[i] + 1));// + 1;
       }
       vec3.max(lowerChunkBound, lowerChunkBound, sourcesLowerChunkBound);
       vec3.min(upperChunkBound, upperChunkBound, sourcesUpperChunkBound);
 
-      // console.log('chunkBounds', lowerBound, upperBound);
 
       // Checks whether [lowerBound, upperBound) intersects the viewport plane.
       //
@@ -858,7 +913,13 @@ export interface VolumeChunkSpecificationBaseOptions {
    * If set, indicates that the chunk is in compressed segmentation format with the specified block
    * size.
    */
+
   compressedSegmentationBlockSize?: vec3;
+
+  stack: boolean;
+
+  dataScaler: number|undefined;
+
 }
 
 /**
@@ -919,6 +980,10 @@ export class VolumeChunkSpecification {
 
   compressedSegmentationBlockSize: vec3|undefined;
 
+  stack: boolean = false;
+
+  dataScaler: number|undefined = undefined;
+
   constructor(options: VolumeChunkSpecificationOptions) {
     let {dataType,  lowerVoxelBound = kZeroVec, upperVoxelBound, chunkDataSize, voxelSize,
          transform, baseVoxelOffset = kZeroVec, numChannels} = options;
@@ -944,6 +1009,11 @@ export class VolumeChunkSpecification {
       upperChunkBound[i] = Math.floor((upperVoxelBound[i] - 1) / chunkDataSize[i] + 1);
     }
     this.compressedSegmentationBlockSize = options.compressedSegmentationBlockSize;
+
+    if(options.stack){
+      this.stack = options.stack
+    }
+    this.dataScaler = options.dataScaler;
   }
 
   static make(options: VolumeChunkSpecificationOptions&{volumeSourceOptions: VolumeSourceOptions}) {
@@ -966,6 +1036,8 @@ export class VolumeChunkSpecification {
       upperClipBound: this.upperClipBound,
       baseVoxelOffset: this.baseVoxelOffset,
       compressedSegmentationBlockSize: this.compressedSegmentationBlockSize,
+      stack: this.stack,
+      dataScaler: this.dataScaler,
     };
   }
 

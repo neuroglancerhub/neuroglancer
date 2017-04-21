@@ -27,7 +27,7 @@ KeyboardEvent {
       text += `  ${prop}: ${JSON.stringify((<any>event)[prop])}\n`;
     }
     text += `}</pre>`;
-    document.body.innerHTML = text;
+    document.getElementById('neurog-body').innerHTML = text;
     event.preventDefault();
   });
 });

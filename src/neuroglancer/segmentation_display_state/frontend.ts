@@ -21,6 +21,7 @@ import {SegmentColorHash} from 'neuroglancer/segment_color';
 import {forEachVisibleSegment, getObjectKey, VisibleSegmentsState} from 'neuroglancer/segmentation_display_state/base';
 import {shareVisibility} from 'neuroglancer/shared_visibility_count/frontend';
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {vec4} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -79,6 +80,7 @@ export class SegmentSelectionState extends RefCounted {
 export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentSelectionState: SegmentSelectionState;
   segmentColorHash: SegmentColorHash;
+  showSegmentsOnHover: TrackableBoolean;
 }
 
 export interface SegmentationDisplayStateWithAlpha extends SegmentationDisplayState {

@@ -25,7 +25,7 @@
 }
 
 #container {
-  width: 100vw;
+  width: inherit;
   flex: 1;
   position: relative;
 }

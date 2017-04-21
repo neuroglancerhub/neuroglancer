@@ -1,0 +1,23 @@
+.metric-scale-widget{
+  position: relative;
+  height: 60px;
+  width: 90%;
+}
+.metric-scale-bar{
+  width: 90%;
+  padding-left: 10%;
+}
+.metric-grad-step{
+  height: 15px;
+  width: 1.8%;
+  display: inline-block;
+}
+
+.metric-val-max{
+  position: absolute;
+  right: 0;
+}
+.metric-val-min{
+  position: absolute;
+  left:.5em;
+}

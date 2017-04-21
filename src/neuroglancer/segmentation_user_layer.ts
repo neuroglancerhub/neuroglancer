@@ -18,6 +18,7 @@ import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {getMeshSource, getSkeletonSource} from 'neuroglancer/datasource/factory';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
+import {SegmentationDropdown} from 'neuroglancer/layer_dropdown';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {MeshLayer} from 'neuroglancer/mesh/frontend';
@@ -28,12 +29,10 @@ import {PerspectiveViewSkeletonLayer, SkeletonLayer, SliceViewPanelSkeletonLayer
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {SegmentationRenderLayer, SliceViewSegmentationDisplayState} from 'neuroglancer/sliceview/segmentation_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {parseArray, verifyObjectProperty, verifyOptionalString} from 'neuroglancer/util/json';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {RangeWidget} from 'neuroglancer/widget/range';
-import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
-import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 
 require('./segmentation_user_layer.css');
 
@@ -58,6 +57,10 @@ export class SegmentationUserLayer extends UserLayer {
   meshPath: string|undefined;
   skeletonsPath: string|undefined;
   meshLayer: MeshLayer|undefined;
+  segmentationLayer: SegmentationRenderLayer;
+  wasDisposed = false;
+  dropDownType: string;
+  showSegmentsOnHover = new TrackableBoolean(false, false);
 
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
@@ -93,6 +96,10 @@ export class SegmentationUserLayer extends UserLayer {
           }
         }
       });
+
+      this.segmentationLayer = new SegmentationRenderLayer(
+          manager.chunkManager, volumePromise, this, this.selectedAlpha, this.notSelectedAlpha);
+      this.addRenderLayer(this.segmentationLayer);
     }
 
     if (meshPath !== undefined) {
@@ -183,6 +190,10 @@ export class SegmentationUserLayer extends UserLayer {
         this.displayState.visibleSegments.clear();
         break;
       }
+      case 'toggle-show-segments-on-hover': {
+        this.showSegmentsOnHover.toggle();
+        break;
+      }
       case 'select': {
         let {segmentSelectionState} = this.displayState;
         if (segmentSelectionState.hasSelectedSegment) {
@@ -198,35 +209,6 @@ export class SegmentationUserLayer extends UserLayer {
       }
     }
   }
+
 }
 
-class SegmentationDropdown extends UserLayerDropdown {
-  visibleSegmentWidget = this.registerDisposer(new SegmentSetWidget(this.layer.displayState));
-  addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
-  selectedAlphaWidget =
-      this.registerDisposer(new RangeWidget(this.layer.displayState.selectedAlpha));
-  notSelectedAlphaWidget =
-      this.registerDisposer(new RangeWidget(this.layer.displayState.notSelectedAlpha));
-  objectAlphaWidget = this.registerDisposer(new RangeWidget(this.layer.displayState.objectAlpha));
-  constructor(public element: HTMLDivElement, public layer: SegmentationUserLayer) {
-    super();
-    element.classList.add('segmentation-dropdown');
-    let {selectedAlphaWidget, notSelectedAlphaWidget, objectAlphaWidget} = this;
-    selectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
-    notSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
-    objectAlphaWidget.promptElement.textContent = 'Opacity (3d)';
-
-    element.appendChild(this.selectedAlphaWidget.element);
-    element.appendChild(this.notSelectedAlphaWidget.element);
-    element.appendChild(this.objectAlphaWidget.element);
-    this.addSegmentWidget.element.classList.add('add-segment');
-    this.addSegmentWidget.element.title = 'Add segment ID';
-    element.appendChild(this.registerDisposer(this.addSegmentWidget).element);
-    this.registerDisposer(this.addSegmentWidget.valueEntered.add(
-        (value: Uint64) => { this.layer.displayState.visibleSegments.add(value); }));
-    element.appendChild(this.registerDisposer(this.visibleSegmentWidget).element);
-  }
-}
-
-registerLayerType('segmentation', SegmentationUserLayer);
-registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);

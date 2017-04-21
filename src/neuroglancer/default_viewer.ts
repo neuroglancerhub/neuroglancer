@@ -21,7 +21,7 @@ import 'neuroglancer/sliceview/chunk_format_handlers';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {Viewer} from 'neuroglancer/viewer';
 
-export function makeDefaultViewer() {
+export function makeDefaultViewer(config: any) {
   let display = new DisplayContext(document.getElementById('container')!);
-  return new Viewer(display);
+  return new Viewer(display, config);
 }

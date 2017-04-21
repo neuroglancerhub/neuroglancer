@@ -18,6 +18,8 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {getVolume, GetVolumeOptions} from 'neuroglancer/datasource/factory';
 import {LayerManager, LayerSelectedValues, ManagedUserLayer, UserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
+import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
+import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
@@ -27,16 +29,18 @@ import {verifyObject, verifyObjectProperty, verifyOptionalString} from 'neurogla
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Trackable} from 'neuroglancer/util/trackable';
 import {RPC} from 'neuroglancer/worker_rpc';
+import {StackUserLayer} from 'neuroglancer/stack_user_layer';
+import {max, map} from 'lodash';
 
 export function getVolumeWithStatusMessage(
     chunkManager: ChunkManager, x: string,
     options: GetVolumeOptions = {}): Promise<MultiscaleVolumeChunkSource> {
   return StatusMessage.forPromise(
       new Promise(function(resolve) { resolve(getVolume(chunkManager, x, options)); }), {
-        initialMessage: `Retrieving metadata for volume ${x}.`,
-        delay: true,
-        errorPrefix: `Error retrieving metadata for volume ${x}: `,
-      });
+      initialMessage: `Retrieving metadata for volume ${x}.`,
+      delay: true,
+      errorPrefix: `Error retrieving metadata for volume ${x}: `,
+  });
 }
 
 export class ManagedUserLayerWithSpecification extends ManagedUserLayer {
@@ -83,13 +87,12 @@ export class LayerListSpecification extends RefCounted implements Trackable {
   }
 
   getLayer(name: string, spec: any) {
-    let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
     if (typeof spec === 'string') {
       spec = {'source': spec};
     }
     verifyObject(spec);
     let layerType = verifyObjectProperty(spec, 'type', verifyOptionalString);
-    managedLayer.visible = verifyObjectProperty(spec, 'visible', x => {
+    let visible = verifyObjectProperty(spec, 'visible', x => {
       if (x === undefined || x === true) {
         return true;
       }
@@ -98,6 +101,19 @@ export class LayerListSpecification extends RefCounted implements Trackable {
       }
       throw new Error(`Expected boolean, but received: ${JSON.stringify(x)}.`);
     });
+
+    if (layerType === 'metric') {
+      let metricData = spec['metricData'];
+      let metricLayer = new SegmentationMetricUserLayer(this, spec, metricData);
+      let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
+      managedLayer.layer = metricLayer;
+      managedLayer.visible = visible;
+
+      return managedLayer;
+    }
+
+    let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
+    managedLayer.visible = visible;
     let sourceUrl = managedLayer.sourceUrl =
         verifyObjectProperty(spec, 'source', verifyOptionalString);
     if (layerType === undefined) {
@@ -117,6 +133,10 @@ export class LayerListSpecification extends RefCounted implements Trackable {
           throw new Error(`Unsupported volume type: ${VolumeType[source.volumeType]}.`);
         }
       });
+    } else if (layerType === 'segmentation') {
+      managedLayer.layer = new SegmentationUserLayer(this, spec);
+    } else if (layerType === 'stack'){
+      managedLayer.layer = new StackUserLayer(this, spec);
     } else {
       let layerConstructor = layerTypes.get(layerType);
       if (layerConstructor !== undefined) {

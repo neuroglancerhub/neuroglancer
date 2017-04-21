@@ -86,7 +86,7 @@ export class Viewer extends RefCounted implements ViewerState {
 
   state = new CompoundTrackable();
 
-  constructor(public display: DisplayContext) {
+  constructor(public display: DisplayContext, config: any) {
     super();
 
     this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
@@ -123,7 +123,7 @@ export class Viewer extends RefCounted implements ViewerState {
     // Debounce this call to ensure that a transient state does not result in the layer dialog being
     // shown.
     const maybeResetState = this.registerCancellable(debounce(() => {
-      if (this.layerManager.managedLayers.length === 0) {
+      if (this.layerManager.managedLayers.length === 0 && config.auto_show_layer_dialog === true) {
         // No layers, reset state.
         this.navigationState.reset();
         this.perspectiveNavigationState.pose.orientation.reset();
@@ -175,14 +175,23 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    for (let command of ['recolor', 'clear-segments']) {
+    for (let command of ['recolor', 'clear-segments', 'toggle-show-segments-on-hover']) {
       keyCommands.set(command, function() { this.layerManager.invokeAction(command); });
     }
 
     keyCommands.set('toggle-axis-lines', function() { this.showAxisLines.toggle(); });
     keyCommands.set('toggle-scale-bar', function() { this.showScaleBar.toggle(); });
+
     this.keyCommands.set(
         'toggle-show-slices', function() { this.showPerspectiveSliceViews.toggle(); });
+
+
+    // This needs to happen after the global keyboard shortcut handler for the viewer has been
+    // registered, so that it has priority.
+    if (this.layerManager.managedLayers.length === 0 && config.auto_show_layer_dialog === true) {
+      new LayerDialog(this.layerSpecification);
+    }
+
   }
 
   private makeUI() {

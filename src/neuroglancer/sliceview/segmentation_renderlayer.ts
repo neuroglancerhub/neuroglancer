@@ -53,15 +53,16 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
 }
 
 export class SegmentationRenderLayer extends RenderLayer {
-  private segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
-  private hashTableManager = new HashSetShaderManager('visibleSegments');
-  private gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
+  protected segmentColorShaderManager = new SegmentColorShaderManager('segmentColorHash');
+  protected hashTableManager = new HashSetShaderManager('visibleSegments');
+  protected gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
 
-  private equivalencesShaderManager = new HashMapShaderManager('equivalences');
-  private equivalencesHashMap =
+  protected equivalencesShaderManager = new HashMapShaderManager('equivalences');
+  protected equivalencesHashMap =
       new EquivalencesHashMap(this.displayState.segmentEquivalences.disjointSets);
-  private gpuEquivalencesHashTable = GPUHashTable.get(this.gl, this.equivalencesHashMap.hashMap);
-  private hasEquivalences: boolean;
+  protected gpuEquivalencesHashTable = GPUHashTable.get(this.gl, this.equivalencesHashMap.hashMap);
+  protected hasEquivalences: boolean;
+  public layerPosition: number|undefined;
 
   constructor(
       multiscaleSource: MultiscaleVolumeChunkSource,
@@ -82,6 +83,8 @@ export class SegmentationRenderLayer extends RenderLayer {
     });
     this.registerDisposer(
         displayState.notSelectedAlpha.changed.add(() => { this.redrawNeeded.dispatch(); }));
+    this.registerDisposer(
+        displayState.showSegmentsOnHover.changed.add(() => { this.redrawNeeded.dispatch(); }));
   }
 
   getShaderKey() {
@@ -119,6 +122,7 @@ uint64_t getMappedObjectId() {
     this.segmentColorShaderManager.defineShader(builder);
     builder.addUniform('highp vec4', 'uSelectedSegment', 2);
     builder.addUniform('highp float', 'uShowAllSegments');
+    builder.addUniform('highp float', 'uShowSegmentsOnHover');
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.addFragmentCode(glsl_unnormalizeUint8);
@@ -134,7 +138,8 @@ uint64_t getMappedObjectId() {
   bool has = uShowAllSegments > 0.0 ? true : ${this.hashTableManager.hasFunctionName}(value);
   if (uSelectedSegment[0] == unnormalizeUint8(value.low) &&
       uSelectedSegment[1] == unnormalizeUint8(value.high)) {
-    saturation = has ? 0.5 : 0.75;
+    saturation = has ? 0.5 : uShowSegmentsOnHover;
+    alpha = has || (uShowSegmentsOnHover > 0.0 ) ? alpha : 0.0; 
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
@@ -146,9 +151,26 @@ uint64_t getMappedObjectId() {
   beginSlice(sliceView: SliceView) {
     let shader = super.beginSlice(sliceView);
     let gl = this.gl;
-
     let {displayState} = this;
-    let {segmentSelectionState, visibleSegments} = this.displayState;
+    let {segmentSelectionState, visibleSegments, showSegmentsOnHover} = this.displayState;
+
+    gl.uniform1f(shader.uniform('uSelectedAlpha'), this.displayState.selectedAlpha.value);
+    gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
+    gl.uniform4fv(shader.uniform('uSelectedSegment'), this.getSelectedSegment());
+    gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0.0 : 1.0);
+    gl.uniform1f(shader.uniform('uShowSegmentsOnHover'), showSegmentsOnHover.value ? 1.0 : 0.0);
+    this.hashTableManager.enable(gl, shader, this.gpuHashTable);
+
+    if (this.hasEquivalences) {
+      this.equivalencesHashMap.update();
+      this.equivalencesShaderManager.enable(gl, shader, this.gpuEquivalencesHashTable);
+    }
+    this.segmentColorShaderManager.enable(gl, shader, displayState.segmentColorHash);
+    return shader;
+  }
+
+  getSelectedSegment() {
+    let {segmentSelectionState} = this.displayState;
     if (!segmentSelectionState.hasSelectedSegment) {
       selectedSegmentForShader.fill(0);
     } else {
@@ -159,19 +181,9 @@ uint64_t getMappedObjectId() {
         selectedSegmentForShader[4 + i] = ((high >> (8 * i)) & 0xFF);
       }
     }
-    gl.uniform1f(shader.uniform('uSelectedAlpha'), this.displayState.selectedAlpha.value);
-    gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
-    gl.uniform4fv(shader.uniform('uSelectedSegment'), selectedSegmentForShader);
-    gl.uniform1f(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0.0 : 1.0);
-    this.hashTableManager.enable(gl, shader, this.gpuHashTable);
-    if (this.hasEquivalences) {
-      this.equivalencesHashMap.update();
-      this.equivalencesShaderManager.enable(gl, shader, this.gpuEquivalencesHashTable);
-    }
-
-    this.segmentColorShaderManager.enable(gl, shader, displayState.segmentColorHash);
-    return shader;
+    return selectedSegmentForShader;
   }
+
   endSlice(shader: ShaderProgram) {
     let {gl} = this;
     this.hashTableManager.disable(gl, shader);

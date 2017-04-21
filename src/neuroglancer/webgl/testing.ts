@@ -17,12 +17,15 @@
 import {GL, initializeWebGL} from 'neuroglancer/webgl/context';
 
 export function webglTest(f: (gl: GL, canvas: HTMLCanvasElement) => void) {
+  let neurog_body = document.createElement('div');
+  neurog_body.id = 'neurog-body';
+  document.body.appendChild(neurog_body); 
   let canvas = document.createElement('canvas');
-  document.body.appendChild(canvas);
+  neurog_body.appendChild(canvas);
   try {
     let gl = initializeWebGL(canvas);
     f(gl, canvas);
   } finally {
-    document.body.removeChild(canvas);
+    document.body.removeChild(neurog_body);
   }
 }

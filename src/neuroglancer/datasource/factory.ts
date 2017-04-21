@@ -83,6 +83,7 @@ export interface DataSourceFactory {
   volumeCompleter?:
       (value: string, chunkManager: ChunkManager,
        cancellationToken: CancellationToken) => Promise<CompletionResult>;
+  getStackSource?: (path: string, spec:any) => Promise<MultiscaleVolumeChunkSource>;
 
   /**
    * Returns a suggested layer name for the given volume source.
@@ -140,6 +141,11 @@ export function getSkeletonSource(
   return new Promise<SkeletonSource>(resolve => {
     resolve(factories.getSkeletonSource!(chunkManager, path, cancellationToken));
   });
+}
+
+export function getStackSource(chunkManager: ChunkManager, url: string, x:any) {
+  let [factories, path] = getDataSource(url);
+  return factories.getStackSource!(path, x);
 }
 
 export function volumeCompleter(

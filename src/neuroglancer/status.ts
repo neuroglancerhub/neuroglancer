@@ -29,7 +29,7 @@ export class StatusMessage {
     if (statusContainer === null) {
       statusContainer = document.createElement('ul');
       statusContainer.id = 'statusContainer';
-      document.body.appendChild(statusContainer);
+      (document.getElementById('neurog-body')!).appendChild(statusContainer);
     }
     let element = document.createElement('li');
     this.element = element;

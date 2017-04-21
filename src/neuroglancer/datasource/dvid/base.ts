@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import {VolumeType} from 'neuroglancer/sliceview/base';
 
 export class DVIDSourceParameters {
   baseUrls: string[];
@@ -21,6 +22,7 @@ export class DVIDSourceParameters {
 }
 
 export class VolumeChunkSourceParameters extends DVIDSourceParameters {
+  volumeType: VolumeType;
   static RPC_ID = 'dvid/VolumeChunkSource';
   static stringify(parameters: VolumeChunkSourceParameters) {
     return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}`;
@@ -42,3 +44,21 @@ export class TileChunkSourceParameters extends DVIDSourceParameters {
     return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/${parameters['dims']}/${parameters['level']}/${TileEncoding[parameters['encoding']]}`;
   }
 }
+
+export class SkeletonSourceParameters extends DVIDSourceParameters {
+  static RPC_ID = 'dvid/SkeletonSource';
+
+  static stringify(parameters: DVIDSourceParameters) {
+    return `dvid:skeleton:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}`;
+  }
+};
+
+export class StackParameters {
+  
+  constructor(public positions:any, public colors:Map<string, Float32Array>, public stackID: string){}
+  static RPC_ID = 'dvid/StackChunkSource';
+  static stringify(parameters: StackParameters) {
+    return `dvid://stack/${parameters.stackID}`;
+  }
+
+};
