@@ -54,8 +54,10 @@ export class SkeletonSourceParameters extends DVIDSourceParameters {
 };
 
 export class StackParameters {
-  
-  constructor(public positions:any, public colors:Map<string, Float32Array>, public stackID: string){}
+  positions: any;
+  colors: Map<string, Float32Array>;
+  stackID: string;
+
   static RPC_ID = 'dvid/StackChunkSource';
   static stringify(parameters: StackParameters) {
     return `dvid://stack/${parameters.stackID}`;

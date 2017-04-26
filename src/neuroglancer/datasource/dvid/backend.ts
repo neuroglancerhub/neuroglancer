@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {handleChunkDownloadPromise, registerChunkSource} from 'neuroglancer/chunk_manager/backend';
+import {registerChunkSource} from 'neuroglancer/chunk_manager/backend';
 import {SkeletonSourceParameters, TileChunkSourceParameters, TileEncoding, VolumeChunkSourceParameters, StackParameters} from 'neuroglancer/datasource/dvid/base';
 import {ParameterizedSkeletonSource, SkeletonChunk} from 'neuroglancer/skeleton/backend';
 import {ParameterizedVolumeChunkSource, VolumeChunk} from 'neuroglancer/sliceview/backend';
@@ -26,7 +26,6 @@ import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/sliceview/decode_swc_skeleton';
 import {Endianness} from 'neuroglancer/util/endian';
-import {VolumeType} from 'neuroglancer/sliceview/base';
 import {vec3, vec4} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
 import {RPC} from 'neuroglancer/worker_rpc';
@@ -113,15 +112,15 @@ class TileChunkSource extends ParameterizedVolumeChunkSource<TileChunkSourcePara
 
 @registerChunkSource(SkeletonSourceParameters)
 export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourceParameters> {
-  download(chunk: SkeletonChunk) {
+  download(chunk: SkeletonChunk, cancellationToken: CancellationToken) {
     const params = this.parameters;
     // example:
     // http://emdata1:7000/api/node/d5053e99753848e599a641925aa2d38f/bodies1104_skeletons/key/102160_swc
     const path =
         `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/key/${chunk.objectId}_swc`;
-    handleChunkDownloadPromise(
-        chunk, sendHttpRequest(openShardedHttpRequest(params.baseUrls, path), 'text'),
-        decodeSkeletonChunk);
+    return sendHttpRequest(
+           openShardedHttpRequest(params.baseUrls, path), 'text', cancellationToken)
+    .then( (response: string) => decodeSkeletonChunk(chunk, response));
   }
 };
 

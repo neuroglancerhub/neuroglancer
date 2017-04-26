@@ -26,6 +26,8 @@ import {TrackableValue} from 'neuroglancer/trackable_value';
 import {verifyString} from 'neuroglancer/util/json';
 import {MetricKeyData, mapMetricsToColors} from 'neuroglancer/util/metric_color_util';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {vec3} from 'neuroglancer/util/geom';
+import {VolumeType} from 'neuroglancer/sliceview/base';
 
 require('./segmentation_user_layer.css');
 
@@ -35,7 +37,7 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
   selectedAlphaStash: number;
   notSelectedAlphaStash: number;
   segLayers: Map<string, SegmentationRenderLayer> = new Map<string, SegmentationRenderLayer>();
-  visibleLayer: SegmentationRenderLayer;
+  visibleLayer: SegmentationRenderLayer | CustomColorSegmentationRenderLayer;
   currentLayerName: TrackableValue<string>;
   prevLayerName: string;
 
@@ -60,9 +62,8 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
         metrics.set(metricName, metricKeyData);
       }.bind(this));
       // use the first metric map
-      this.metricLayer = this.addMetricLayer(metrics);
-      // start by showing the segmentation layer
-      this.hideLayer(this.metricLayer);
+      this.addMetricLayer(metrics);
+
     }
   }
 
@@ -70,25 +71,28 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     let {manager} = this;
 
     // promise for color renderlayer--gets its own copy of the data
-    let colorPromise = getVolumeWithStatusMessage(this.volumePath!);
+    getVolumeWithStatusMessage(manager.chunkManager, this.volumePath!, {
+       volumeType: VolumeType.SEGMENTATION
+    }).then(volume => {
+        if (!this.wasDisposed) {
+          this.metricLayer = new CustomColorSegmentationRenderLayer(volume, this.displayState, metrics);
+          this.addRenderLayer(this.metricLayer);
+          // start by showing the segmentation layer
+          this.hideLayer(this.metricLayer);
+          // don't bother rendering the layer since it's not visible
+          this.metricLayer.setReady(false);
+          this.metricLayer.currentMetricName = 'Random Colors';
 
-    let metricLayer =
-        new CustomColorSegmentationRenderLayer(manager.chunkManager, colorPromise, metrics, this);
-    metricLayer.currentMetricName = 'Random Colors';
+          for (let name of metrics.keys()) {
+            this.segLayers.set(name, this.metricLayer);
+          }
 
-    // don't bother rendering the layer since it's not visible
-    colorPromise.then((volume) => { metricLayer.setReady(false); });
+          this.metricLayer.layerPosition = this.renderLayers.length - 1;
+          this.displayState.visibleSegments.changed.add(this.syncMetricVisibleSegments);
 
-    for (let name of metrics.keys()) {
-      this.segLayers.set(name, metricLayer);
-    }
+      }
+    });
 
-    this.addRenderLayer(metricLayer);
-    metricLayer.layerPosition = this.renderLayers.length - 1;
-
-    this.visibleSegments.changed.add(this.syncMetricVisibleSegments, this);
-
-    return metricLayer;
   }
 
   toJSON() {
@@ -103,7 +107,7 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
   addSegment(id:number){
     const segment = new Uint64();
     segment.parseString(id.toString());
-    this.visibleSegments.add(segment);
+    this.displayState.visibleSegments.add(segment);
     
     if(this.visibleLayer !== this.segmentationLayer){
       //translate into metric coordinates
@@ -129,14 +133,14 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
   updateVisibleSegmentsOnMetricChange() {
     let metricVisibleSegments = this.metricLayer.displayState.visibleSegments;
     metricVisibleSegments.clear();
-    for (let segment of this.visibleSegments.hashTable.keys()) {
+    for (let segment of this.displayState.visibleSegments.hashTable.keys()) {
       let colorSegment = this.metricLayer.getColorVal(segment);
       metricVisibleSegments.add(colorSegment);
     }
   }
 
-  getValueAt(position: Float32Array, pickedRenderLayer: RenderLayer|null, pickedObject: Uint64) {
-    return this.segmentationLayer.getValueAt(position);
+  getValueAt(position: Float32Array) {
+    return this.segmentationLayer.getValueAt(vec3.fromValues(position[0],position[1],position[2]));
   }
 
   shouldUpdateMetricSegments() {
@@ -160,8 +164,8 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
       this.metricLayer.setReady(this.visibleLayer instanceof CustomColorSegmentationRenderLayer);
 
       // swap alphas
-      this.visibleLayer.selectedAlpha.value = oldLayer.selectedAlpha.value;
-      this.visibleLayer.notSelectedAlpha.value = oldLayer.notSelectedAlpha.value;
+      this.visibleLayer.displayState.selectedAlpha.value = oldLayer.displayState.selectedAlpha.value;
+      this.visibleLayer.displayState.notSelectedAlpha.value = oldLayer.displayState.notSelectedAlpha.value;
       this.hideLayer(oldLayer);
 
       // reorder layers to avoid blending hidden layers
@@ -183,9 +187,9 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     // update history
     this.prevLayerName = this.currentLayerName.value;
   }
-  hideLayer(layer: SegmentationRenderLayer) {
-    layer.selectedAlpha.value = 0;
-    layer.notSelectedAlpha.value = 0;
+  hideLayer(layer: SegmentationRenderLayer | CustomColorSegmentationRenderLayer) {
+    layer.displayState.selectedAlpha.value = 0;
+    layer.displayState.notSelectedAlpha.value = 0;
   }
 
   makeDropdown(element: HTMLDivElement) { return new MetricDropdown(element, this); }

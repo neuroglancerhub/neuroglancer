@@ -6,7 +6,7 @@ import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {GL} from 'neuroglancer/webgl/context';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
-import {vec4, vec3, Vec3, vec3Key} from 'neuroglancer/util/geom';
+import {vec4, vec3, vec3Key} from 'neuroglancer/util/geom';
 import {RPC} from 'neuroglancer/worker_rpc';
 import {stableStringify} from 'neuroglancer/util/json';
 import {StackChunkFormat} from 'neuroglancer/stack/chunk_format';
@@ -19,7 +19,7 @@ export class StackChunk extends VolumeChunk {
     super(source, x);
     this.data = x['data'];
   }
-  getChannelValueAt(dataPosition: Vec3, channel=0){
+  getChannelValueAt(_dataPosition: vec3, _channel=0){
     return this.data;
   }
 }
@@ -27,7 +27,7 @@ export class StackChunk extends VolumeChunk {
 export class StackChunkSource extends VolumeChunkSource {
   chunks: Map<string, StackChunk>;
 
-  getValueAt(position: Vec3) {
+  getValueAt(_position: vec3) {
     return '';//don't display anything on hover. Could display the chunk value
   }
 

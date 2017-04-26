@@ -25,9 +25,10 @@ export class ColorSelect extends RefCounted {
     element.appendChild(document.createTextNode('Color Options: '));
     element.appendChild(select);
 
-    this.registerSignalBinding(model.changed.add(this.update, this));
+    this.registerDisposer(model.changed.add(this.update.bind(this)))
+
     this.registerEventListener(
-        select, 'change', function(this: typeof select, e: Event) { model.value = this.value; });
+        select, 'change', function(this: typeof select, _: Event) { model.value = this.value; });
   }
 
   update() { this.select.value = this.model.value; }

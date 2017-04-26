@@ -3,9 +3,8 @@ import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource, defineParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {StackRenderLayer} from 'neuroglancer/sliceview/stack_renderlayer';
-import {trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
+import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {LayerListSpecification} from 'neuroglancer/layer_specification';
-import {Vec3, vec3} from 'neuroglancer/util/geom';
 import {DataType, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as GenericVolumeChunkSource, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 
@@ -19,12 +18,12 @@ export class StackUserLayer extends UserLayer {
   constructor(manager: LayerListSpecification, x:any){
     super();
     
-    let volumePath = x['source'];
-    this.volumePath = volumePath;
+    this.volumePath = x['source'];
 
-    let sourcePromise = getStackSource(manager.chunkManager, volumePath, x);
-    this.renderLayer = new StackRenderLayer(manager.chunkManager, sourcePromise)
-    this.addRenderLayer(this.renderLayer);
+    getStackSource(manager.chunkManager, this.volumePath, x).then(stackSource => {
+      this.renderLayer = new StackRenderLayer(stackSource)
+      this.addRenderLayer(this.renderLayer);
+    });
 
   }
   

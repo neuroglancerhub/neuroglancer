@@ -18,7 +18,6 @@ import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {getMeshSource, getSkeletonSource} from 'neuroglancer/datasource/factory';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
 import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
-import {SegmentationDropdown} from 'neuroglancer/layer_dropdown';
 import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {MeshLayer} from 'neuroglancer/mesh/frontend';
@@ -39,6 +38,8 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {SegmentSetWidget} from 'neuroglancer/widget/segment_set_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
+import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
+
 
 require('neuroglancer/noselect.css');
 require('./segmentation_user_layer.css');
@@ -64,6 +65,7 @@ export class SegmentationUserLayer extends UserLayer {
         objectToDataTransform: new CoordinateTransform(),
         fragmentMain: getTrackableFragmentMain(),
         shaderError: makeWatchableShaderError(),
+        showSegmentsOnHover: new TrackableBoolean(false, false)
       };
   volumePath: string|undefined;
 
@@ -77,7 +79,7 @@ export class SegmentationUserLayer extends UserLayer {
   segmentationLayer: SegmentationRenderLayer;
   wasDisposed = false;
   dropDownType: string;
-  showSegmentsOnHover = new TrackableBoolean(false, false);
+ 
 
   constructor(public manager: LayerListSpecification, x: any) {
     super([]);
@@ -120,9 +122,6 @@ export class SegmentationUserLayer extends UserLayer {
         }
       });
 
-      this.segmentationLayer = new SegmentationRenderLayer(
-          manager.chunkManager, volumePromise, this, this.selectedAlpha, this.notSelectedAlpha);
-      this.addRenderLayer(this.segmentationLayer);
     }
 
     if (meshPath != null) {
@@ -216,7 +215,7 @@ export class SegmentationUserLayer extends UserLayer {
         break;
       }
       case 'toggle-show-segments-on-hover': {
-        this.showSegmentsOnHover.toggle();
+        this.displayState.showSegmentsOnHover.toggle();
         break;
       }
       case 'select': {
@@ -244,7 +243,7 @@ function makeSkeletonShaderCodeWidget(layer: SegmentationUserLayer) {
   });
 }
 
-class SegmentationDropdown extends UserLayerDropdown {
+export class SegmentationDropdown extends UserLayerDropdown {
   visibleSegmentWidget = this.registerDisposer(new SegmentSetWidget(this.layer.displayState));
   addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
   selectedAlphaWidget =

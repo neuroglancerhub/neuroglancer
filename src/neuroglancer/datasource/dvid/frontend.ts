@@ -510,12 +510,12 @@ export function getSkeletonSourceByUrl(chunkManager: ChunkManager, url: string) 
 }
 
 //Stacks
-export function getStackSource(path: string, spec: any){
-    return new Promise(function(resolve, reject){
+export function getStackSource(chunkManager:ChunkManager, _path: string, spec: any){
+    return new Promise(function(resolve, _reject){
         // set up source asynchronously
         window.setTimeout(
           function() {
-            resolve(new MultiscaleStackChunkSource(spec));
+            resolve(new MultiscaleStackChunkSource(chunkManager, spec));
           }, 0);
       });
 }
@@ -526,40 +526,44 @@ export class MultiscaleStackChunkSource implements GenericMultiscaleVolumeChunkS
   numChannels = 1;
   dataType = DataType.FLOAT32;
   volumeType = VolumeType.STACK;
-  positions: Array<Float32Array>;
+  positions: Array< Array<number> >;
   colors: Map<string, Float32Array>;
   volumeSpec: VolumeChunkSpecification;
   chunkWidth: number;
   stackID: string;
 
-  constructor(spec: any){
+  constructor(public chunkManager: ChunkManager, spec: any){
     //TODO: move some of these calculations to the backend thread
-    let stacks = spec.stackData.substacks;
+    let stacks: Array<stackinfo> = spec.stackData.substacks;
     let chunkSize = this.chunkWidth = parseInt(stacks[0].width);
     let dataScaler = spec.dataScaler;
 
     //only works for isovoxel chunks
-    this.positions = map(stacks, function(stack){return [parseInt(stack.x), parseInt(stack.y), parseInt(stack.z)]});
+    this.positions = map(stacks, function(stack:stackinfo){return [parseInt(stack.x), parseInt(stack.y), parseInt(stack.z)]});
     this.coatStack(this.positions);
     this.stackID = spec.source;
     //calculate colors--this could be done on the backend instead
-    let minVal = chain(stacks).map('status').min().value();
-    let maxVal = chain(stacks).map('status').max().value();
+    let minVal = (chain(stacks) as any).map('status').min().value();
+    let maxVal = (chain(stacks) as any).map('status').max().value();
     let colorScale = chroma.scale(spec.stackData.colorInterpolate).domain([minVal, maxVal]);
-    let colorMapContents = map(stacks, function(stack){
+
+    this.colors = new Map();
+    stacks.forEach( (stack:stackinfo) => {
       let rgb = colorScale(stack.status).rgb();
       let color =  new Float32Array([rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0, 1]);
       let posShift = chunkSize/2;
-      return [vec3Key(vec3.fromValues(stack.x+posShift, stack.y+posShift, stack.z+posShift)), color]//shift point to LUB
+      //shift point to LUB
+      let key = vec3Key(vec3.fromValues(parseInt(stack.x)+posShift, parseInt(stack.y)+posShift, parseInt(stack.z)+posShift));
+      this.colors.set(key, color)
     });
-    this.colors = new Map(colorMapContents);
     //worth cutting down on loops by doing this all at once?
-    let x = Math.floor((chain(stacks).map('x').min().value() - chunkSize)/chunkSize);
-    let y = Math.floor((chain(stacks).map('y').min().value() - chunkSize)/chunkSize);
-    let z = Math.floor((chain(stacks).map('z').min().value() - chunkSize)/chunkSize);
+    //note: need to retype chain, as typings aren't created for all chained methods yet
+    let x = Math.floor(((chain(stacks) as any).map('x').min().value() - chunkSize)/chunkSize);
+    let y = Math.floor(((chain(stacks) as any).map('y').min().value() - chunkSize)/chunkSize);
+    let z = Math.floor(((chain(stacks) as any).map('z').min().value() - chunkSize)/chunkSize);
     let lowerVoxelBound = vec3.fromValues(x,y,z)
 
-    let limit = map(spec.stackData.stackDimensions, function(coord){
+    let limit = map(spec.stackData.stackDimensions, function(coord:number){
       return Math.floor(coord/chunkSize);
     });
     let upperVoxelBound = vec3.fromValues(limit[0], limit[1], limit[2] - 1);
@@ -585,17 +589,18 @@ export class MultiscaleStackChunkSource implements GenericMultiscaleVolumeChunkS
    * This gets around the neuroglancer limitation which allows chunks to bleed
    * outside of their lower, back, bottom bounderies if there is no abutting chunk
    */
-  coatStack(positions: Array<any>){
+  coatStack(positions: number[][]){
     let {chunkWidth} = this;
     let zs = chain(positions).map(function(pos){return pos[2]}).uniq().value();
     let zMin = min(zs);
     
-    let zMinMaxYmap = new Map(map(zs, function(z){
-      return [z, [Infinity, -Infinity]];
-    }))
+    let zMinMaxYmap: Map<number, number[] > = new Map()
+    zs.map(function(z:number){
+      zMinMaxYmap.set(z, [Infinity, -Infinity]);
+    })
 
     let zyMap = new Map();
-    let coatPositions = [];
+    let coatPositions: number[][] = [];
 
     each(positions, function(pos){
       //add 'end cap' coating on zMin
@@ -612,13 +617,16 @@ export class MultiscaleStackChunkSource implements GenericMultiscaleVolumeChunkS
       }
       //find min, max y for each z
       let currMinMaxY = zMinMaxYmap.get(pos[2]);
-      zMinMaxYmap.set(pos[2], [ Math.min(currMinMaxY[0], pos[1] ), Math.max(currMinMaxY[1], pos[1] )]);
+      if(currMinMaxY !== undefined){
+        zMinMaxYmap.set(pos[2], [ Math.min(currMinMaxY[0], pos[1] ), Math.max(currMinMaxY[1], pos[1] )]);
+      }
     });
 
     //add endcaps on each row in the x direction
-    zyMap.forEach(function(posArray, key){
-      let xMinPos = min(posArray, function(pos){return pos[0]});
-      let xMaxPos = max(posArray, function(pos){return pos[0]});
+    zyMap.forEach(function(posArray: number[][], _){
+      //lodash typings don't handle
+      let xMinPos = posArray.reduce(function(prev, curr){return (prev[0] < curr[0] ? prev : curr)});
+      let xMaxPos = posArray.reduce(function(prev, curr){return (prev[0] > curr[0] ? prev : curr)});
 
       coatPositions.push([xMinPos[0] - chunkWidth, xMinPos[1], xMinPos[2]]);
       coatPositions.push([xMaxPos[0] + chunkWidth, xMaxPos[1], xMaxPos[2]]);
@@ -631,7 +639,7 @@ export class MultiscaleStackChunkSource implements GenericMultiscaleVolumeChunkS
       zyKey = z + ',' + minMaxY[0];
       let positionsToShadow = zyMap.get(zyKey);
 
-      positionsToShadow.forEach(function(pos){
+      positionsToShadow.forEach(function(pos:Array<number>){
         coatPositions.push([pos[0], pos[1] - chunkWidth, pos[2]]);
       });
 
@@ -639,13 +647,13 @@ export class MultiscaleStackChunkSource implements GenericMultiscaleVolumeChunkS
       zyKey = z + ',' + minMaxY[1];
       positionsToShadow = zyMap.get(zyKey);
 
-      positionsToShadow.forEach(function(pos){
+      positionsToShadow.forEach(function(pos:number[]){
         coatPositions.push([pos[0], pos[1] + chunkWidth, pos[2]]);
       });
     });
 
     //resort chunks so least x, y, z are drawn first
-    this.positions = sortBy(coatPositions.concat(positions), [function(pos){return pos[2]}, function(pos){return pos[1]}, function(pos){return pos[0]}]);
+    this.positions = sortBy(coatPositions.concat(positions), [function(pos:Array<number>){return pos[2]}, function(pos:Array<number>){return pos[1]}, function(pos:Array<number>){return pos[0]}]);
   }
 
   /**
@@ -653,8 +661,17 @@ export class MultiscaleStackChunkSource implements GenericMultiscaleVolumeChunkS
    * there may be alternative sources with different chunk layouts.
    */
   getSources(chunkManager: ChunkManager){
-    let sources: StackChunkSource[][] = [[ParameterizedStackChunkSource.get(chunkManager, this.volumeSpec, new StackParameters(this.positions, this.colors, this.stackID))]];
+    const stackParameters = {positions: this.positions, colors: this.colors, stackID: this.stackID}
+    let sources: StackChunkSource[][] = [[ParameterizedStackChunkSource.get(chunkManager, this.volumeSpec, stackParameters)]];
     return sources;
   }
-  getMeshSource(chunkManager: ChunkManager){ return null };
+  getMeshSource(){ return null };
 }
+
+type stackinfo = {
+  width: string;
+  x: string;
+  y: string;
+  z: string;
+  status: any;
+} 

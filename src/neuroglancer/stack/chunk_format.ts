@@ -16,15 +16,15 @@ export class StackChunkFormat implements ChunkFormat {
     builder.addUniform('highp vec4', 'uSubstackColor');
   }
 
-  beginDrawing(gl: GL, shader: ShaderProgram) {}
+  beginDrawing(_gl: GL, _shader: ShaderProgram) {}
 
-  endDrawing(gl: GL, shader: ShaderProgram) {}
+  endDrawing(_gl: GL, _shader: ShaderProgram) {}
 
   bindChunk(gl: GL, shader: ShaderProgram, chunk: StackChunk){
     gl.uniform4fv(shader.uniform('uSubstackColor'), vec4.fromValues(chunk.data[0],chunk.data[1],chunk.data[2], chunk.data[3]));
   }
 
-  beginSource(gl: GL, shader: ShaderProgram) {}
+  beginSource(_gl: GL, _shader: ShaderProgram) {}
 }
 
 export class StackChunkFormatHandler extends RefCounted implements ChunkFormatHandler{
@@ -35,7 +35,7 @@ export class StackChunkFormatHandler extends RefCounted implements ChunkFormatHa
   }
 }
 
-registerChunkFormatHandler((gl: GL, spec: VolumeChunkSpecification) => {
+registerChunkFormatHandler((_gl: GL, spec: VolumeChunkSpecification) => {
   if (spec.stack != null) {
     return new StackChunkFormatHandler();
   }

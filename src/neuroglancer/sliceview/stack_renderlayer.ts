@@ -1,17 +1,17 @@
 import {ChunkManager} from 'neuroglancer/chunk_manager/frontend';
 import {SliceView, MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {RenderLayer, trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
+import {RenderLayer} from 'neuroglancer/sliceview/renderlayer';
+import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {ImageRenderLayer, getTrackableFragmentMain} from 'neuroglancer/sliceview/image_renderlayer';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
-import {BoundingBox, Mat4, Vec3, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
+import {BoundingBox, vec3, vec3Key, vec4} from 'neuroglancer/util/geom';
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 
 export class StackRenderLayer extends RenderLayer {
   opacity = trackableAlphaValue(0.5);
-  constructor(
-    chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>) {
+  constructor(stackSource: MultiscaleVolumeChunkSource) {
     
-    super(chunkManager, multiscaleSourcePromise);
+    super(stackSource);
   }
     getShaderKey() { return `sliceview.StackRenderLayer`; }
   
@@ -65,23 +65,22 @@ void emitRGBA(vec4 rgba) {
 
     for (let source of visibleSources) {
       let chunkLayout = source.spec.chunkLayout;
-      let {offset} = chunkLayout;
 
       let chunks = source.chunks;
 
       let originalChunkSize = chunkLayout.size;
 
-      let chunkDataSize: Vec3|undefined;
+      let chunkDataSize: vec3|undefined;
       let visibleChunks = sliceView.visibleChunks.get(chunkLayout);
       if (!visibleChunks) {
         continue;
       }
 
-      vertexComputationManager.beginSource(gl, shader, source.spec);
+      vertexComputationManager.beginSource(gl, shader, sliceView, sliceView.dataToDevice, source.spec);
       let sourceChunkFormat = source.chunkFormat;
       sourceChunkFormat.beginSource(gl, shader);
 
-      let setChunkDataSize = (newChunkDataSize: Vec3) => {
+      let setChunkDataSize = (newChunkDataSize: vec3) => {
         chunkDataSize = newChunkDataSize;
         vertexComputationManager.setupChunkDataSize(gl, shader, chunkDataSize);
       };

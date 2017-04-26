@@ -17,9 +17,9 @@
 /**
  * @file Main entry point for default neuroglancer viewer.
  */
-import {setupDefaultViewer} from 'neuroglancer/ui/default_viewer_setup';
-
-
+// import {setupDefaultViewer} from 'neuroglancer/ui/default_viewer_setup';
+import {makeDefaultViewer} from 'neuroglancer/default_viewer';
+import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
 // window.addEventListener('DOMContentLoaded', () => {
 //   const viewer = setupDefaultViewer();
 // });

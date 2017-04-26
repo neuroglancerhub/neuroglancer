@@ -7,8 +7,8 @@ import {updateLookupTableData} from 'neuroglancer/sliceview/compressed_segmentat
 import {CompressedSegmentationVolumeChunk} from 'neuroglancer/sliceview/compressed_segmentation/chunk_format.ts';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {VolumeChunkSource} from 'neuroglancer/sliceview/frontend';
-import {trackableAlphaValue} from 'neuroglancer/sliceview/renderlayer';
-import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_renderlayer';
+import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {SegmentationRenderLayer, SliceViewSegmentationDisplayState} from 'neuroglancer/sliceview/segmentation_renderlayer';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {MetricKeyData} from 'neuroglancer/util/metric_color_util';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -24,15 +24,15 @@ export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer 
         chunk.data, IDColorMap, 1, chunk.chunkFormat.subchunkSize, chunk.chunkDataSize);
   };
 
-  constructor(
-      chunkManager: ChunkManager, multiscaleSourcePromise: Promise<MultiscaleVolumeChunkSource>,
-      public metrics: Map<string, MetricKeyData>, public displayState: SegmentationMetricUserLayer,
-      public selectedAlpha = trackableAlphaValue(0.5),
-      public notSelectedAlpha = trackableAlphaValue(0)) {
-    super(chunkManager, multiscaleSourcePromise, displayState, selectedAlpha, notSelectedAlpha);
+  constructor(multiscaleSource: MultiscaleVolumeChunkSource, public displayState: SliceViewSegmentationDisplayState,
+      public metrics: Map<string, MetricKeyData>) {
+    super(multiscaleSource, displayState);
     // copy display state
-    this.displayState = Object.assign({}, displayState);
-    this.displayState.visibleSegments = Uint64Set.makeWithCounterpart(displayState.manager.worker);
+    this.displayState = Object.assign({
+      selectedAlpha: trackableAlphaValue(0.5),
+      notSelectedAlpha: trackableAlphaValue(0)
+    }, displayState);
+    // this.displayState.visibleSegments = Uint64Set.makeWithCounterpart(displayState.manager.worker);
     this.gpuHashTable = GPUHashTable.get(this.gl, this.displayState.visibleSegments.hashTable);
   }
 
@@ -40,7 +40,7 @@ export class CustomColorSegmentationRenderLayer extends SegmentationRenderLayer 
     this.currentMetricName = metricName;
 
     let metricKeyData = this.metrics.get(metricName);
-    let fn = undefined;
+    let fn:any = undefined;
 
     if (metricKeyData) {
       fn = this.fn.bind({}, metricKeyData.IDColorMap);

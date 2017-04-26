@@ -20,6 +20,7 @@ import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, vec3, vec4, transformVectorByMat4} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
+import {ParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/backend';
 
 export {DATA_TYPE_BYTES, DataType};
 
@@ -359,7 +360,7 @@ export class SliceViewBase extends SharedObject {
     for (let i = 0; i < 4; ++i) {
       vec3.transformMat4(globalCorners[i], globalCorners[i], viewportToData);
     }
-    // console.log("data bounds", dataLowerBound, dataUpperBound);
+    var center = this.centerDataPosition;
 
     // These variables hold the lower and upper bounds on chunk grid positions that intersect the
     // viewing plane.
@@ -383,48 +384,46 @@ export class SliceViewBase extends SharedObject {
 
     this.visibleChunkLayouts.forEach((visibleSources, chunkLayout) => {
 
-      let layoutObject = getLayoutObject(chunkLayout);
-      let chunkSize = chunkLayout.size;
-      let offset = chunkLayout.offset;
+    let layoutObject = getLayoutObject(chunkLayout);
+    let chunkSize = chunkLayout.size;
 
-      //check to see if we have a stackChunkSource
-      let stackSource = undefined;
-      visibleSources.forEach(function(a,source){
-        if(source.spec.stack){
-          stackSource = source;
-        }
-      });
-      if(stackSource){
-        //clone visibleSources
-        visibleSources = new Map(visibleSources.entries())
-        visibleSources.delete(stackSource);
-        //get nm bounds
-        let nmLowerBound = vec3.create();
-        let nmUpperBound = vec3.create();
-        let sources = [stackSource];
-        let spec = stackSource.spec;
-        let nmWidth = spec.voxelSize[0]/spec.dataScaler;
+    //check to see if we have a stackChunkSource
+    const sources:Array<VolumeChunkSource> = Array.from(visibleSources.keys());
+    let stackSource: VolumeChunkSource | undefined = sources.find(function(source:VolumeChunkSource){
+      return !!source.spec.stack
+    });
+    if(stackSource !== undefined && stackSource.spec !== undefined && stackSource instanceof ParameterizedVolumeChunkSource){
+      //clone visibleSources
+      visibleSources = new Map(visibleSources.entries())
+      visibleSources.delete(stackSource);
+      //get nm bounds
+      let nmLowerBound = vec3.create();
+      let nmUpperBound = vec3.create();
+      let sources = [stackSource];
+      let spec = stackSource.spec;
+      let dataScaler = spec.dataScaler;
+      let nmWidth = spec.voxelSize[0]/dataScaler;
 
-        vec3.scale(nmLowerBound, dataLowerBound, 1/spec.dataScaler)
-        vec3.scale(nmUpperBound, dataUpperBound, 1/spec.dataScaler)
-        let positions = stackSource.parameters.positions;
-        let nmCenter = vec3.create();
-        vec3.scale(nmCenter, center, 1/spec.dataScaler);
-        let chunk_radius = Math.ceil(Math.sqrt(3*Math.pow(nmWidth/2, 2)))
+      vec3.scale(nmLowerBound, lowerChunkBound, 1/dataScaler)
+      vec3.scale(nmUpperBound, upperChunkBound, 1/dataScaler)
+      let positions = stackSource.parameters.positions;
+      let nmCenter = vec3.create();
+      vec3.scale(nmCenter, center, 1/dataScaler);
+      let chunk_radius = Math.ceil(Math.sqrt(3*Math.pow(nmWidth/2, 2)))
 
-        for(let i=1; i< positions.length; i++){
-          //determine if chunk centered here is likely to intersect plane
-          let position = vec3.fromValues(positions[i][0],positions[i][1],positions[i][2]);
-          let diff = vec3.create();
-          vec3.sub(diff, position, nmCenter);
-          let d = vec3.dot(diff, planeNormal);
-          //pretend chunk is a sphere of center-to-corner radius
-          if(Math.abs(d) <= chunk_radius){
-            vec3.add(position, position, vec3.fromValues(nmWidth/2, nmWidth/2, nmWidth/2));
-            addChunk(chunkLayout, layoutObject, position, sources);//lowerBound == positionInChunks === LUB point of chunk
-          }
+      for(let i=1; i< positions.length; i++){
+        //determine if chunk centered here is likely to intersect plane
+        let position = vec3.fromValues(positions[i][0],positions[i][1],positions[i][2]);
+        let diff = vec3.create();
+        vec3.sub(diff, position, nmCenter);
+        let d = vec3.dot(diff, planeNormal);
+        //pretend chunk is a sphere of center-to-corner radius
+        if(Math.abs(d) <= chunk_radius){
+          vec3.add(position, position, vec3.fromValues(nmWidth/2, nmWidth/2, nmWidth/2));
+          addChunk(chunkLayout, layoutObject, position, sources);//lowerBound == positionInChunks === LUB point of chunk
         }
       }
+    }
 
 
 
@@ -656,6 +655,7 @@ export enum VolumeType {
   UNKNOWN,
   IMAGE,
   SEGMENTATION,
+  STACK
 }
 
 /**
@@ -916,9 +916,9 @@ export interface VolumeChunkSpecificationBaseOptions {
 
   compressedSegmentationBlockSize?: vec3;
 
-  stack: boolean;
+  stack?: boolean;
 
-  dataScaler: number|undefined;
+  dataScaler?: number;
 
 }
 
@@ -954,6 +954,12 @@ export interface VolumeChunkSpecificationGetDefaultsOptions extends
     VolumeChunkSpecificationBaseOptions, VolumeChunkSpecificationDefaultCompressionOptions,
     ChunkLayoutOptions, VolumeChunkSpecificationVolumeSourceOptions {}
 
+export interface VolumeChunkStackSpecification {
+  stack?: boolean;
+
+  dataScaler?: number;
+}
+
 /**
  * Specifies a chunk layout and voxel size.
  */
@@ -980,9 +986,9 @@ export class VolumeChunkSpecification {
 
   compressedSegmentationBlockSize: vec3|undefined;
 
-  stack: boolean = false;
+  dataScaler: number;
 
-  dataScaler: number|undefined = undefined;
+  stack: boolean;
 
   constructor(options: VolumeChunkSpecificationOptions) {
     let {dataType,  lowerVoxelBound = kZeroVec, upperVoxelBound, chunkDataSize, voxelSize,
@@ -1011,9 +1017,17 @@ export class VolumeChunkSpecification {
     this.compressedSegmentationBlockSize = options.compressedSegmentationBlockSize;
 
     if(options.stack){
-      this.stack = options.stack
+      this.stack = options.stack;
     }
-    this.dataScaler = options.dataScaler;
+    else{
+      this.stack=false;
+    }
+    if(options.dataScaler){
+      this.dataScaler = options.dataScaler;
+    }
+    else{
+      this.dataScaler=1
+    }
   }
 
   static make(options: VolumeChunkSpecificationOptions&{volumeSourceOptions: VolumeSourceOptions}) {
