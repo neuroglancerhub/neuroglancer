@@ -20,7 +20,6 @@ import {approxEqual} from 'neuroglancer/util/compare';
 import {DATA_TYPE_BYTES, DataType} from 'neuroglancer/util/data_type';
 import {effectiveScalingFactorFromMat4, identityMat4, kAxes, kInfinityVec, kZeroVec, mat4, prod3, rectifyTransformMatrixIfAxisAligned, vec3, vec4, transformVectorByMat4} from 'neuroglancer/util/geom';
 import {SharedObject} from 'neuroglancer/worker_rpc';
-import {ParameterizedVolumeChunkSource} from 'neuroglancer/sliceview/backend';
 
 export {DATA_TYPE_BYTES, DataType};
 
@@ -392,7 +391,7 @@ export class SliceViewBase extends SharedObject {
     let stackSource: VolumeChunkSource | undefined = sources.find(function(source:VolumeChunkSource){
       return !!source.spec.stack
     });
-    if(stackSource !== undefined && stackSource.spec !== undefined && stackSource instanceof ParameterizedVolumeChunkSource){
+    if(stackSource !== undefined && stackSource.spec !== undefined && instanceOfParameterizedVolumeChunkSource(stackSource)){
       //clone visibleSources
       visibleSources = new Map(visibleSources.entries())
       visibleSources.delete(stackSource);
@@ -1092,6 +1091,14 @@ export class VolumeChunkSpecification {
 };
 
 export interface VolumeChunkSource { spec: VolumeChunkSpecification; }
+
+/* needed to cheat to avoid type issue or circular reference when determining if source has parameters
+hopefully I will come up with a better way to do this
+*/
+interface ParameterizedVolumeChunkSource extends VolumeChunkSource { parameters: any; }
+function instanceOfParameterizedVolumeChunkSource(object: any): object is ParameterizedVolumeChunkSource {
+    return 'parameters' in object;
+}
 
 export const SLICEVIEW_RPC_ID = 'SliceView';
 export const SLICEVIEW_RENDERLAYER_RPC_ID = 'sliceview/RenderLayer';

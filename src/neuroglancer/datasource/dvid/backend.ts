@@ -24,7 +24,7 @@ import {decodeJpegChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/jpe
 import {decodeRawChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/raw';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {VolumeType} from 'neuroglancer/sliceview/base';
-import {decodeSwcSkeletonChunk} from 'neuroglancer/sliceview/decode_swc_skeleton';
+import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
 import {Endianness} from 'neuroglancer/util/endian';
 import {vec3, vec4} from 'neuroglancer/util/geom';
 import {openShardedHttpRequest, sendHttpRequest} from 'neuroglancer/util/http_request';
@@ -125,7 +125,7 @@ export class SkeletonSource extends ParameterizedSkeletonSource<SkeletonSourcePa
 };
 
 function decodeSkeletonChunk(chunk: SkeletonChunk, result: string) {
-  decodeSwcSkeletonChunk(chunk, result, Endianness.LITTLE);
+  decodeSwcSkeletonChunk(chunk, result);
 }
 
 @registerChunkSource(StackParameters)
