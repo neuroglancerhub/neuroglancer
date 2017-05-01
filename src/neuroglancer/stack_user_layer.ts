@@ -4,9 +4,8 @@ import {MultiscaleVolumeChunkSource, SliceView, VolumeChunkSource, defineParamet
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {StackRenderLayer} from 'neuroglancer/sliceview/stack_renderlayer';
 import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
-import {LayerListSpecification} from 'neuroglancer/layer_specification';
+import {LayerListSpecification, registerLayerType, registerVolumeLayerType, getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {DataType, SLICEVIEW_RPC_ID, SliceViewBase, VolumeChunkSource as GenericVolumeChunkSource, VolumeChunkSpecification, VolumeType} from 'neuroglancer/sliceview/base';
-import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 
 
 export class StackUserLayer extends UserLayer {
@@ -33,3 +32,6 @@ export class StackUserLayer extends UserLayer {
     return x;
   }
 }
+
+registerLayerType('stack', StackUserLayer);
+registerVolumeLayerType(VolumeType.STACK, StackUserLayer);

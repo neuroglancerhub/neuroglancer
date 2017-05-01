@@ -17,8 +17,7 @@
 import {CoordinateTransform} from 'neuroglancer/coordinate_transform';
 import {getMeshSource, getSkeletonSource} from 'neuroglancer/datasource/factory';
 import {UserLayer, UserLayerDropdown} from 'neuroglancer/layer';
-import {LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
-import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
+import {LayerListSpecification, registerLayerType, registerVolumeLayerType, getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {MeshLayer} from 'neuroglancer/mesh/frontend';
 import {Overlay} from 'neuroglancer/overlay';
@@ -339,3 +338,5 @@ class ShaderCodeOverlay extends Overlay {
 
 }
 
+registerLayerType('segmentation', SegmentationUserLayer);
+registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);

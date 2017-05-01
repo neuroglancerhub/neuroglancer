@@ -654,7 +654,8 @@ export enum VolumeType {
   UNKNOWN,
   IMAGE,
   SEGMENTATION,
-  STACK
+  STACK,
+  METRIC
 }
 
 /**

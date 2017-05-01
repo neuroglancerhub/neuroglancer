@@ -19,7 +19,6 @@ import {getVolume, GetVolumeOptions} from 'neuroglancer/datasource/factory';
 import {LayerManager, LayerSelectedValues, ManagedUserLayer, UserLayer} from 'neuroglancer/layer';
 import {VoxelSize} from 'neuroglancer/navigation_state';
 import {SegmentationMetricUserLayer} from 'neuroglancer/segmentation_metric_user_layer';
-import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {VolumeType} from 'neuroglancer/sliceview/base';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/frontend';
 import {StatusMessage} from 'neuroglancer/status';
@@ -102,15 +101,6 @@ export class LayerListSpecification extends RefCounted implements Trackable {
       throw new Error(`Expected boolean, but received: ${JSON.stringify(x)}.`);
     });
 
-    if (layerType === 'metric') {
-      let metricData = spec['metricData'];
-      let metricLayer = new SegmentationMetricUserLayer(this, spec, metricData);
-      let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
-      managedLayer.layer = metricLayer;
-      managedLayer.visible = visible;
-
-      return managedLayer;
-    }
 
     let managedLayer = new ManagedUserLayerWithSpecification(name, spec, this);
     managedLayer.visible = visible;
@@ -133,10 +123,6 @@ export class LayerListSpecification extends RefCounted implements Trackable {
           throw new Error(`Unsupported volume type: ${VolumeType[source.volumeType]}.`);
         }
       });
-    } else if (layerType === 'segmentation') {
-      managedLayer.layer = new SegmentationUserLayer(this, spec);
-    } else if (layerType === 'stack'){
-      managedLayer.layer = new StackUserLayer(this, spec);
     } else {
       let layerConstructor = layerTypes.get(layerType);
       if (layerConstructor !== undefined) {

@@ -17,8 +17,7 @@
 import {each} from 'lodash';
 import {RenderLayer} from 'neuroglancer/layer';
 import {MetricDropdown} from 'neuroglancer/layer_dropdown';
-import {LayerListSpecification} from 'neuroglancer/layer_specification';
-import {getVolumeWithStatusMessage} from 'neuroglancer/layer_specification';
+import {getVolumeWithStatusMessage, LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 import {CustomColorSegmentationRenderLayer} from 'neuroglancer/sliceview/custom_color_segmentation_renderlayer';
 import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_renderlayer';
@@ -41,9 +40,9 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
   currentLayerName: TrackableValue<string>;
   prevLayerName: string;
 
-  constructor(public manager: LayerListSpecification, x: any, metricData: any) {
+  constructor(public manager: LayerListSpecification, x: any) {
     super(manager, x);
-
+    let metricData: any = x['metricData'];
     // bookkeeping and setup for toggling the color state
     this.visibleLayer = this.segmentationLayer;
     this.currentLayerName = new TrackableValue<string>('Random Colors', verifyString);
@@ -194,3 +193,7 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
 
   makeDropdown(element: HTMLDivElement) { return new MetricDropdown(element, this); }
 };
+
+
+registerLayerType('metrix', SegmentationMetricUserLayer);
+registerVolumeLayerType(VolumeType.METRIC, SegmentationMetricUserLayer);
