@@ -18,17 +18,10 @@
  * @file Main entry point for default neuroglancer viewer.
  */
 // import {setupDefaultViewer} from 'neuroglancer/ui/default_viewer_setup';
-import {makeDefaultViewer} from 'neuroglancer/default_viewer';
-import {makeDefaultKeyBindings} from 'neuroglancer/default_key_bindings';
-// window.addEventListener('DOMContentLoaded', () => {
-//   const viewer = setupDefaultViewer();
-// });
-
-// let neuroglancerElement =
+import {setupDefaultViewer} from 'neuroglancer/ui/default_viewer_setup';
 
 export function InitializeNeuroglancer(config: any) {
-  let viewer = (<any>window)['viewer'] = makeDefaultViewer(config);
-  makeDefaultKeyBindings(viewer.keyMap);
+  let viewer = (<any>window)['viewer'] = setupDefaultViewer(config);
 }
 
 (<any>window).InitializeNeuroglancer = InitializeNeuroglancer

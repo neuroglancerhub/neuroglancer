@@ -16,40 +16,41 @@
 
 import {each} from 'lodash';
 import {RenderLayer} from 'neuroglancer/layer';
-import {MetricDropdown} from 'neuroglancer/layer_dropdown';
 import {getVolumeWithStatusMessage, LayerListSpecification, registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
-import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
+import {SegmentationUserLayer, SegmentationDropdown} from 'neuroglancer/segmentation_user_layer';
 import {CustomColorSegmentationRenderLayer} from 'neuroglancer/sliceview/custom_color_segmentation_renderlayer';
-import {SegmentationRenderLayer} from 'neuroglancer/sliceview/segmentation_renderlayer';
+import {SegmentationRenderLayer, SliceViewSegmentationDisplayState} from 'neuroglancer/sliceview/segmentation_renderlayer';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {verifyString} from 'neuroglancer/util/json';
 import {MetricKeyData, mapMetricsToColors} from 'neuroglancer/util/metric_color_util';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {Uint64Set} from 'neuroglancer/uint64_set';
 import {vec3} from 'neuroglancer/util/geom';
 import {VolumeType} from 'neuroglancer/sliceview/base';
+import {SegmentationDisplayState3D} from 'neuroglancer/segmentation_display_state/frontend';
+import {RangeWidget} from 'neuroglancer/widget/range';
+import {MetricScaleWidget} from 'neuroglancer/widget/metric_scale_widget';
+import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
+import {ColorSelect} from 'neuroglancer/widget/color_select';
 
 require('./segmentation_user_layer.css');
 
 export class SegmentationMetricUserLayer extends SegmentationUserLayer {
   colorPath: string|undefined;
   metricLayer: CustomColorSegmentationRenderLayer;
+  metricDisplayState: SliceViewSegmentationDisplayState;
   selectedAlphaStash: number;
   notSelectedAlphaStash: number;
   segLayers: Map<string, SegmentationRenderLayer> = new Map<string, SegmentationRenderLayer>();
   visibleLayer: SegmentationRenderLayer | CustomColorSegmentationRenderLayer;
   currentLayerName: TrackableValue<string>;
   prevLayerName: string;
+  dropdown: MetricDropdown | undefined;
 
   constructor(public manager: LayerListSpecification, x: any) {
     super(manager, x);
     let metricData: any = x['metricData'];
     // bookkeeping and setup for toggling the color state
-    this.visibleLayer = this.segmentationLayer;
-    this.currentLayerName = new TrackableValue<string>('Random Colors', verifyString);
-    this.prevLayerName = this.currentLayerName.value;
-    this.segLayers.set('Random Colors', this.segmentationLayer);
-    this.segmentationLayer.layerPosition = 0;
-
 
     if (this.volumePath !== undefined) {
       let metrics = new Map<string, MetricKeyData>();
@@ -64,17 +65,34 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
       this.addMetricLayer(metrics);
 
     }
+    this.currentLayerName = new TrackableValue<string>('Random Colors', verifyString);
+  }
+
+  initializeSegLayer(volume: any){
+    super.initializeSegLayer(volume);
+    this.visibleLayer = this.segmentationLayer;
+    this.prevLayerName = this.currentLayerName.value;
+    this.segLayers.set('Random Colors', this.segmentationLayer);
+    if(this.dropdown){
+      this.dropdown.colorSelectWidget.addOption('Random Colors');
+    }
   }
 
   addMetricLayer(metrics: Map<string, MetricKeyData>) {
     let {manager} = this;
 
     // promise for color renderlayer--gets its own copy of the data
+    this.metricDisplayState = Object.assign({}, this.displayState, {
+      selectedAlpha: trackableAlphaValue(0.5),
+      notSelectedAlpha: trackableAlphaValue(0),
+      visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
+    });
+
     getVolumeWithStatusMessage(manager.chunkManager, this.volumePath!, {
        volumeType: VolumeType.SEGMENTATION
     }).then(volume => {
         if (!this.wasDisposed) {
-          this.metricLayer = new CustomColorSegmentationRenderLayer(volume, this.displayState, metrics);
+          this.metricLayer = new CustomColorSegmentationRenderLayer(volume, this.metricDisplayState, metrics);
           this.addRenderLayer(this.metricLayer);
           // start by showing the segmentation layer
           this.hideLayer(this.metricLayer);
@@ -84,10 +102,13 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
 
           for (let name of metrics.keys()) {
             this.segLayers.set(name, this.metricLayer);
+            if(this.dropdown){
+              this.dropdown.colorSelectWidget.addOption(name);
+            }
           }
 
           this.metricLayer.layerPosition = this.renderLayers.length - 1;
-          this.displayState.visibleSegments.changed.add(this.syncMetricVisibleSegments);
+          this.displayState.visibleSegments.changed.add(this.syncMetricVisibleSegments.bind(this));
 
       }
     });
@@ -97,9 +118,9 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
   toJSON() {
     let x: any = super.toJSON();
     x['type'] = 'metric';
-    if (!x['selectedAlpha']) {
-      x['selectedAlpha'] = this.selectedAlphaStash;
-    }
+    x['selectedAlpha'] = this.segmentationLayer.displayState.selectedAlpha.value || 
+      this.metricLayer.displayState.selectedAlpha.value;
+
     return x;
   }
 
@@ -191,9 +212,68 @@ export class SegmentationMetricUserLayer extends SegmentationUserLayer {
     layer.displayState.notSelectedAlpha.value = 0;
   }
 
-  makeDropdown(element: HTMLDivElement) { return new MetricDropdown(element, this); }
+  makeDropdown(element: HTMLDivElement) { 
+    this.dropdown = new MetricDropdown(element, this, this.metricDisplayState);
+    return this.dropdown;
+  }
 };
 
+class MetricDropdown extends SegmentationDropdown {
+  metricSelectedAlphaWidget =
+      this.registerDisposer(new RangeWidget(this.metricLayerDisplayState.selectedAlpha));
+  metricNotSelectedAlphaWidget =
+      this.registerDisposer(new RangeWidget(this.metricLayerDisplayState.notSelectedAlpha));
+  colorSelectWidget = this.registerDisposer(
+      new ColorSelect(Array.from(this.layer.segLayers.keys()), this.layer.currentLayerName));
+  metricScaleWidget: MetricScaleWidget;
 
-registerLayerType('metrix', SegmentationMetricUserLayer);
+  constructor(public element: HTMLDivElement, public layer: SegmentationMetricUserLayer, public metricLayerDisplayState: SliceViewSegmentationDisplayState) {
+    super(element, layer);
+
+    element.insertBefore(this.metricNotSelectedAlphaWidget.element, element.firstChild);
+    element.insertBefore(this.metricSelectedAlphaWidget.element, element.firstChild);
+    element.appendChild(this.colorSelectWidget.element);
+
+    this.metricSelectedAlphaWidget.element.style.display = 'none';
+    this.metricNotSelectedAlphaWidget.element.style.display = 'none';
+    this.metricSelectedAlphaWidget.promptElement.textContent = 'Opacity (on)';
+    this.metricNotSelectedAlphaWidget.promptElement.textContent = 'Opacity (off)';
+
+    this.registerDisposer(layer.currentLayerName.changed.add(() => {
+      this.updateDropdown();
+      this.layer.updateCurrentSegLayer();
+    }));
+  }
+
+  updateDropdown() {
+    if (this.layer.shouldUpdateLayers()) {
+      this.toggleSliders();
+    }
+    if (this.metricScaleWidget) {
+      this.metricScaleWidget.dispose();
+    }
+    let metric = this.layer.metricLayer.metrics.get(this.layer.currentLayerName.value);
+    if (metric) {
+      this.metricScaleWidget = this.registerDisposer(new MetricScaleWidget(metric));
+      this.element.appendChild(this.metricScaleWidget.element);
+    }
+  }
+
+  toggleSliders() {
+    if (this.layer.visibleLayer != this.layer.metricLayer) {
+      // new layer is the metric layer
+      this.metricSelectedAlphaWidget.element.style.display = 'flex';
+      this.metricNotSelectedAlphaWidget.element.style.display = 'flex';
+      this.selectedAlphaWidget.element.style.display = 'none';
+      this.notSelectedAlphaWidget.element.style.display = 'none';
+    } else {
+      this.metricSelectedAlphaWidget.element.style.display = 'none';
+      this.metricNotSelectedAlphaWidget.element.style.display = 'none';
+      this.selectedAlphaWidget.element.style.display = 'flex';
+      this.notSelectedAlphaWidget.element.style.display = 'flex';
+    }
+  }
+};
+
+registerLayerType('metric', SegmentationMetricUserLayer);
 registerVolumeLayerType(VolumeType.METRIC, SegmentationMetricUserLayer);

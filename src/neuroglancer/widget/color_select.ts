@@ -16,10 +16,7 @@ export class ColorSelect extends RefCounted {
     select.name = 'colorselect';
 
     for (let optionStr of options) {
-      let optionEl = document.createElement('option');
-      optionEl.innerHTML = optionStr;
-      optionEl.value = optionStr;
-      select.appendChild(optionEl);
+      this.addOption(optionStr);
     }
     select.value = model.value;  // initial state
     element.appendChild(document.createTextNode('Color Options: '));
@@ -32,5 +29,13 @@ export class ColorSelect extends RefCounted {
   }
 
   update() { this.select.value = this.model.value; }
+  
+  addOption(optionStr: string) {
+      let optionEl = document.createElement('option');
+      optionEl.innerHTML = optionStr;
+      optionEl.value = optionStr;
+      this.select.appendChild(optionEl);
+  }
+  
   disposed() { removeFromParent(this.element); }
 }

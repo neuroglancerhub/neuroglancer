@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>neuroglancer</title>
+    <link rel="stylesheet" type="text/css" href="styles.css">
+  </head>
+  <body>
+      <div id="neurog-body">
+        <div id="container"></div>
+      </div>
+  <script type="text/javascript" src="janelia_test.bundle.js"></script>
+  </body>
+  <script type="text/javascript">window.addEventListener('DOMContentLoaded', () => {
+     InitializeNeuroglancer({auto_show_layer_dialog:false})
+     // setTimeout(function(){janelia.loadTestStack();}, 0);
+    });
+  </script>
+</html>

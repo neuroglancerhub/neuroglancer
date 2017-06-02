@@ -1,0 +1,473 @@
+{
+    "substacks": [
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3360,
+            "y": 2560,
+            "z": 1728,
+            "id": "0",
+            "status": 0.3059,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.07 (false merge), 0.24 (false split) <br>&nbsp&nbsp<b>size</b>: 8071237<br>&nbsp&nbsp<b>num-gt-bodies</b>: 140<br>&nbsp&nbsp<b>num-seg-bodies</b>: 200<br>&nbsp&nbsp<b>rand</b>: 1.00 (false merge), 0.95 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3616,
+            "y": 2560,
+            "z": 1728,
+            "id": "1",
+            "status": 0.9398,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.74 (false merge), 0.19 (false split) <br>&nbsp&nbsp<b>size</b>: 7606214<br>&nbsp&nbsp<b>num-gt-bodies</b>: 163<br>&nbsp&nbsp<b>num-seg-bodies</b>: 286<br>&nbsp&nbsp<b>rand</b>: 0.56 (false merge), 0.98 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3872,
+            "y": 2560,
+            "z": 1728,
+            "id": "2",
+            "status": 0.41869999999999996,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.17 (false merge), 0.24 (false split) <br>&nbsp&nbsp<b>size</b>: 6794390<br>&nbsp&nbsp<b>num-gt-bodies</b>: 313<br>&nbsp&nbsp<b>num-seg-bodies</b>: 482<br>&nbsp&nbsp<b>rand</b>: 0.94 (false merge), 0.96 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4128,
+            "y": 2560,
+            "z": 1728,
+            "id": "3",
+            "status": 1.0019,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.72 (false merge), 0.28 (false split) <br>&nbsp&nbsp<b>size</b>: 7058585<br>&nbsp&nbsp<b>num-gt-bodies</b>: 264<br>&nbsp&nbsp<b>num-seg-bodies</b>: 390<br>&nbsp&nbsp<b>rand</b>: 0.48 (false merge), 0.94 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4384,
+            "y": 2560,
+            "z": 1728,
+            "id": "4",
+            "status": 1.2376,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.94 (false merge), 0.30 (false split) <br>&nbsp&nbsp<b>size</b>: 7726651<br>&nbsp&nbsp<b>num-gt-bodies</b>: 150<br>&nbsp&nbsp<b>num-seg-bodies</b>: 295<br>&nbsp&nbsp<b>rand</b>: 0.58 (false merge), 0.98 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4640,
+            "y": 2560,
+            "z": 1728,
+            "id": "5",
+            "status": 2.4314,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 2.23 (false merge), 0.20 (false split) <br>&nbsp&nbsp<b>size</b>: 7367521<br>&nbsp&nbsp<b>num-gt-bodies</b>: 278<br>&nbsp&nbsp<b>num-seg-bodies</b>: 272<br>&nbsp&nbsp<b>rand</b>: 0.27 (false merge), 0.98 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4896,
+            "y": 2560,
+            "z": 1728,
+            "id": "6",
+            "status": 0.46399999999999997,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.26 (false merge), 0.20 (false split) <br>&nbsp&nbsp<b>size</b>: 754983<br>&nbsp&nbsp<b>num-gt-bodies</b>: 94<br>&nbsp&nbsp<b>num-seg-bodies</b>: 114<br>&nbsp&nbsp<b>rand</b>: 0.90 (false merge), 0.96 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3072,
+            "y": 2816,
+            "z": 1728,
+            "id": "7",
+            "status": 0.6738999999999999,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.07 (false merge), 0.61 (false split) <br>&nbsp&nbsp<b>size</b>: 1703064<br>&nbsp&nbsp<b>num-gt-bodies</b>: 140<br>&nbsp&nbsp<b>num-seg-bodies</b>: 212<br>&nbsp&nbsp<b>rand</b>: 0.99 (false merge), 0.71 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3328,
+            "y": 2816,
+            "z": 1728,
+            "id": "8",
+            "status": 0.47409999999999997,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.04 (false merge), 0.43 (false split) <br>&nbsp&nbsp<b>size</b>: 7703821<br>&nbsp&nbsp<b>num-gt-bodies</b>: 265<br>&nbsp&nbsp<b>num-seg-bodies</b>: 548<br>&nbsp&nbsp<b>rand</b>: 1.00 (false merge), 0.91 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3584,
+            "y": 2816,
+            "z": 1728,
+            "id": "9",
+            "status": 1.1825,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.90 (false merge), 0.28 (false split) <br>&nbsp&nbsp<b>size</b>: 8171366<br>&nbsp&nbsp<b>num-gt-bodies</b>: 269<br>&nbsp&nbsp<b>num-seg-bodies</b>: 424<br>&nbsp&nbsp<b>rand</b>: 0.42 (false merge), 0.95 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3840,
+            "y": 2816,
+            "z": 1728,
+            "id": "10",
+            "status": 0.38039999999999996,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.11 (false merge), 0.27 (false split) <br>&nbsp&nbsp<b>size</b>: 7790968<br>&nbsp&nbsp<b>num-gt-bodies</b>: 399<br>&nbsp&nbsp<b>num-seg-bodies</b>: 558<br>&nbsp&nbsp<b>rand</b>: 0.99 (false merge), 0.94 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4096,
+            "y": 2816,
+            "z": 1728,
+            "id": "11",
+            "status": 0.7693000000000001,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.50 (false merge), 0.27 (false split) <br>&nbsp&nbsp<b>size</b>: 8134881<br>&nbsp&nbsp<b>num-gt-bodies</b>: 293<br>&nbsp&nbsp<b>num-seg-bodies</b>: 497<br>&nbsp&nbsp<b>rand</b>: 0.63 (false merge), 0.94 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4352,
+            "y": 2816,
+            "z": 1728,
+            "id": "12",
+            "status": 1.1835,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.82 (false merge), 0.37 (false split) <br>&nbsp&nbsp<b>size</b>: 8622968<br>&nbsp&nbsp<b>num-gt-bodies</b>: 183<br>&nbsp&nbsp<b>num-seg-bodies</b>: 347<br>&nbsp&nbsp<b>rand</b>: 0.66 (false merge), 0.98 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4608,
+            "y": 2816,
+            "z": 1728,
+            "id": "13",
+            "status": 1.935,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 1.57 (false merge), 0.36 (false split) <br>&nbsp&nbsp<b>size</b>: 8026558<br>&nbsp&nbsp<b>num-gt-bodies</b>: 311<br>&nbsp&nbsp<b>num-seg-bodies</b>: 369<br>&nbsp&nbsp<b>rand</b>: 0.23 (false merge), 0.91 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4864,
+            "y": 2816,
+            "z": 1728,
+            "id": "14",
+            "status": 0.24120000000000003,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.05 (false merge), 0.19 (false split) <br>&nbsp&nbsp<b>size</b>: 1971236<br>&nbsp&nbsp<b>num-gt-bodies</b>: 106<br>&nbsp&nbsp<b>num-seg-bodies</b>: 147<br>&nbsp&nbsp<b>rand</b>: 0.99 (false merge), 0.94 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 2848,
+            "y": 3072,
+            "z": 1728,
+            "id": "15",
+            "status": 0.1329,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.04 (false merge), 0.10 (false split) <br>&nbsp&nbsp<b>size</b>: 7948274<br>&nbsp&nbsp<b>num-gt-bodies</b>: 75<br>&nbsp&nbsp<b>num-seg-bodies</b>: 157<br>&nbsp&nbsp<b>rand</b>: 1.00 (false merge), 0.98 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3104,
+            "y": 3072,
+            "z": 1728,
+            "id": "16",
+            "status": 0.3069,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.03 (false merge), 0.28 (false split) <br>&nbsp&nbsp<b>size</b>: 8515787<br>&nbsp&nbsp<b>num-gt-bodies</b>: 227<br>&nbsp&nbsp<b>num-seg-bodies</b>: 455<br>&nbsp&nbsp<b>rand</b>: 1.00 (false merge), 0.98 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3360,
+            "y": 3072,
+            "z": 1728,
+            "id": "17",
+            "status": 0.3255,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.08 (false merge), 0.25 (false split) <br>&nbsp&nbsp<b>size</b>: 7842666<br>&nbsp&nbsp<b>num-gt-bodies</b>: 371<br>&nbsp&nbsp<b>num-seg-bodies</b>: 624<br>&nbsp&nbsp<b>rand</b>: 0.97 (false merge), 0.94 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3616,
+            "y": 3072,
+            "z": 1728,
+            "id": "18",
+            "status": 1.3453,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 1.06 (false merge), 0.29 (false split) <br>&nbsp&nbsp<b>size</b>: 8037680<br>&nbsp&nbsp<b>num-gt-bodies</b>: 289<br>&nbsp&nbsp<b>num-seg-bodies</b>: 516<br>&nbsp&nbsp<b>rand</b>: 0.44 (false merge), 0.97 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3872,
+            "y": 3072,
+            "z": 1728,
+            "id": "19",
+            "status": 1.8527,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 1.48 (false merge), 0.37 (false split) <br>&nbsp&nbsp<b>size</b>: 8272871<br>&nbsp&nbsp<b>num-gt-bodies</b>: 253<br>&nbsp&nbsp<b>num-seg-bodies</b>: 464<br>&nbsp&nbsp<b>rand</b>: 0.31 (false merge), 0.94 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4128,
+            "y": 3072,
+            "z": 1728,
+            "id": "20",
+            "status": 1.2872,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 1.03 (false merge), 0.26 (false split) <br>&nbsp&nbsp<b>size</b>: 7616166<br>&nbsp&nbsp<b>num-gt-bodies</b>: 418<br>&nbsp&nbsp<b>num-seg-bodies</b>: 529<br>&nbsp&nbsp<b>rand</b>: 0.35 (false merge), 0.95 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4384,
+            "y": 3072,
+            "z": 1728,
+            "id": "21",
+            "status": 0.8097,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.60 (false merge), 0.21 (false split) <br>&nbsp&nbsp<b>size</b>: 7904756<br>&nbsp&nbsp<b>num-gt-bodies</b>: 381<br>&nbsp&nbsp<b>num-seg-bodies</b>: 499<br>&nbsp&nbsp<b>rand</b>: 0.53 (false merge), 0.98 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4640,
+            "y": 3072,
+            "z": 1728,
+            "id": "22",
+            "status": 0.7619,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.49 (false merge), 0.27 (false split) <br>&nbsp&nbsp<b>size</b>: 7940796<br>&nbsp&nbsp<b>num-gt-bodies</b>: 296<br>&nbsp&nbsp<b>num-seg-bodies</b>: 501<br>&nbsp&nbsp<b>rand</b>: 0.59 (false merge), 0.96 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4896,
+            "y": 3072,
+            "z": 1728,
+            "id": "23",
+            "status": 0.35140000000000005,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.20 (false merge), 0.16 (false split) <br>&nbsp&nbsp<b>size</b>: 926684<br>&nbsp&nbsp<b>num-gt-bodies</b>: 86<br>&nbsp&nbsp<b>num-seg-bodies</b>: 134<br>&nbsp&nbsp<b>rand</b>: 0.90 (false merge), 0.98 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 2848,
+            "y": 3328,
+            "z": 1728,
+            "id": "24",
+            "status": 0.3575,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.05 (false merge), 0.31 (false split) <br>&nbsp&nbsp<b>size</b>: 8097287<br>&nbsp&nbsp<b>num-gt-bodies</b>: 274<br>&nbsp&nbsp<b>num-seg-bodies</b>: 487<br>&nbsp&nbsp<b>rand</b>: 1.00 (false merge), 0.94 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3104,
+            "y": 3328,
+            "z": 1728,
+            "id": "25",
+            "status": 0.42600000000000005,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.12 (false merge), 0.30 (false split) <br>&nbsp&nbsp<b>size</b>: 7832554<br>&nbsp&nbsp<b>num-gt-bodies</b>: 294<br>&nbsp&nbsp<b>num-seg-bodies</b>: 510<br>&nbsp&nbsp<b>rand</b>: 0.98 (false merge), 0.96 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3360,
+            "y": 3328,
+            "z": 1728,
+            "id": "26",
+            "status": 0.7334,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.38 (false merge), 0.35 (false split) <br>&nbsp&nbsp<b>size</b>: 7991209<br>&nbsp&nbsp<b>num-gt-bodies</b>: 279<br>&nbsp&nbsp<b>num-seg-bodies</b>: 591<br>&nbsp&nbsp<b>rand</b>: 0.76 (false merge), 0.95 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3616,
+            "y": 3328,
+            "z": 1728,
+            "id": "27",
+            "status": 1.5893000000000002,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 1.33 (false merge), 0.26 (false split) <br>&nbsp&nbsp<b>size</b>: 8893125<br>&nbsp&nbsp<b>num-gt-bodies</b>: 144<br>&nbsp&nbsp<b>num-seg-bodies</b>: 274<br>&nbsp&nbsp<b>rand</b>: 0.42 (false merge), 0.97 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3872,
+            "y": 3328,
+            "z": 1728,
+            "id": "28",
+            "status": 1.335,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 1.06 (false merge), 0.28 (false split) <br>&nbsp&nbsp<b>size</b>: 8503305<br>&nbsp&nbsp<b>num-gt-bodies</b>: 188<br>&nbsp&nbsp<b>num-seg-bodies</b>: 289<br>&nbsp&nbsp<b>rand</b>: 0.45 (false merge), 0.97 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4128,
+            "y": 3328,
+            "z": 1728,
+            "id": "29",
+            "status": 1.4034,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 1.13 (false merge), 0.27 (false split) <br>&nbsp&nbsp<b>size</b>: 8387815<br>&nbsp&nbsp<b>num-gt-bodies</b>: 203<br>&nbsp&nbsp<b>num-seg-bodies</b>: 352<br>&nbsp&nbsp<b>rand</b>: 0.42 (false merge), 0.96 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4384,
+            "y": 3328,
+            "z": 1728,
+            "id": "30",
+            "status": 0.6013000000000001,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.36 (false merge), 0.24 (false split) <br>&nbsp&nbsp<b>size</b>: 8107147<br>&nbsp&nbsp<b>num-gt-bodies</b>: 272<br>&nbsp&nbsp<b>num-seg-bodies</b>: 432<br>&nbsp&nbsp<b>rand</b>: 0.71 (false merge), 0.94 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4640,
+            "y": 3328,
+            "z": 1728,
+            "id": "31",
+            "status": 0.6542,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.52 (false merge), 0.14 (false split) <br>&nbsp&nbsp<b>size</b>: 8902569<br>&nbsp&nbsp<b>num-gt-bodies</b>: 163<br>&nbsp&nbsp<b>num-seg-bodies</b>: 231<br>&nbsp&nbsp<b>rand</b>: 0.78 (false merge), 0.99 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 4896,
+            "y": 3328,
+            "z": 1728,
+            "id": "32",
+            "status": 0.8815,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.75 (false merge), 0.13 (false split) <br>&nbsp&nbsp<b>size</b>: 1011368<br>&nbsp&nbsp<b>num-gt-bodies</b>: 51<br>&nbsp&nbsp<b>num-seg-bodies</b>: 68<br>&nbsp&nbsp<b>rand</b>: 0.72 (false merge), 0.99 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 2848,
+            "y": 3584,
+            "z": 1728,
+            "id": "33",
+            "status": 0.6169,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.33 (false merge), 0.29 (false split) <br>&nbsp&nbsp<b>size</b>: 7990439<br>&nbsp&nbsp<b>num-gt-bodies</b>: 313<br>&nbsp&nbsp<b>num-seg-bodies</b>: 575<br>&nbsp&nbsp<b>rand</b>: 0.85 (false merge), 0.95 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3104,
+            "y": 3584,
+            "z": 1728,
+            "id": "34",
+            "status": 0.7183999999999999,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.50 (false merge), 0.22 (false split) <br>&nbsp&nbsp<b>size</b>: 8952656<br>&nbsp&nbsp<b>num-gt-bodies</b>: 152<br>&nbsp&nbsp<b>num-seg-bodies</b>: 310<br>&nbsp&nbsp<b>rand</b>: 0.75 (false merge), 0.96 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3360,
+            "y": 3584,
+            "z": 1728,
+            "id": "35",
+            "status": 0.5586,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.27 (false merge), 0.29 (false split) <br>&nbsp&nbsp<b>size</b>: 8492733<br>&nbsp&nbsp<b>num-gt-bodies</b>: 221<br>&nbsp&nbsp<b>num-seg-bodies</b>: 436<br>&nbsp&nbsp<b>rand</b>: 0.87 (false merge), 0.96 (false split) <br><div class=\"modal-footer\"></div>"
+        },
+        {
+            "width": 256,
+            "length": 256,
+            "height": 256,
+            "x": 3616,
+            "y": 3584,
+            "z": 1728,
+            "id": "36",
+            "status": 0.6335999999999999,
+            "annotations": "<br>&nbsp&nbsp<b>VI</b>: 0.34 (false merge), 0.30 (false split) <br>&nbsp&nbsp<b>size</b>: 7939142<br>&nbsp&nbsp<b>num-gt-bodies</b>: 322<br>&nbsp&nbsp<b>num-seg-bodies</b>: 539<br>&nbsp&nbsp<b>rand</b>: 0.85 (false merge), 0.95 (false split) <br><div class=\"modal-footer\"></div>"
+        }
+
+    ],
+    "colors": {
+        "0": {
+            "name": "0.02",
+            "color": "#043CDC"
+        },
+        "1": {
+            "name": "0.33",
+            "color": "#1F3AC4"
+        },
+        "2": {
+            "name": "0.64",
+            "color": "#3B38AD"
+        },
+        "3": {
+            "name": "0.95",
+            "color": "#573696"
+        },
+        "4": {
+            "name": "1.26",
+            "color": "#73347E"
+        },
+        "5": {
+            "name": "1.57",
+            "color": "#8F3367"
+        },
+        "6": {
+            "name": "1.88",
+            "color": "#AB3150"
+        },
+        "7": {
+            "name": "2.19",
+            "color": "#C72F38"
+        },
+        "8": {
+            "name": "2.51",
+            "color": "#E32D21"
+        },
+        "9": {
+            "name": "2.82",
+            "color": "#FF2C0A"
+        }
+    },
+    "element": "#stack_roi",
+    "modal": true,
+    "metadataTop": true,
+    "colorInterpolate": [
+        "White",
+        "Yellow",
+        "aquamarine",
+        "deepskyblue",
+        "mediumorchid"
+    ],
+    "canvasDimenstions": [
+        511,
+        511
+    ],
+    "stackMidpoint": {
+        "0": 3520,
+        "1": 3056,
+        "2": 4800
+    }
+}

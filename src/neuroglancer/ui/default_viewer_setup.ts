@@ -22,8 +22,8 @@ import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 /**
  * Sets up the default neuroglancer viewer.
  */
-export function setupDefaultViewer() {
-  let viewer = (<any>window)['viewer'] = makeDefaultViewer();
+export function setupDefaultViewer(config: any) {
+  let viewer = (<any>window)['viewer'] = makeDefaultViewer(config);
   makeDefaultKeyBindings(viewer.keyMap);
 
   const hashBinding = new UrlHashBinding(viewer.state);

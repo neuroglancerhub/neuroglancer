@@ -108,6 +108,7 @@ The "frontend" UI thread handles user actions and rendering, while the "backend"
 - [Compressed segmentation format](src/neuroglancer/sliceview/compressed_segmentation/README.md)
 - [Data chunk management](src/neuroglancer/chunk_manager/)
 - [On-GPU hashing](src/neuroglancer/gpu_hash/)
+- [Fly-EM long term fork notes](FLYEM_README.md)
 
 # Building
 

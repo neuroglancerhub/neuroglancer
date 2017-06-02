@@ -734,9 +734,9 @@ export class MultiscaleStackChunkSource implements GenericMultiscaleVolumeChunkS
    * @return Chunk sources for each scale, ordered by increasing minVoxelSize.  For each scale,
    * there may be alternative sources with different chunk layouts.
    */
-  getSources(chunkManager: ChunkManager){
+  getSources(_: VolumeSourceOptions){
     const stackParameters = {positions: this.positions, colors: this.colors, stackID: this.stackID}
-    let sources: StackChunkSource[][] = [[ParameterizedStackChunkSource.get(chunkManager, this.volumeSpec, stackParameters)]];
+    let sources: StackChunkSource[][] = [[ParameterizedStackChunkSource.get(this.chunkManager, this.volumeSpec, stackParameters)]];
     return sources;
   }
   getMeshSource(){ return null };

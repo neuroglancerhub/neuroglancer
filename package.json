@@ -21,12 +21,14 @@
     "test:watch": "karma start ./config/karma.conf.js --no-single-run",
     "benchmark": "karma start ./config/karma.benchmark.js --single-run",
     "benchmark:watch": "karma start ./config/karma.benchmark.js --no-single-run",
-    "gulp": "gulp"
+    "gulp": "gulp",
+    "test-janelia": "webpack-dev-server --config ./config/janeliatest_webpack.config.js"
   },
   "devDependencies": {
     "@types/jasmine": "^2.2.22-alpha",
     "babel-plugin-istanbul": "^3.0.0",
     "clang-format": "^1.0.46",
+    "copy-webpack-plugin": "^4.0.1",
     "gulp": "^3.9.1",
     "gulp-clang-format": "^1.0.23",
     "gulp-tslint": "^7.0.1",

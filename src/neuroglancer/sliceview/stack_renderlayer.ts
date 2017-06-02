@@ -11,7 +11,7 @@ export class StackRenderLayer extends RenderLayer {
   opacity = trackableAlphaValue(0.5);
   constructor(stackSource: MultiscaleVolumeChunkSource) {
     
-    super(stackSource);
+    super(stackSource, {volumeSourceOptions: {}});
   }
     getShaderKey() { return `sliceview.StackRenderLayer`; }
   
@@ -92,7 +92,7 @@ void emitRGBA(vec4 rgba) {
           let newChunkDataSize = chunk.chunkDataSize;
 
           if (newChunkDataSize !== chunkDataSize) {
-            setChunkDataSize(newChunkDataSize);
+            setChunkDataSize(vec3.fromValues(4,4,4));
           }
 
           vec3.scale(chunkPosition, chunk.chunkGridPosition, source.spec.dataScaler);

@@ -111,7 +111,8 @@ export class SegmentationUserLayer extends UserLayer {
         volumeType: VolumeType.SEGMENTATION
       }).then(volume => {
         if (!this.wasDisposed) {
-          this.addRenderLayer(new SegmentationRenderLayer(volume, this.displayState));
+          this.initializeSegLayer(volume);
+
           if (meshPath === undefined) {
             let meshSource = volume.getMeshSource();
             if (meshSource != null) {
@@ -154,6 +155,13 @@ export class SegmentationUserLayer extends UserLayer {
         });
       }
     });
+  }
+
+  initializeSegLayer(volume: any){
+    this.segmentationLayer = new SegmentationRenderLayer(volume, this.displayState);
+    this.addRenderLayer(this.segmentationLayer);
+
+    this.segmentationLayer.layerPosition = 0;
   }
 
   addMesh(meshSource: MeshSource) {
