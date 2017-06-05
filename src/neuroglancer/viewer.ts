@@ -68,7 +68,7 @@ export class Viewer extends RefCounted implements ViewerState {
   layerPanel: LayerPanel;
   layerSelectedValues =
       this.registerDisposer(new LayerSelectedValues(this.layerManager, this.mouseState));
-  worker = new RPC(new Worker('chunk_worker.bundle.js'));
+  worker: RPC;
   resetInitiated = new NullarySignal();
 
   chunkQueueManager = new ChunkQueueManager(this.worker, this.display.gl, {
@@ -89,6 +89,13 @@ export class Viewer extends RefCounted implements ViewerState {
   constructor(public display: DisplayContext, config: any) {
     super();
 
+    //allow neuroglancer source code to be deployed in a subdirectory
+    let source_folder = '';
+    if(config['source_folder']){
+      source_folder = config['source_folder'];
+    }
+
+    this.worker = new RPC(new Worker(source_folder + 'chunk_worker.bundle.js'));
     this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
     this.registerDisposer(display.updateFinished.add(() => { this.onUpdateDisplayFinished(); }));
 
