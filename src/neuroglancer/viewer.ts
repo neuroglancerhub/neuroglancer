@@ -71,17 +71,11 @@ export class Viewer extends RefCounted implements ViewerState {
   worker: RPC;
   resetInitiated = new NullarySignal();
 
-  chunkQueueManager = new ChunkQueueManager(this.worker, this.display.gl, {
-    gpuMemory: new AvailableCapacity(1e6, 1e9),
-    systemMemory: new AvailableCapacity(1e7, 2e9),
-    download: new AvailableCapacity(32, Number.POSITIVE_INFINITY)
-  });
-  chunkManager = new ChunkManager(this.chunkQueueManager);
+  chunkQueueManager: ChunkQueueManager;
+  chunkManager: ChunkManager;
   keyMap = new KeySequenceMap();
   keyCommands = new Map<string, (this: Viewer) => void>();
-  layerSpecification = new LayerListSpecification(
-      this.layerManager, this.chunkManager, this.worker, this.layerSelectedValues,
-      this.navigationState.voxelSize);
+  layerSpecification: LayerListSpecification;
   layoutName = new TrackableValue<string>(LAYOUTS[0][0], validateLayoutName);
 
   state = new CompoundTrackable();
@@ -96,6 +90,18 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     this.worker = new RPC(new Worker(source_folder + 'chunk_worker.bundle.js'));
+    this.chunkQueueManager = new ChunkQueueManager(this.worker, this.display.gl, {
+      gpuMemory: new AvailableCapacity(1e6, 1e9),
+      systemMemory: new AvailableCapacity(1e7, 2e9),
+      download: new AvailableCapacity(32, Number.POSITIVE_INFINITY)
+    });
+    this.chunkManager = new ChunkManager(this.chunkQueueManager);
+
+    this.layerSpecification = new LayerListSpecification(
+      this.layerManager, this.chunkManager, this.worker, this.layerSelectedValues,
+      this.navigationState.voxelSize);
+
+
     this.registerDisposer(display.updateStarted.add(() => { this.onUpdateDisplay(); }));
     this.registerDisposer(display.updateFinished.add(() => { this.onUpdateDisplayFinished(); }));
 
