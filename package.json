@@ -1,6 +1,6 @@
 {
   "name": "neuroglancer",
-  "description": "Visualization tool for 3-D volumetric data.",
+  "description": "Package management for FlyEM builds for Neuroglancer.",
   "license": "Apache-2.0",
   "version": "0.0.0-beta.0",
   "repository": {
@@ -22,7 +22,8 @@
     "benchmark": "karma start ./config/karma.benchmark.js --single-run",
     "benchmark:watch": "karma start ./config/karma.benchmark.js --no-single-run",
     "gulp": "gulp",
-    "test-janelia": "webpack-dev-server --config ./config/janeliatest_webpack.config.js"
+    "test-janelia": "webpack-dev-server --config ./config/janeliatest_webpack.config.js",
+    "build-janelia-release": "webpack --config ./config/janelia.webpack.min.js --display-modules"
   },
   "devDependencies": {
     "@types/jasmine": "^2.2.22-alpha",
@@ -48,7 +49,8 @@
     "nunjucks": "^3.0.0",
     "tslint": "^4.0.2",
     "tslint-eslint-rules": "^3.2.0",
-    "webpack-dev-server": "^2.2.0"
+    "webpack-dev-server": "^2.2.0",
+    "webpack-shell-plugin": "^0.5.0"
   },
   "dependencies": {
     "@types/codemirror": "0.0.22-alpha",

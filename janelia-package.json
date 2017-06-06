@@ -1,0 +1,16 @@
+{
+  "name": "neuroglancer",
+  "description": "Package management for FlyEM builds of Neuroglancer.",
+  "license": "Apache-2.0",
+  "version": "0.0.0-beta.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janelia-flyem/neuroglancer.git"
+  },
+  "scripts": {
+  },
+  "devDependencies": {
+  },
+  "dependencies": {
+  }
+}

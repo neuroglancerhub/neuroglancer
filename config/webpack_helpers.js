@@ -205,7 +205,7 @@ function getBaseConfig(options) {
     if (options.outputPath === undefined) {
       throw new Error('options.outputPath must be specified.');
     }
-    baseConfig.output = {filename: '[name].bundle.js', path: options.outputPath, sourcePrefix: ''};
+    baseConfig.output = {filename: options.filename||'[name].bundle.js', path: options.outputPath, sourcePrefix: ''};
   }
   return baseConfig;
 }
