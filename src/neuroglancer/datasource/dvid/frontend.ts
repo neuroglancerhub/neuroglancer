@@ -290,6 +290,7 @@ export function parseDataInstance(
       return new TileDataInstanceInfo(obj, name, baseInfo);
     case 'labels64':
     case 'labelblk':
+    case 'labelarray':
       return new VolumeDataInstanceInfo(
           obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATION, instanceNames);
     default:
