@@ -70,9 +70,13 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
   getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array) {
     let params = this.parameters;
     if (params.encoding === VolumeChunkEncoding.JPEG) {
-      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/subvolblocks/` +
-          `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
-          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}`;
+            return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/subvolblocks/` +
+                  `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
+                  `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}`;
+    } else if (params.encoding === VolumeChunkEncoding.RAW)  {
+            return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+                  `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
+                  `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
     } else {
       // encoding is COMPRESSED_SEGMENTATION
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
@@ -81,7 +85,7 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
     }
   }
   getDecoder(params: any) {
-    if (params.encoding === VolumeChunkEncoding.JPEG) {
+    if (params.encoding === VolumeChunkEncoding.JPEG || params.encoding === VolumeChunkEncoding.RAW) {
       return decodeJpegChunk;
     } else {
       // encoding is COMPRESSED_SEGMENTATION

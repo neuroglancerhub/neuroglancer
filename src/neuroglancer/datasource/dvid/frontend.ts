@@ -44,6 +44,10 @@ export class DataInstanceBaseInfo {
     return this.obj['TypeName'];
   }
 
+  get compressionStr(): string {
+    return this.obj['Compression'];
+  }
+
   constructor(public obj: any) {
     verifyObject(obj);
     verifyObjectProperty(obj, 'TypeName', verifyString);
@@ -284,8 +288,14 @@ export function parseDataInstance(
   switch (baseInfo.typeName) {
     case 'uint8blk':
     case 'grayscale8':
-      return new VolumeDataInstanceInfo(
+      let jpegcompress = baseInfo.compressionStr.indexOf("jpeg") !== -1;
+      if (jpegcompress) {
+        return new VolumeDataInstanceInfo(
           obj, name, baseInfo, VolumeChunkEncoding.JPEG, instanceNames);
+      } else {
+        return new VolumeDataInstanceInfo(
+          obj, name, baseInfo, VolumeChunkEncoding.RAW, instanceNames);
+      }
     case 'imagetile':
       return new TileDataInstanceInfo(obj, name, baseInfo);
     case 'labels64':

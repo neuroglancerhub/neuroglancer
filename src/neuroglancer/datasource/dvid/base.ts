@@ -17,6 +17,7 @@ import {VolumeType} from 'neuroglancer/sliceview/base';
 
 export enum VolumeChunkEncoding {
   JPEG,
+  RAW,
   COMPRESSED_SEGMENTATION
 }
 
