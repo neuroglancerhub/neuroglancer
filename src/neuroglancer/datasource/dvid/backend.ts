@@ -57,16 +57,22 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
       path = this.getPath(chunkPosition, chunkDataSize);
     }
     let decoder = this.getDecoder(params);
-    return sendHttpRequest(
-               openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken)
-        .then(response => decoder(chunk, response));
+    if (params.encoding === VolumeChunkEncoding.JPEG) {
+        return sendHttpRequest(
+                                openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken)
+                                .then(response => decoder(chunk, response.slice(16)));
+    } else {
+        return sendHttpRequest(
+                                openShardedHttpRequest(params.baseUrls, path), 'arraybuffer', cancellationToken)
+                                .then(response => decoder(chunk, response));
+    }
   }
   getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array) {
     let params = this.parameters;
     if (params.encoding === VolumeChunkEncoding.JPEG) {
-      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/subvolblocks/` +
           `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
-          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
+          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}`;
     } else {
       // encoding is COMPRESSED_SEGMENTATION
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
