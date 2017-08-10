@@ -79,15 +79,22 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       throw new Error(
           'Expected Extended.Values property to have length >= 1, but received: ${JSON.stringify(extendedValues)}.');
     }
-    this.numLevels = 1;
 
-    // dvid does not have explicit datatype support for multiscale but
-    // by convention different levels are specified with unique
-    // instances where levels are distinguished by the suffix '_LEVELNUM'
-    let instSet = new Set<string>(instanceNames);
-    while (instSet.has(name + '_' + this.numLevels.toString())) {
-      this.numLevels += 1;
-    }
+    this.numLevels = 1
+    if (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) {
+      //this.numLevels = 4; // hard-code hack if "MaxDownresLevel" is not supported
+      // retrieve maximum downres level
+      let maxdownreslevel = verifyObjectProperty(extended, 'MaxDownresLevel', verifyPositiveInt);
+      this.numLevels = maxdownreslevel + 1  
+    } else {
+      // dvid does not have explicit datatype support for multiscale but
+      // by convention different levels are specified with unique
+      // instances where levels are distinguished by the suffix '_LEVELNUM'
+      let instSet = new Set<string>(instanceNames);
+      while (instSet.has(name + '_' + this.numLevels.toString())) {
+        this.numLevels += 1;
+      }
+    } 
 
     this.dataType =
         verifyObjectProperty(extendedValues[0], 'DataType', x => verifyMapKey(x, serverDataTypes));
@@ -99,7 +106,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
 
   get volumeType() {
     return (
-        this.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ? VolumeType.SEGMENTATION :
+        (this.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION || this.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) ? VolumeType.SEGMENTATION :
                                                                         VolumeType.IMAGE);
   }
 
@@ -119,14 +126,18 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
             Math.ceil(this.upperVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
       }
       let dataInstanceKey = parameters.dataInstanceKey;
-      if (level > 0) {
-        dataInstanceKey += '_' + level.toString();
+      
+      if (encoding !== VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) {
+        if (level > 0) {
+          dataInstanceKey += '_' + level.toString();
+        }
       }
 
       let volParameters: VolumeChunkSourceParameters = {
         'baseUrls': parameters.baseUrls,
         'nodeKey': parameters.nodeKey,
         'dataInstanceKey': dataInstanceKey,
+        'dataScale': level.toString(),
         'encoding': encoding,
       };
       let alternatives =
@@ -142,7 +153,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
                 volumeType: this.volumeType,
                 volumeSourceOptions,
                 compressedSegmentationBlockSize:
-                    (encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ?
+                    ((encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION || encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) ?
                          vec3.fromValues(8, 8, 8) :
                          undefined)
               })
@@ -300,9 +311,11 @@ export function parseDataInstance(
       return new TileDataInstanceInfo(obj, name, baseInfo);
     case 'labels64':
     case 'labelblk':
-    case 'labelarray':
       return new VolumeDataInstanceInfo(
           obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATION, instanceNames);
+    case 'labelarray':
+      return new VolumeDataInstanceInfo(
+          obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY, instanceNames);
     default:
       throw new Error(`DVID data type ${JSON.stringify(baseInfo.typeName)} is not supported.`);
   }
@@ -463,7 +476,7 @@ export class MultiscaleVolumeChunkSource implements GenericMultiscaleVolumeChunk
         this.chunkManager, {
           'baseUrls': this.baseUrls,
           'nodeKey': this.nodeKey,
-          'dataInstanceKey': this.dataInstanceKey,
+          'dataInstanceKey': this.dataInstanceKey
         },
         volumeSourceOptions);
   }

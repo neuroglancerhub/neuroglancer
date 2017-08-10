@@ -77,11 +77,15 @@ class VolumeChunkSource extends ParameterizedVolumeChunkSource<VolumeChunkSource
             return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
                   `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
                   `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}/jpeg`;
+    } else if (params.encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY)  {
+            return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+              `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
+              `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip&scale=${params['dataScale']}`;
     } else {
-      // encoding is COMPRESSED_SEGMENTATION
-      return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
-          `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
-          `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip`;
+            // encoding is COMPRESSED_SEGMENTATION
+            return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/raw/0_1_2/` +
+                `${chunkDataSize[0]}_${chunkDataSize[1]}_${chunkDataSize[2]}/` +
+                `${chunkPosition[0]}_${chunkPosition[1]}_${chunkPosition[2]}?compression=googlegzip`;
     }
   }
   getDecoder(params: any) {

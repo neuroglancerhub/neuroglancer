@@ -18,7 +18,8 @@ import {VolumeType} from 'neuroglancer/sliceview/base';
 export enum VolumeChunkEncoding {
   JPEG,
   RAW,
-  COMPRESSED_SEGMENTATION
+  COMPRESSED_SEGMENTATION,
+  COMPRESSED_SEGMENTATIONARRAY
 }
 
 export class DVIDSourceParameters {
@@ -28,10 +29,11 @@ export class DVIDSourceParameters {
 }
 
 export class VolumeChunkSourceParameters extends DVIDSourceParameters {
+  dataScale: string;
   encoding: VolumeChunkEncoding;
   static RPC_ID = 'dvid/VolumeChunkSource';
   static stringify(parameters: VolumeChunkSourceParameters) {
-    return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}`;
+    return `dvid:volume:${parameters['baseUrls'][0]}/${parameters['nodeKey']}/${parameters['dataInstanceKey']}/${parameters['dataScale']}`;
   }
 };
 
