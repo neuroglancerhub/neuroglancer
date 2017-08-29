@@ -10,8 +10,8 @@ export function mapMetricsToColors(
   let metricIteratee = function(el: ArrayLike<number>) {
     return el[1];  // metric value
   };
-  let min = metricKeyData.min = minBy(IdMetricMap, metricIteratee)[1];
-  let max = metricKeyData.max = maxBy(IdMetricMap, metricIteratee)[1];
+  let min = metricKeyData.min = minBy(IdMetricMap, metricIteratee)![1];
+  let max = metricKeyData.max = maxBy(IdMetricMap, metricIteratee)![1];
   let scale = metricKeyData.chromaScale = chroma!.scale(colors).domain([min, max]);
 
   for (let i = 0, len = IdMetricMap.length; i < len; i++) {
