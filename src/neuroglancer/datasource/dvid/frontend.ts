@@ -763,7 +763,9 @@ export class MultiscaleStackChunkSource implements GenericMultiscaleVolumeChunkS
     let sources: StackChunkSource[][] = [[ParameterizedStackChunkSource.get(this.chunkManager, this.volumeSpec, stackParameters)]];
     return sources;
   }
-  getMeshSource(){ return null };
+  getMeshSource() : null {
+    return null;
+  }
 }
 
 type stackinfo = {
