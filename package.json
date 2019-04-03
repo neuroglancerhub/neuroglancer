@@ -3,6 +3,7 @@
   "description": "Visualization tool for 3-D volumetric data.",
   "license": "Apache-2.0",
   "version": "0.0.0-beta.0",
+  "main": "trans/main_module.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/google/neuroglancer.git"
@@ -12,8 +13,8 @@
   },
   "scripts": {
     "generate-code": "node ./config/generate_code.js",
-    "build-min": "webpack --config ./config/webpack.config.js --env=min",
-    "build": "webpack --config ./config/webpack.config.js --env=dev",
+    "build-min": "webpack --config ./config/webpack.config.js --env=min && tsc --outDir ./lib && babel lib --out-dir trans",
+    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./lib && babel lib --quiet --out-dir trans",
     "build-python": "webpack --config ./config/webpack.config.js --env=python-dev",
     "build-python-min": "webpack --config ./config/webpack.config.js --env=python-min",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",
@@ -27,6 +28,12 @@
   },
   "devDependencies": {
     "@types/jasmine": "^3.3.12",
+    "babel-cli": "^6.26.0",
+    "babel-plugin-import-noop": "^1.0.1",
+    "babel-plugin-module-resolver": "^3.2.0",
+    "babel-plugin-syntax-dynamic-import": "^6.18.0",
+    "babel-plugin-transform-runtime": "^6.23.0",
+    "babel-preset-env": "^1.7.0",
     "benchmark": "^2.1.4",
     "clang-format": "^1.2.4",
     "copy-webpack-plugin": "^5.0.2",
