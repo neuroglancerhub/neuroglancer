@@ -15,6 +15,14 @@ import {registerProvider} from 'neuroglancer/datasource/default_provider';
  * Sets up the default neuroglancer viewer.
  */
 // TODO: options here could enable or disable datasources.
+
+// TODO: need to check for webGL2 support
+// const gl = document.createElement('canvas').getContext('webgl2');
+// if (!gl) {
+//   console.log('your browser/OS/drivers do not support WebGL2');
+// } else {
+//   console.log('webgl2 works!');
+// }
 export function setupDefaultViewer() {
   // image_register();
   registerLayerType('image', ImageUserLayer);
