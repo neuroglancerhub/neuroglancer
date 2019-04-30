@@ -34,6 +34,9 @@ import {TouchEventBinder, TouchPinchInfo, TouchTranslateInfo} from 'neuroglancer
 import {getWheelZoomAmount} from 'neuroglancer/util/wheel_zoom';
 import {ViewerState} from 'neuroglancer/viewer_state';
 
+import './rendered_data_panel.css';
+import 'neuroglancer/noselect.css';
+
 const tempVec3 = vec3.create();
 
 export interface RenderedDataViewerState extends ViewerState {
