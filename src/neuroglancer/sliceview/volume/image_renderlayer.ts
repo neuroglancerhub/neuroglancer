@@ -20,9 +20,9 @@ import {RenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/volume/ren
 import {TrackableAlphaValue, trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue, trackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {verifyEnumString} from 'neuroglancer/util/json';
-import glsl_COLORMAPS from 'neuroglancer/webgl/colormaps.glsl';
 import {makeTrackableFragmentMain, TrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
+import {colormaps} from 'neuroglancer/webgl/colormaps';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
 
@@ -31,6 +31,7 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
 }
 `;
 
+const glsl_COLORMAPS = colormaps();
 
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
   return makeTrackableFragmentMain(value);
