@@ -13,8 +13,8 @@
   },
   "scripts": {
     "generate-code": "node ./config/generate_code.js",
-    "build-min": "webpack --config ./config/webpack.config.js --env=min && tsc --outDir ./lib && babel lib --out-dir trans",
-    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./lib && babel lib --quiet --out-dir trans",
+    "build-min": "webpack --config ./config/webpack.config.js --env=min && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 1 src/**/*.html src/**/*.css trans/",
+    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 1 src/**/*.html src/**/*.css trans/",
     "build-python": "webpack --config ./config/webpack.config.js --env=python-dev",
     "build-python-min": "webpack --config ./config/webpack.config.js --env=python-min",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",
@@ -37,6 +37,7 @@
     "benchmark": "^2.1.4",
     "clang-format": "^1.2.4",
     "copy-webpack-plugin": "^5.0.2",
+    "copyfiles": "^2.1.0",
     "gulp": "^4.0.0",
     "gulp-clang-format": "^1.0.27",
     "gulp-tslint": "^8.1.4",
