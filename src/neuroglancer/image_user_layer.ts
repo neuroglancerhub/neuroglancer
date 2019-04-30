@@ -28,8 +28,8 @@ import {RenderScaleWidget} from 'neuroglancer/widget/render_scale_widget';
 import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {Tab} from 'neuroglancer/widget/tab_view';
 
-require('./image_user_layer.css');
-require('neuroglancer/maximize_button.css');
+import './image_user_layer.css';
+import 'neuroglancer/maximize_button.css';
 
 const OPACITY_JSON_KEY = 'opacity';
 const BLEND_JSON_KEY = 'blend';
