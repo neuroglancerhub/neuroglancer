@@ -14,7 +14,7 @@
   "scripts": {
     "generate-code": "node ./config/generate_code.js",
     "build-min": "webpack --config ./config/webpack.config.js --env=min && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 1 src/**/*.html src/**/*.css trans/",
-    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 1 src/**/*.html src/**/*.css trans/",
+    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 2 dist/dev/*.css trans/ && copyfiles -u 2 dist/dev/chunk_worker_bundle.js trans/",
     "build-python": "webpack --config ./config/webpack.config.js --env=python-dev",
     "build-python-min": "webpack --config ./config/webpack.config.js --env=python-min",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",
@@ -51,6 +51,7 @@
     "karma-mocha-reporter": "^2.2.5",
     "karma-sourcemap-loader": "^0.3.7",
     "karma-webpack": "^3.0.5",
+    "mini-css-extract-plugin": "^0.6.0",
     "minimist": "^1.2.0",
     "nunjucks": "^3.2.0",
     "tslint": "^5.15.0",
