@@ -14,7 +14,7 @@
   "scripts": {
     "generate-code": "node ./config/generate_code.js",
     "build-min": "webpack --config ./config/webpack.config.js --env=min && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 1 src/**/*.html src/**/*.css trans/",
-    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 2 dist/dev/*.css trans/ && copyfiles -u 2 dist/dev/chunk_worker_bundle.js trans/",
+    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 2 dist/dev/*.css trans/ && copyfiles -u 2 dist/dev/chunk_worker.* trans/",
     "build-python": "webpack --config ./config/webpack.config.js --env=python-dev",
     "build-python-min": "webpack --config ./config/webpack.config.js --env=python-min",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",

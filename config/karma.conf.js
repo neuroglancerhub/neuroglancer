@@ -19,7 +19,7 @@
 let webpackHelpers = require('./webpack_helpers');
 const path = require('path');
 const webpack = require('webpack');
-const ExtractTextPlugin = require('extract-text-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const minimist = require('minimist');
 
 module.exports = function(config) {
@@ -42,7 +42,10 @@ module.exports = function(config) {
             result.regExp = newRegExp;
           }
         }),
-    new ExtractTextPlugin({filename: 'styles.css', allChunks: true}),
+    new MiniCssExtractPlugin({
+      filename: '[name].css',
+      chunkFilename: '[id].css'
+    }),
   ];
 
   config.set({
