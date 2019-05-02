@@ -19,6 +19,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const ExtractTextPlugin = require('extract-text-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const webpack = require('webpack');
 const fs = require('fs');
 const AliasPlugin = require('./webpack_alias_plugin');
@@ -212,7 +213,18 @@ function getBaseConfig(options) {
       ],
       rules: [
         tsLoaderEntry,
-        {test: /\.css$/, loader: 'style-loader!css-loader'},
+        {
+          test: /\.css$/,
+          use: [
+            {
+              loader: MiniCssExtractPlugin.loader,
+              options: {
+                hmr: process.env.NODE_ENV === 'development',
+              },
+            },
+            'css-loader',
+          ],
+        },
         {
           test: /\.glsl$/,
           loader: [
@@ -372,6 +384,10 @@ function getViewerConfig(options) {
           target: 'web',
           plugins: [
             htmlPlugin,
+            new MiniCssExtractPlugin({
+              filename: '[name].css',
+              chunkFilename: '[id].css'
+            }),
             new webpack.DefinePlugin(Object.assign({}, defaultDefines, extraDefines)),
             ...extraFrontendPlugins,
             ...commonPlugins,
