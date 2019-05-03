@@ -458,6 +458,10 @@ function getViewerConfigFromEnv(options, env) {
   if (envParts.has('python')) {
     options = makePythonClientOptions(options);
   }
+  if (envParts.has('module')) {
+    const srcDir = resolveReal(__dirname, '../src');
+    options.frontendModules = [resolveReal(srcDir, 'main_module.ts')]
+  }
   return getViewerConfig(options);
 }
 
