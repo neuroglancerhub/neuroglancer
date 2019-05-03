@@ -3,7 +3,7 @@
   "description": "Visualization tool for 3-D volumetric data.",
   "license": "Apache-2.0",
   "version": "0.0.0-beta.0",
-  "main": "trans/main_module.js",
+  "main": "/dist/module/main_module.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/google/neuroglancer.git"
@@ -13,8 +13,8 @@
   },
   "scripts": {
     "generate-code": "node ./config/generate_code.js",
-    "build-min": "webpack --config ./config/webpack.config.js --env=min && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 1 src/**/*.html src/**/*.css trans/",
-    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./lib && babel lib --quiet --out-dir trans && copyfiles -u 2 dist/dev/*.css trans/ && copyfiles -u 2 dist/dev/chunk_worker.* trans/",
+    "build-min": "webpack --config ./config/webpack.config.js --env=min && tsc --outDir ./tmp && babel tmp --quiet --out-dir dist/module && copyfiles -u 2 dist/dev/*.css dist/module && copyfiles -u 2 dist/dev/chunk_worker.* dist/module && rimraf ./tmp",
+    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./tmp && babel tmp --quiet --out-dir dist/module && copyfiles -u 2 dist/dev/*.css dist/module && copyfiles -u 2 dist/dev/chunk_worker.* dist/module && rimraf ./tmp",
     "build-python": "webpack --config ./config/webpack.config.js --env=python-dev",
     "build-python-min": "webpack --config ./config/webpack.config.js --env=python-min",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",
@@ -55,6 +55,7 @@
     "minimist": "^1.2.0",
     "nunjucks": "^3.2.0",
     "tslint": "^5.15.0",
+    "rimraf": "^2.6.3",
     "tslint-eslint-rules": "^5.4.0",
     "webpack-cli": "^3.3.0",
     "webpack-dev-server": ">=3.2.1"
