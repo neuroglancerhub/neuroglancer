@@ -1,6 +1,6 @@
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
-import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
+import {makeMinimalViewer} from 'neuroglancer/ui/minimal_viewer';
 import {registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer_specification';
 import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 
@@ -34,7 +34,7 @@ export function setupDefaultViewer() {
 
   registerProvider('dvid', () => new DVIDDataSource());
 
-  let viewer = makeDefaultViewer();
+  let viewer = makeMinimalViewer();
   setDefaultInputEventBindings(viewer.inputEventBindings);
 
   /* const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));

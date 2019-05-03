@@ -13,8 +13,9 @@
   },
   "scripts": {
     "generate-code": "node ./config/generate_code.js",
-    "build-min": "webpack --config ./config/webpack.config.js --env=min && tsc --outDir ./tmp && babel tmp --quiet --out-dir dist/module && copyfiles -u 2 dist/dev/*.css dist/module && copyfiles -u 2 dist/dev/chunk_worker.* dist/module && rimraf ./tmp",
-    "build": "webpack --config ./config/webpack.config.js --env=dev && tsc --outDir ./tmp && babel tmp --quiet --out-dir dist/module && copyfiles -u 2 dist/dev/*.css dist/module && copyfiles -u 2 dist/dev/chunk_worker.* dist/module && rimraf ./tmp",
+    "build-min": "webpack --config ./config/webpack.config.js --env=min",
+    "build": "webpack --config ./config/webpack.config.js --env=dev",
+    "build-module": "webpack --config ./config/webpack.config.js --env=dev-module && tsc --outDir ./tmp && babel tmp --quiet --out-dir dist/module && copyfiles -u 2 dist/dev-module/*.css dist/module && copyfiles -u 2 dist/dev-module/chunk_worker.* dist/module && rimraf ./tmp",
     "build-python": "webpack --config ./config/webpack.config.js --env=python-dev",
     "build-python-min": "webpack --config ./config/webpack.config.js --env=python-min",
     "build:watch": "webpack --config ./config/webpack.config.js --watch",
