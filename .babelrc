@@ -10,7 +10,7 @@
   ],
   "plugins": [
     ["module-resolver", {
-      "root": ["./lib"],
+      "root": ["./tmp"],
        "extensions": [".js", ".jsx", ".es", ".es6", ".mjs", ".glsl"]
     }],
     ["import-noop", {

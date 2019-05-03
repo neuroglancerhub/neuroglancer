@@ -167,6 +167,24 @@ function getBaseConfig(options) {
   options = options || {};
   let {loaderEntry: tsLoaderEntry, extraResolveAliases} = getTypescriptLoaderEntry(options);
   console.log(extraResolveAliases);
+
+  const cssLoaderEntry = options.noOutput ?
+    {test: /\.css$/, loader: 'style-loader!css-loader'} :
+    {
+      test: /\.css$/,
+      loader: [
+        {
+          loader: MiniCssExtractPlugin.loader,
+          options: {
+            hmr: process.env.NODE_ENV === 'development',
+          }
+        },
+        {
+          loader: 'css-loader',
+        },
+      ],
+    }
+
   let aliasMappings = Object.assign(
       {
         'neuroglancer-testdata': resolveReal(__dirname, '../testdata'),
@@ -213,18 +231,7 @@ function getBaseConfig(options) {
       ],
       rules: [
         tsLoaderEntry,
-        {
-          test: /\.css$/,
-          use: [
-            {
-              loader: MiniCssExtractPlugin.loader,
-              options: {
-                hmr: process.env.NODE_ENV === 'development',
-              },
-            },
-            'css-loader',
-          ],
-        },
+        cssLoaderEntry,
         {
           test: /\.glsl$/,
           loader: [
