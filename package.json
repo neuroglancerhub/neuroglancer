@@ -3,7 +3,7 @@
   "description": "Visualization tool for 3-D volumetric data.",
   "license": "Apache-2.0",
   "version": "0.0.0-beta.0",
-  "main": "/dist/module/main_module.js",
+  "main": "dist/module/main_module.js",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/google/neuroglancer.git"
