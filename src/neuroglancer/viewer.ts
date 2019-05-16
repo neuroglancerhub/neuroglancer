@@ -64,7 +64,7 @@ import'neuroglancer/noselect.css';
 import 'neuroglancer/ui/button.css';
 
 export class DataManagementContext extends RefCounted {
-  worker = new Worker('chunk_worker.bundle.js');
+  worker = new Worker('/chunk_worker.bundle.js');
   chunkQueueManager = this.registerDisposer(
       new ChunkQueueManager(new RPC(this.worker), this.gl, this.frameNumberCounter, {
         gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
