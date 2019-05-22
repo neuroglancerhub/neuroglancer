@@ -9,7 +9,13 @@ import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
 // import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 
 import {DVIDDataSource} from 'neuroglancer/datasource/dvid/frontend';
+import {BrainmapsDataSource, productionInstance} from 'neuroglancer/datasource/brainmaps/frontend';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
+
+import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
+import {credentialsKey} from 'neuroglancer/datasource/brainmaps/api';
+import {BrainmapsCredentialsProvider} from 'neuroglancer/datasource/brainmaps/credentials_provider';
+
 
 /**
  * Sets up the default neuroglancer viewer.
@@ -23,7 +29,8 @@ import {registerProvider} from 'neuroglancer/datasource/default_provider';
 // } else {
 //   console.log('webgl2 works!');
 // }
-export function setupDefaultViewer() {
+
+export function setupDefaultViewer(options: { BrainMapsClientId: string | undefined }) {
   // image_register();
   registerLayerType('image', ImageUserLayer);
   registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);
@@ -33,6 +40,17 @@ export function setupDefaultViewer() {
   registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 
   registerProvider('dvid', () => new DVIDDataSource());
+
+  // register_brainmaps
+  if (options.BrainMapsClientId) {
+    const clientId: string = options.BrainMapsClientId;
+    defaultCredentialsManager.register(credentialsKey, () => new BrainmapsCredentialsProvider(clientId));
+    registerProvider('brainmaps',
+      options => new BrainmapsDataSource(
+        productionInstance, options.credentialsManager.getCredentialsProvider(credentialsKey)
+      )
+    );
+  }
 
   let viewer = makeMinimalViewer();
   setDefaultInputEventBindings(viewer.inputEventBindings);
