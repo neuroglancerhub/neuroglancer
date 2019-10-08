@@ -34,7 +34,7 @@ function returnWorker(worker: Worker) {
 }
 
 function getNewWorker(): Worker {
-  const worker = new Worker('async_computation.bundle.js');
+  const worker = new Worker('/async_computation.bundle.js');
   worker.onmessage = msg => {
     const {id, value, error} = msg.data as {id: number, value?: any, error?: string};
     returnWorker(worker);
