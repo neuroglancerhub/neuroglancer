@@ -15,7 +15,7 @@
  */
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {AnnotationSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {assignMeshFragmentData, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
@@ -25,7 +25,15 @@ import {VolumeChunk, VolumeChunkSource} from 'neuroglancer/sliceview/volume/back
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {Endianness} from 'neuroglancer/util/endian';
 import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_request';
-import {registerSharedObject} from 'neuroglancer/worker_rpc';
+import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
+import {vec3} from 'neuroglancer/util/geom';
+import {Uint64} from 'neuroglancer/util/uint64';
+import {DVIDInstance, makeRequest} from 'neuroglancer/datasource/dvid/api';
+import {DVIDPointAnnotation, updateAnnotationTypeHandler} from 'neuroglancer/datasource/dvid/utils';
+import {Annotation, AnnotationId, AnnotationSerializer, AnnotationType} from 'neuroglancer/annotation';
+import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
+import {verifyObject, verifyObjectProperty, verifyOptionalString, parseIntVec} from 'neuroglancer/util/json';
+import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 
 @registerSharedObject() export class DVIDSkeletonSource extends
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
@@ -121,5 +129,220 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
       // encoding is COMPRESSED_SEGMENTATION
       return decodeCompressedSegmentationChunk;
     }
+  }
+}
+
+function DVIDSource<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
+  Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
+  return WithParameters(Base, parametersConstructor);
+}
+
+export function parseUint64ToArray(out: Uint64[], v: string): Uint64[] {
+  if (v) {
+    out.push(Uint64.parseString(v));
+  }
+
+  return out;
+}
+
+function parseAnnotation(entry: any): DVIDPointAnnotation|null {
+  const properties = verifyObjectProperty(entry, 'Prop', verifyObject);
+
+  let isCustom = false;
+  if (properties.custom) {
+    isCustom = (properties.custom === '1');
+  }
+  if (isCustom) {
+    const corner = verifyObjectProperty(entry, 'Pos', x => parseIntVec(vec3.create(), x));
+    const description = verifyObjectProperty(properties, 'comment', verifyOptionalString);
+    const segments = verifyObjectProperty(properties, 'body ID', x => parseUint64ToArray(Array<Uint64>(), x));
+
+    return {
+      type: AnnotationType.POINT,
+      id: `${corner[0]}_${corner[1]}_${corner[2]}`,
+      point: corner,
+      description,
+      segments,
+      properties
+    };
+  } else {
+    return null;
+  }
+}
+
+function parseAnnotations(
+    chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk, responses: any[]) {
+  const serializer = new AnnotationSerializer();
+
+  responses.forEach((response) => {
+    try {
+      let annotation = parseAnnotation(response);
+      if (annotation) {
+        serializer.add(annotation);
+      }
+    } catch (e) {
+      throw new Error(`Error parsing annotation: ${e.message}`);
+    }
+  });
+  chunk.data = Object.assign(new AnnotationGeometryData(), serializer.serialize());
+}
+
+function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefined): any {
+  const payload = annotation.description || '';
+  const objectLabels =
+      annotation.segments === undefined ? undefined : annotation.segments.map(x => x.toString());
+  switch (annotation.type) {
+    case AnnotationType.POINT: {
+      let obj: {[key: string]: any} = {
+        Kind: 'Note',
+        Pos: [annotation.point[0], annotation.point[1], annotation.point[2]],
+        Prop: {
+          comment: payload
+        }
+      };
+      if (annotation.properties) {
+        if (annotation.properties.custom) {
+          obj['Prop']['custom'] = annotation.properties.custom;
+        }
+        if (annotation.properties.type) {
+          obj['Prop']['type'] = annotation.properties.type;
+        }
+      }
+      if (objectLabels && objectLabels.length > 0) {
+        obj['Prop']['body ID'] = objectLabels[0];
+      }
+      if (user) {
+        obj['Tags'] = ['user:' + user];
+        obj['Prop']['user'] = user;
+      }
+      return obj;
+    }
+  }
+}
+
+@registerSharedObject() export class DVIDAnnotationSource extends (DVIDSource(AnnotationSource, AnnotationSourceParameters)) {
+  constructor(rpc: RPC, options: any) {
+    super(rpc, options);
+    updateAnnotationTypeHandler();
+  }
+
+  private getElementsPath() {
+    return `/${this.parameters.dataInstanceKey}/elements`;
+  }
+
+  private getPathByUserTag(user: string) {
+    return `/${this.parameters.dataInstanceKey}/tag/user:${user}`;
+  }
+
+  private getPathByBodyId(bodyId: Uint64) {
+    return `/${this.parameters.dataInstanceKey}/label/${bodyId}`;
+  }
+
+  private getPathByAnnotationId(annotationId: string) {
+    return `${this.getElementsPath()}/1_1_1/${annotationId}`;
+  }
+
+  downloadGeometry(chunk: AnnotationGeometryChunk, cancellationToken: CancellationToken) {
+    const {parameters} = this;
+
+    if (parameters.user) {
+      return makeRequest(
+        new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+          method: 'GET',
+          path: this.getPathByUserTag(parameters.user),
+          payload: undefined,
+          responseType: 'json',
+        },
+        cancellationToken)
+        .then(values => {
+          parseAnnotations(chunk, values);
+        });
+    } else {
+      throw new Error('User must be specified to view DVID annotations.');
+    }
+  }
+
+  downloadSegmentFilteredGeometry(
+    chunk: AnnotationSubsetGeometryChunk, cancellationToken: CancellationToken) {
+    const { parameters } = this;
+
+    return makeRequest(
+      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+        method: 'GET',
+        path: this.getPathByBodyId(chunk.objectId),
+        payload: undefined,
+        responseType: 'json',
+      },
+      cancellationToken)
+      .then(values => {
+        parseAnnotations(chunk, values);
+      });
+  }
+
+  downloadMetadata(chunk: AnnotationMetadataChunk, cancellationToken: CancellationToken) {
+    const { parameters } = this;
+    const id = chunk.key!;
+    return makeRequest(
+      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+        method: 'GET',
+        path: this.getPathByAnnotationId(id),
+        payload: undefined,
+        responseType: 'json',
+      },
+      cancellationToken)
+      .then(response => {
+        if (response.length > 0) {
+          chunk.annotation = parseAnnotation(response[0]);
+        } else {
+          chunk.annotation = null;
+        }
+      },
+        () => {
+          chunk.annotation = null;
+        });
+  }
+
+  add(annotation: Annotation) {
+    const { parameters } = this;
+
+    const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
+
+    if (annotation.type === AnnotationType.POINT) {
+    return makeRequest(
+      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+      method: 'POST',
+      path: this.getElementsPath(),
+      payload: JSON.stringify([dvidAnnotation]),
+      responseType: '',
+    })
+      .then(() => {
+          return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
+      });
+    } else {
+      return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
+    }
+  }
+
+  update(_: AnnotationId, annotation: Annotation) {
+    const {parameters} = this;
+    const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
+    return makeRequest(
+      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+             method: 'POST',
+             path: this.getElementsPath(),
+             payload: JSON.stringify([dvidAnnotation]),
+             responseType: '',
+           });
+  }
+
+  delete (id: AnnotationId) {
+    const {parameters} = this;
+    return makeRequest(
+      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+             method: 'DELETE',
+             path: `/${parameters.dataInstanceKey}/element/${id}`,
+             payload: undefined,
+             responseType: '',
+           });
   }
 }
