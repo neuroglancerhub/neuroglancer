@@ -23,7 +23,7 @@ import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue} from 'neuroglance
 import {makeTrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
 import {ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {addControlsToBuilder, setControlsInShader, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
-import {colormaps} from 'neuroglancer/webgl/colormaps';
+import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 
 export const FRAGMENT_MAIN_START = '//NEUROGLANCER_IMAGE_RENDERLAYER_FRAGMENT_MAIN_START';
 
@@ -31,8 +31,6 @@ const DEFAULT_FRAGMENT_MAIN = `void main() {
   emitGrayscale(toNormalized(getDataValue()));
 }
 `;
-
-const glsl_COLORMAPS = colormaps();
 
 export function getTrackableFragmentMain(value = DEFAULT_FRAGMENT_MAIN) {
   return makeTrackableFragmentMain(value);

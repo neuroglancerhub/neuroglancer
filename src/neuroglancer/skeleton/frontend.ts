@@ -40,9 +40,7 @@ import {parameterizedEmitterDependentShaderGetter, WatchableShaderError} from 'n
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {compute1dTextureLayout, computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
-import {colormaps} from 'neuroglancer/webgl/colormaps';
-
-const glsl_COLORMAPS = colormaps();
+import {glsl_COLORMAPS} from 'neuroglancer/webgl/colormaps';
 
 const tempMat2 = mat4.create();
 

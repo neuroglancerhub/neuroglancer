@@ -13,8 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-export function colormaps() {
-  return `vec3 colormapJet(float x) {
+export const glsl_COLORMAPS = `vec3 colormapJet(float x) {
   vec3 result;
   result.r = x < 0.89 ? ((x - 0.35) / 0.31) : (1.0 - (x - 0.89) / 0.11 * 0.5);
   result.g = x < 0.64 ? ((x - 0.125) * 4.0) : (1.0 - (x - 0.64) / 0.27);
@@ -39,4 +38,3 @@ vec3 colormapCubehelix(float x) {
   result = clamp(xclamp + amp * result, 0.0, 1.0);
   return result;
 }`;
-}
