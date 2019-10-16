@@ -58,13 +58,17 @@ import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {RPC} from 'neuroglancer/worker_rpc';
 
 declare var NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any
+declare var BUNDLE_ROOT: string|undefined
 
 import './viewer.css';
 import 'neuroglancer/noselect.css';
 import 'neuroglancer/ui/button.css';
 
+const chunkRoot = "undefined" === typeof BUNDLE_ROOT ? '' : BUNDLE_ROOT;
+const chunk_worker_url = chunkRoot + 'chunk_worker.bundle.js';
+
 export class DataManagementContext extends RefCounted {
-  worker = new Worker('/chunk_worker.bundle.js');
+  worker = new Worker(chunk_worker_url);
   chunkQueueManager = this.registerDisposer(
       new ChunkQueueManager(new RPC(this.worker), this.gl, this.frameNumberCounter, {
         gpuMemory: new CapacitySpecification({defaultItemLimit: 1e6, defaultSizeLimit: 1e9}),
