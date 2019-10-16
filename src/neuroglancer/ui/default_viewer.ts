@@ -17,8 +17,11 @@
 import './default_viewer.css';
 
 import {ViewerOptions} from 'neuroglancer/viewer';
-
+import {disableContextMenu, disableWheel} from 'neuroglancer/ui/disable_default_actions';
 import {makeMinimalViewer} from './minimal_viewer';
+
 export function makeDefaultViewer(options?: Partial<ViewerOptions>) {
+  disableContextMenu();
+  disableWheel();
   return makeMinimalViewer(options);
 }
