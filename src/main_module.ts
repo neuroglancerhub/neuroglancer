@@ -30,7 +30,10 @@ import {BrainmapsCredentialsProvider} from 'neuroglancer/datasource/brainmaps/cr
 //   console.log('webgl2 works!');
 // }
 
-export function setupDefaultViewer(options: { BrainMapsClientId: string | undefined }) {
+export function setupDefaultViewer(options: {
+  BrainMapsClientId: string | undefined,
+  Target: HTMLElement | undefined
+}) {
   // image_register();
   registerLayerType('image', ImageUserLayer);
   registerVolumeLayerType(VolumeType.IMAGE, ImageUserLayer);
@@ -52,7 +55,7 @@ export function setupDefaultViewer(options: { BrainMapsClientId: string | undefi
     );
   }
 
-  let viewer = makeMinimalViewer();
+  let viewer = makeMinimalViewer(undefined, options.Target);
   setDefaultInputEventBindings(viewer.inputEventBindings);
 
   /* const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));

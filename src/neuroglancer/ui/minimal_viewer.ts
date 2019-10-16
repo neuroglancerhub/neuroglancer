@@ -20,9 +20,9 @@ import {StatusMessage} from 'neuroglancer/status';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {Viewer, ViewerOptions} from 'neuroglancer/viewer';
 
-export function makeMinimalViewer(options?: Partial<ViewerOptions>) {
+export function makeMinimalViewer(options?: Partial<ViewerOptions>, target = document.getElementById('neuroglancer-container')! ) {
   try {
-    let display = new DisplayContext(document.getElementById('neuroglancer-container')!);
+    let display = new DisplayContext(target);
     return new Viewer(display, options);
   } catch (error) {
     StatusMessage.showMessage(`Error: ${error.message}`);
