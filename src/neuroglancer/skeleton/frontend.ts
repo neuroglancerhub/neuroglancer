@@ -35,7 +35,6 @@ import {Buffer} from 'neuroglancer/webgl/buffer';
 import {CircleShader} from 'neuroglancer/webgl/circles';
 import {GL} from 'neuroglancer/webgl/context';
 
-
 import {parameterizedEmitterDependentShaderGetter, WatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';

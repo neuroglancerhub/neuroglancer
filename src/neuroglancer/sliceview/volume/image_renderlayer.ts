@@ -17,7 +17,6 @@
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {MultiscaleVolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {RenderLayer, RenderLayerOptions} from 'neuroglancer/sliceview/volume/renderlayer';
-
 import {TrackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {BLEND_FUNCTIONS, BLEND_MODES, TrackableBlendModeValue} from 'neuroglancer/trackable_blend';
 import {makeTrackableFragmentMain} from 'neuroglancer/webgl/dynamic_shader';
