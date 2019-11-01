@@ -466,7 +466,7 @@ function getViewerConfigFromEnv(options, env) {
       // default, they are served from the same relative path as the main
       // neuroglancer application. When the application is included as a module
       // that path doesn't always work and the url root needs to be specified.
-      'BUNDLE_ROOT': JSON.stringify('/')
+      'NEUROGLANCER_BUNDLE_ROOT': JSON.stringify('/')
     };
   }
   return getViewerConfig(options);

@@ -17,8 +17,8 @@
 import {AsyncComputationSpec} from 'neuroglancer/async_computation';
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 
-declare var BUNDLE_ROOT: string|undefined
-const bundleRoot = "undefined" === typeof BUNDLE_ROOT ? '' : BUNDLE_ROOT;
+declare var NEUROGLANCER_BUNDLE_ROOT: string|undefined
+const bundleRoot = "undefined" === typeof NEUROGLANCER_BUNDLE_ROOT ? '' : NEUROGLANCER_BUNDLE_ROOT;
 const bundleUrl =  bundleRoot + 'async_computation.bundle.js';
 
 const freeWorkers: Worker[] = [];
