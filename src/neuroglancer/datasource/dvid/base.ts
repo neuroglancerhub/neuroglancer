@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+import {vec3} from 'neuroglancer/util/geom';
+
+export const annotationChunkDataSize = vec3.fromValues(64, 64, 64);
+
 export enum VolumeChunkEncoding {
   JPEG,
   RAW,

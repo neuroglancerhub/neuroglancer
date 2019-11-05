@@ -35,23 +35,30 @@ export let Env = {
 };
 
 export interface DVIDPointAnnotation extends Point {
+  kind?: string;
   properties?: {[key:string]: any};
 }
 
 function getRenderingAttribute(annotation: Point): number {
-  let {properties} = <DVIDPointAnnotation>annotation;
+  let {kind, properties} = <DVIDPointAnnotation>annotation;
   if (properties) {
-    if (properties.checked) {
-      if (properties.checked === '1') {
-        return 1;
+    if (kind === 'Note') {
+      if (properties.checked) {
+        if (properties.checked === '1') {
+          return 1;
+        }
       }
-    }
-    if (properties.type) {
-      if (properties.type === 'Merge') {
-        return 2;
-      } else if (properties.type === 'Split') {
-        return 3;
+      if (properties.type) {
+        if (properties.type === 'Merge') {
+          return 2;
+        } else if (properties.type === 'Split') {
+          return 3;
+        }
       }
+    } else if (kind === 'PreSyn') {
+      return 4;
+    } else if (kind === 'PostSyn') {
+      return 5;
     }
   }
 
@@ -99,7 +106,7 @@ vec3 hsv2rgb(vec3 c)
 }
 
 void setFillColor() {
-  if (vRenderingAttribute >= 1 && vRenderingAttribute <= 3) {
+  if (vRenderingAttribute >= 1 && vRenderingAttribute <= 5) {
     vec3 hsv = rgb2hsv(vColor.rgb);
     if (vRenderingAttribute == 1) {
       vColor.rgb = vec3(0.0, 1.0, 0.0);
@@ -107,6 +114,10 @@ void setFillColor() {
       vColor.rgb = hsv2rgb(vec3(mod(hsv.x - 0.1, 1.0), 1.0, hsv.z));
     } else if (vRenderingAttribute == 3) {
       vColor.rgb = hsv2rgb(vec3(mod(hsv.x - 0.3, 1.0), 1.0, hsv.z));
+    } else if (vRenderingAttribute == 4) {
+      vColor.rgb = vec3(1.0, 1.0, 1.0);
+    } else if (vRenderingAttribute == 5) {
+      vColor.rgb = vec3(0.5, 0.5, 0.5);
     }
   }
 }

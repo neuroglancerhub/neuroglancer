@@ -21,7 +21,7 @@
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {CompletionResult, DataSource} from 'neuroglancer/datasource';
-import {AnnotationSourceParameters, DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {AnnotationSourceParameters, DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, annotationChunkDataSize} from 'neuroglancer/datasource/dvid/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -30,7 +30,7 @@ import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {fetchOk} from 'neuroglancer/util/http_request';
-import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {DVIDInstance, makeRequest} from 'neuroglancer/datasource/dvid/api';
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
@@ -252,8 +252,6 @@ export function parseDataInstance(
     case 'labelmap':
       return new VolumeDataInstanceInfo(
           obj, name, baseInfo, VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY, instanceNames);
-    case 'annotation':
-      return new VolumeDataInstanceInfo(obj, name, baseInfo, VolumeChunkEncoding.RAW, instanceNames);
     default:
       throw new Error(`DVID data type ${JSON.stringify(baseInfo.typeName)} is not supported.`);
   }
@@ -543,6 +541,7 @@ export class VolumeInfo {
   voxelSize: vec3;
   upperVoxelBound: vec3;
   boundingBoxes: {corner: vec3, size: vec3, metadata?: string}[];
+  numLevels = 1;
   constructor(obj: any) {
     try {
       verifyObject(obj);
@@ -551,6 +550,8 @@ export class VolumeInfo {
       this.dataType = verifyObjectProperty(baseObj, 'TypeName', x => x === undefined ? 'UINT8' : x.TypeName);
 
       let extended = verifyObjectProperty(obj, 'Extended', verifyObject);
+      let maxdownreslevel = verifyObjectProperty(extended, 'MaxDownresLevel', verifyPositiveInt);
+      this.numLevels = maxdownreslevel + 1;
 
       this.voxelSize = verifyObjectProperty(extended, 'VoxelSize', x => parseIntVec(vec3.create(), x));
       this.upperVoxelBound = verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x.map((a:number) => {return ++a;})));
@@ -575,7 +576,16 @@ export class MultiscaleVolumeInfo {
     try {
       verifyObject(volumeInfoResponse);
       this.scales = [];
-      this.scales.push(new VolumeInfo(volumeInfoResponse));
+      let baseVolumeInfo = new VolumeInfo(volumeInfoResponse);
+      this.scales.push(baseVolumeInfo);
+      let lastVoxelSize = baseVolumeInfo.voxelSize;
+      for (let level = 1; level < baseVolumeInfo.numLevels; ++level) {
+        let volumeInfo:VolumeInfo = {...baseVolumeInfo};
+        volumeInfo.voxelSize = vec3.multiply(vec3.create(), lastVoxelSize, vec3.fromValues(2, 2, 2 ));
+        lastVoxelSize = volumeInfo.voxelSize;
+        volumeInfo.upperVoxelBound = vec3.fromValues(0, 0, 0);
+        this.scales.push(volumeInfo);
+      }
       let baseScale = this.scales[0];
       this.numChannels = this.numChannels = baseScale.numChannels;
       this.dataType = this.dataType = baseScale.dataType;
@@ -586,14 +596,32 @@ export class MultiscaleVolumeInfo {
   }
 }
 
-function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVolumeInfo) {
-  const baseScale = multiscaleInfo.scales[0];
-  const spec = new AnnotationGeometryChunkSpecification({
-    voxelSize: baseScale.voxelSize,
-    chunkSize: vec3.multiply(vec3.create(), baseScale.upperVoxelBound, baseScale.voxelSize),
-    upperChunkBound: vec3.fromValues(1, 1, 1),
-  });
-  return [[{parameters: undefined, spec}]];
+function getAnnotationChunkDataSize(parameters: AnnotationSourceParameters, upperVoxelBound: vec3) {
+  if (parameters.user && parameters.user !== '') {
+    return upperVoxelBound;
+  } else {
+    return annotationChunkDataSize;
+  }
+}
+
+function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVolumeInfo, parameters: AnnotationSourceParameters) {
+  let makeSpec = (scale: VolumeInfo) => {
+    const upperVoxelBound = scale.upperVoxelBound;
+    const chunkDataSize = getAnnotationChunkDataSize(parameters, upperVoxelBound);
+    let spec = new AnnotationGeometryChunkSpecification({
+      voxelSize: scale.voxelSize,
+      chunkSize: vec3.multiply(vec3.create(), chunkDataSize, scale.voxelSize),
+      upperChunkBound: vec3.ceil(vec3.create(), vec3.divide(vec3.create(), upperVoxelBound, chunkDataSize))
+    });
+
+    return [{ parameters: undefined, spec }];
+  };
+
+  if (isNonEmptyString(parameters.user)) {
+    return [makeSpec(multiscaleInfo.scales[0])];
+  } else {
+    return multiscaleInfo.scales.map(scale => makeSpec(scale));
+  }
 }
 
 const MultiscaleAnnotationSourceBase = (WithParameters(MultiscaleAnnotationSource, AnnotationSourceParameters));
@@ -611,7 +639,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   }) {
     super(chunkManager, <any>{
       sourceSpecifications:
-          makeAnnotationGeometrySourceSpecifications(options.multiscaleVolumeInfo),
+          makeAnnotationGeometrySourceSpecifications(options.multiscaleVolumeInfo, options.parameters),
       ...options
     });
 
@@ -643,14 +671,27 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   }
 }
 
-function parseAnnotationKey(key: string): AnnotationSourceParameters {
-  const match = key.match(/^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/]+)$/);
+function isNonEmptyString(str: string|null|undefined) {
+  return (str && str.length > 0);
+}
+
+function parseAnnotationKey(key: string): Promise<AnnotationSourceParameters> {
+  const match = key.match(/^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/);
 
   if (match === null) {
     throw new Error(`Invalid DVID volume key: ${JSON.stringify(key)}.`);
   }
 
-  return { 'baseUrl': match[1], 'nodeKey': match[2], 'dataInstanceKey': match[3], 'user': Env.getUser() };
+  let user = '';
+  let queryString = match[4];
+  if (queryString && queryString.length > 1) {
+    const parameters = parseQueryStringParameters(queryString.substring(1));
+    if (parameters) {
+      user = isNonEmptyString(parameters.user) ? parameters.user : (parameters.usertag ? Env.getUser() : '');
+    }
+  }
+
+  return Promise.resolve({ 'baseUrl': match[1], 'nodeKey': match[2], 'dataInstanceKey': match[3], 'user': user });
 }
 
 async function getSyncedLabel(parameters: AnnotationSourceParameters): Promise<string> {
@@ -673,7 +714,7 @@ async function getSyncedLabel(parameters: AnnotationSourceParameters): Promise<s
 }
 
 export class DVIDDataSource extends DataSource {
-  dvidAnnotationSourceKey: any;
+  dvidAnnotationSourceKey: Promise<any>;
   constructor() {
     super();
   }
@@ -706,19 +747,29 @@ export class DVIDDataSource extends DataSource {
               }).then(response => new MultiscaleVolumeInfo(response)));
   }
 
-  getAnnotationSource(chunkManager: ChunkManager, key: string) {
-    const parameters = parseAnnotationKey(key);
-
-    this.dvidAnnotationSourceKey = {
-      type: 'dvid:getAnnotationSource',
-      parameters
-    };
-
+  getAnnotationSourceFromSourceKey(chunkManager: ChunkManager, sourceKey: any) {
     return chunkManager.memoize.getUncounted(
-      this.dvidAnnotationSourceKey,
-      () => getSyncedLabel(parameters)
-        .then(label => this.getMultiscaleInfo(chunkManager, { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': label }))
-        .then(multiscaleVolumeInfo => chunkManager.getChunkSource(DVIDAnnotationSource, {parameters,multiscaleVolumeInfo}))
-    );
+      sourceKey,
+      () => Promise.resolve(sourceKey['parameters']).then(parameters => {
+        return getSyncedLabel(parameters)
+          .then(label => this.getMultiscaleInfo(chunkManager, { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': label }))
+          .then(multiscaleVolumeInfo => chunkManager.getChunkSource(DVIDAnnotationSource, {
+            parameters,
+            multiscaleVolumeInfo
+          }));
+      }));
+  }
+
+  getAnnotationSource(chunkManager: ChunkManager, key: string) {
+    this.dvidAnnotationSourceKey = parseAnnotationKey(key).then(
+      parameters => {
+        return {
+          type: 'dvid:getAnnotationSource',
+          parameters
+        };
+      });
+
+    return this.dvidAnnotationSourceKey.then(
+      sourceKey => this.getAnnotationSourceFromSourceKey(chunkManager, sourceKey));
   }
 }

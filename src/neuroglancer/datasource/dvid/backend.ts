@@ -15,7 +15,7 @@
  */
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {AnnotationSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {AnnotationSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, annotationChunkDataSize} from 'neuroglancer/datasource/dvid/base';
 import {assignMeshFragmentData, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
@@ -30,9 +30,9 @@ import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {DVIDInstance, makeRequest} from 'neuroglancer/datasource/dvid/api';
 import {DVIDPointAnnotation, updateAnnotationTypeHandler} from 'neuroglancer/datasource/dvid/utils';
-import {Annotation, AnnotationId, AnnotationSerializer, AnnotationType} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationSerializer, AnnotationType, Point} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
-import {verifyObject, verifyObjectProperty, verifyOptionalString, parseIntVec} from 'neuroglancer/util/json';
+import {verifyObject, verifyObjectProperty, verifyOptionalString, parseIntVec, verifyString} from 'neuroglancer/util/json';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 
 @registerSharedObject() export class DVIDSkeletonSource extends
@@ -146,44 +146,59 @@ export function parseUint64ToArray(out: Uint64[], v: string): Uint64[] {
 }
 
 function parseAnnotation(entry: any): DVIDPointAnnotation|null {
-  const properties = verifyObjectProperty(entry, 'Prop', verifyObject);
+  if (entry) {
+    const kind = verifyObjectProperty(entry, 'Kind', verifyString);
+    if (kind !== 'Unknown') {
+      const properties = verifyObjectProperty(entry, 'Prop', verifyObject);
+      const corner = verifyObjectProperty(entry, 'Pos', x => parseIntVec(vec3.create(), x));
+      let description: string | undefined;
+      let segments: Array<Uint64> = new Array<Uint64>();
 
-  let isCustom = false;
-  if (properties.custom) {
-    isCustom = (properties.custom === '1');
-  }
-  if (isCustom) {
-    const corner = verifyObjectProperty(entry, 'Pos', x => parseIntVec(vec3.create(), x));
-    const description = verifyObjectProperty(properties, 'comment', verifyOptionalString);
-    const segments = verifyObjectProperty(properties, 'body ID', x => parseUint64ToArray(Array<Uint64>(), x));
+      if (kind === 'Note') {
+        let isCustom = false;
+        if (properties.custom) {
+          isCustom = (properties.custom === '1');
+        }
+        if (isCustom) {
+          description = verifyObjectProperty(properties, 'comment', verifyOptionalString);
+          segments = verifyObjectProperty(properties, 'body ID', x => parseUint64ToArray(Array<Uint64>(), x));
+        }
+      } else if (kind === 'PreSyn' || kind === 'PostSyn') {
+        description = verifyObjectProperty(properties, 'annotation', verifyOptionalString);
+      }
 
-    return {
-      type: AnnotationType.POINT,
-      id: `${corner[0]}_${corner[1]}_${corner[2]}`,
-      point: corner,
-      description,
-      segments,
-      properties
-    };
-  } else {
-    return null;
+      return {
+        type: AnnotationType.POINT,
+        id: `${corner[0]}_${corner[1]}_${corner[2]}`,
+        point: corner,
+        description,
+        segments,
+        kind,
+        properties
+      };
+    }
   }
+
+  return null;
 }
 
 function parseAnnotations(
-    chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk, responses: any[]) {
+  chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any[]) {
   const serializer = new AnnotationSerializer();
-
-  responses.forEach((response) => {
-    try {
-      let annotation = parseAnnotation(response);
-      if (annotation) {
-        serializer.add(annotation);
+  if (responses) {
+    responses.forEach((response) => {
+      if (response) {
+        try {
+          let annotation = parseAnnotation(response);
+          if (annotation) {
+            serializer.add(annotation);
+          }
+        } catch (e) {
+          throw new Error(`Error parsing annotation: ${e.message}`);
+        }
       }
-    } catch (e) {
-      throw new Error(`Error parsing annotation: ${e.message}`);
-    }
-  });
+    });
+  }
   chunk.data = Object.assign(new AnnotationGeometryData(), serializer.serialize());
 }
 
@@ -230,6 +245,10 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
     return `/${this.parameters.dataInstanceKey}/elements`;
   }
 
+  private getPath(position: ArrayLike<number>, size: ArrayLike<number>) {
+    return `${this.getElementsPath()}/${size[0]}_${size[1]}_${size[2]}/${position[0]}_${position[1]}_${position[2]}`;
+  }
+
   private getPathByUserTag(user: string) {
     return `/${this.parameters.dataInstanceKey}/tag/user:${user}`;
   }
@@ -258,7 +277,24 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
           parseAnnotations(chunk, values);
         });
     } else {
-      throw new Error('User must be specified to view DVID annotations.');
+      // console.log('Annotaition chunk position', chunk.chunkGridPosition);
+      if (chunk.source.spec.upperChunkBound[0] <= chunk.source.spec.lowerChunkBound[0]) {
+        return Promise.resolve(parseAnnotations(chunk, []));
+      }
+      // console.log('downloadGeometry:', parameters);
+      const chunkDataSize = annotationChunkDataSize;
+      const chunkPosition = vec3.multiply(vec3.create(), chunk.chunkGridPosition, chunkDataSize);
+      return makeRequest(
+        new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+        method: 'GET',
+        path: this.getPath(chunkPosition, chunkDataSize),
+        payload: undefined,
+        responseType: 'json',
+      },
+        cancellationToken)
+        .then(values => {
+          parseAnnotations(chunk, values);
+        });
     }
   }
 
@@ -302,37 +338,52 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
         });
   }
 
+  private uploadable(annotation: Annotation): annotation is Point {
+    const { parameters } = this;
+
+    if (parameters.user && parameters.user !== '') {
+      return annotation.type === AnnotationType.POINT;
+    }
+
+    return false;
+  }
+
   add(annotation: Annotation) {
     const { parameters } = this;
 
     const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
 
-    if (annotation.type === AnnotationType.POINT) {
-    return makeRequest(
-      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
-      method: 'POST',
-      path: this.getElementsPath(),
-      payload: JSON.stringify([dvidAnnotation]),
-      responseType: '',
-    })
-      .then(() => {
+    if (this.uploadable(annotation)) {
+      return makeRequest(
+        new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+        method: 'POST',
+        path: this.getElementsPath(),
+        payload: JSON.stringify([dvidAnnotation]),
+        responseType: '',
+      })
+        .then(() => {
           return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
-      });
+        });
     } else {
+      console.log(`${annotation.type}_${JSON.stringify(annotation)}`);
       return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
     }
   }
 
   update(_: AnnotationId, annotation: Annotation) {
-    const {parameters} = this;
-    const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
-    return makeRequest(
-      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
-             method: 'POST',
-             path: this.getElementsPath(),
-             payload: JSON.stringify([dvidAnnotation]),
-             responseType: '',
-           });
+    if (this.uploadable(annotation)) {
+      const { parameters } = this;
+      const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
+      return makeRequest(
+        new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+        method: 'POST',
+        path: this.getElementsPath(),
+        payload: JSON.stringify([dvidAnnotation]),
+        responseType: '',
+      });
+    } else {
+      return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
+    }
   }
 
   delete (id: AnnotationId) {
