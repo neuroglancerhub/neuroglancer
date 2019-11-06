@@ -264,20 +264,24 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
   downloadGeometry(chunk: AnnotationGeometryChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
 
-    if (parameters.user) {
-      return makeRequest(
-        new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
-          method: 'GET',
-          path: this.getPathByUserTag(parameters.user),
-          payload: undefined,
-          responseType: 'json',
-        },
-        cancellationToken)
-        .then(values => {
-          parseAnnotations(chunk, values);
-        });
+    if (parameters.usertag) {
+      if (parameters.user) {
+        return makeRequest(
+          new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+            method: 'GET',
+            path: this.getPathByUserTag(parameters.user),
+            payload: undefined,
+            responseType: 'json',
+          },
+          cancellationToken)
+          .then(values => {
+            parseAnnotations(chunk, values);
+          });
+      } else {
+        throw Error('Expecting a valid user name.')
+      }
     } else {
-      // console.log('Annotaition chunk position', chunk.chunkGridPosition);
+      console.log('Annotaition chunk position', chunk.chunkGridPosition);
       if (chunk.source.spec.upperChunkBound[0] <= chunk.source.spec.lowerChunkBound[0]) {
         return Promise.resolve(parseAnnotations(chunk, []));
       }
@@ -365,7 +369,6 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
           return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
         });
     } else {
-      console.log(`${annotation.type}_${JSON.stringify(annotation)}`);
       return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
     }
   }

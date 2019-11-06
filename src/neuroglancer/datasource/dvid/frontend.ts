@@ -36,7 +36,7 @@ import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal} from 'neuroglancer/util/signal';
-import {Env, DVIDPointAnnotation, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
+import {Env, getUserFromToken, isNonEmptyString, DVIDPointAnnotation, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -518,23 +518,6 @@ const SERVER_DATA_TYPES = new Map<string, DataType>();
 SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
 SERVER_DATA_TYPES.set('UINT64', DataType.UINT64);
 
-/*
-function parseBoundingBox(obj: any) {
-  verifyObject(obj);
-  try {
-    return {
-      corner:
-          verifyObjectProperty(obj, 'corner', x => parseXYZ(vec3.create(), x, verifyFiniteFloat)),
-      size: verifyObjectProperty(
-          obj, 'size', x => parseXYZ(vec3.create(), x, verifyFinitePositiveFloat)),
-      metadata: verifyObjectProperty(obj, 'metadata', verifyOptionalString),
-    };
-  } catch (parseError) {
-    throw new Error(`Failed to parse bounding box: ${parseError.message}`);
-  }
-}
-*/
-
 export class VolumeInfo {
   numChannels: number;
   dataType: DataType;
@@ -597,7 +580,7 @@ export class MultiscaleVolumeInfo {
 }
 
 function getAnnotationChunkDataSize(parameters: AnnotationSourceParameters, upperVoxelBound: vec3) {
-  if (parameters.user && parameters.user !== '') {
+  if (parameters.usertag) {
     return upperVoxelBound;
   } else {
     return annotationChunkDataSize;
@@ -617,8 +600,12 @@ function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVo
     return [{ parameters: undefined, spec }];
   };
 
-  if (isNonEmptyString(parameters.user)) {
-    return [makeSpec(multiscaleInfo.scales[0])];
+  if (parameters.usertag) {
+    if (isNonEmptyString(parameters.user)) {
+      return [makeSpec(multiscaleInfo.scales[0])];
+    } else {
+      throw("Expecting a valid user");
+    }
   } else {
     return multiscaleInfo.scales.map(scale => makeSpec(scale));
   }
@@ -648,13 +635,22 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.childAdded = this.childAdded || new Signal<(annotation: Annotation) => void>();
     this.childUpdated = this.childUpdated || new Signal<(annotation: Annotation) => void>();
     this.childDeleted = this.childDeleted || new Signal<(annotationId: string) => void>();
+
+    if (this.parameters.readonly !== undefined) {
+      this.readonly = this.parameters.readonly;
+    }
+  
+    if (!isNonEmptyString(this.parameters.user) || !this.parameters.usertag) {
+      this.readonly = true;
+    }
   }
 
   add(annotation: Annotation, commit: boolean = true): AnnotationReference {
     if (annotation.type === AnnotationType.POINT) {
-      const { parameters } = this;
-      if (!parameters.user) {
-        throw Error('Cannot add DVID point annotation without specifying a user name.');
+      if (this.readonly) {
+        let errorMessage = 'Permission denied for changing annotations.';
+        StatusMessage.showTemporaryMessage(errorMessage);
+        throw Error(errorMessage);
       }
 
       annotation.point = vec3.round(vec3.create(), annotation.point);
@@ -671,10 +667,6 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   }
 }
 
-function isNonEmptyString(str: string|null|undefined) {
-  return (str && str.length > 0);
-}
-
 function parseAnnotationKey(key: string): Promise<AnnotationSourceParameters> {
   const match = key.match(/^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/);
 
@@ -682,16 +674,35 @@ function parseAnnotationKey(key: string): Promise<AnnotationSourceParameters> {
     throw new Error(`Invalid DVID volume key: ${JSON.stringify(key)}.`);
   }
 
-  let user = '';
   let queryString = match[4];
+  let sourceParameters: AnnotationSourceParameters = {
+    baseUrl: match[1],
+    nodeKey: match[2],
+    dataInstanceKey: match[3],
+    usertag: false
+  };
+
   if (queryString && queryString.length > 1) {
     const parameters = parseQueryStringParameters(queryString.substring(1));
     if (parameters) {
-      user = isNonEmptyString(parameters.user) ? parameters.user : (parameters.usertag ? Env.getUser() : '');
+      if (parameters.usertag) {
+        sourceParameters.usertag = (parameters.usertag === 'true');
+      }
+      
+      if (parameters.token) {
+        sourceParameters.token = parameters.token;
+        const tokenUser = getUserFromToken(parameters.token);
+        if (parameters.user && parameters.user !== tokenUser) {
+          parameters.user = undefined;
+        } else {
+          parameters.user = tokenUser;
+        }
+      }
+      sourceParameters.user = isNonEmptyString(parameters.user) ? parameters.user : (sourceParameters.usertag ? Env.getUser() : '');
     }
   }
 
-  return Promise.resolve({ 'baseUrl': match[1], 'nodeKey': match[2], 'dataInstanceKey': match[3], 'user': user });
+  return Promise.resolve(sourceParameters);
 }
 
 async function getSyncedLabel(parameters: AnnotationSourceParameters): Promise<string> {

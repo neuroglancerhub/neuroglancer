@@ -204,3 +204,21 @@ export function updateRenderHelper() {
   renderHandler.sliceViewRenderHelper = DVIDRenderHelper;
   renderHandler.perspectiveViewRenderHelper = DVIDRenderHelper;
 }
+
+export function getUserFromToken(token: string): string|null {
+  if (token) {
+    const payload = token.split('.')[1];
+    if (payload) {
+      const obj = JSON.parse(window.atob(payload));
+      if ('email' in obj) {
+        return obj['email'];
+      }
+    }
+  }
+
+  return null;
+}
+
+export function isNonEmptyString(str: string|null|undefined) {
+  return (str && str.length > 0);
+}
