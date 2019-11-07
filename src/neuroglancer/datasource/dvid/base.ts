@@ -29,6 +29,7 @@ export class DVIDSourceParameters {
   baseUrl: string;
   nodeKey: string;
   dataInstanceKey: string;
+  authServer?: string
 }
 
 export class VolumeChunkSourceParameters extends DVIDSourceParameters {
@@ -50,5 +51,4 @@ export class AnnotationSourceParameters extends DVIDSourceParameters {
   readonly?: boolean;
   usertag?: boolean;
   user?: string;
-  token?: string;
 }

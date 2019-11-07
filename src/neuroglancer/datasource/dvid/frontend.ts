@@ -20,6 +20,8 @@
  */
 
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
+import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompletionResult, DataSource} from 'neuroglancer/datasource';
 import {AnnotationSourceParameters, DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, annotationChunkDataSize} from 'neuroglancer/datasource/dvid/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
@@ -31,12 +33,14 @@ import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglan
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {fetchOk} from 'neuroglancer/util/http_request';
 import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
-import {DVIDInstance, makeRequest} from 'neuroglancer/datasource/dvid/api';
+import {DVIDInstance, DVIDToken, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal} from 'neuroglancer/util/signal';
 import {Env, getUserFromToken, isNonEmptyString, DVIDPointAnnotation, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
+import { getObjectId } from 'neuroglancer/util/object_id';
+import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -611,7 +615,8 @@ function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVo
   }
 }
 
-const MultiscaleAnnotationSourceBase = (WithParameters(MultiscaleAnnotationSource, AnnotationSourceParameters));
+const MultiscaleAnnotationSourceBase = WithParameters(
+  WithCredentialsProvider<DVIDToken>()(MultiscaleAnnotationSource), AnnotationSourceParameters);
 
 export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   key: any;
@@ -621,6 +626,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   }
 
   constructor(chunkManager: ChunkManager, options: {
+    credentialsProvider: CredentialsProvider<DVIDToken>,
     parameters: AnnotationSourceParameters,
     multiscaleVolumeInfo: MultiscaleVolumeInfo
   }) {
@@ -667,7 +673,24 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   }
 }
 
-function parseAnnotationKey(key: string): Promise<AnnotationSourceParameters> {
+function getUser(parameters: any, token:string) {
+  if (token) {
+    const tokenUser = getUserFromToken(token);
+    if (isNonEmptyString(tokenUser)) {
+      if (parameters.user) {
+        if (parameters.user !== tokenUser) {
+          return undefined;
+        }
+      } else {
+        parameters.user = tokenUser;
+      }
+    }
+  }
+
+  return isNonEmptyString(parameters.user) ? parameters.user : (parameters.usertag ? Env.getUser() : '');
+}
+
+function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) => CredentialsProvider<DVIDToken>): Promise<AnnotationSourceParameters> {
   const match = key.match(/^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/);
 
   if (match === null) {
@@ -682,27 +705,29 @@ function parseAnnotationKey(key: string): Promise<AnnotationSourceParameters> {
     usertag: false
   };
 
+  let parameters:any = {};
+
   if (queryString && queryString.length > 1) {
-    const parameters = parseQueryStringParameters(queryString.substring(1));
-    if (parameters) {
-      if (parameters.usertag) {
-        sourceParameters.usertag = (parameters.usertag === 'true');
-      }
-      
-      if (parameters.token) {
-        sourceParameters.token = parameters.token;
-        const tokenUser = getUserFromToken(parameters.token);
-        if (parameters.user && parameters.user !== tokenUser) {
-          parameters.user = undefined;
-        } else {
-          parameters.user = tokenUser;
-        }
-      }
-      sourceParameters.user = isNonEmptyString(parameters.user) ? parameters.user : (sourceParameters.usertag ? Env.getUser() : '');
+    parameters = parseQueryStringParameters(queryString.substring(1));
+    if (parameters.usertag) {
+      parameters.usertag = (parameters.usertag === 'true');
+      sourceParameters.usertag = parameters.usertag;
     }
   }
 
-  return Promise.resolve(sourceParameters);
+  if (parameters.auth) {
+    // let credentials: CredentialsWithGeneration<DVIDToken>|undefined;
+    return getCredentialsProvider(parameters.auth).get(/*credentials, uncancelableToken*/).then(
+      credentials => {
+        sourceParameters.authServer = parameters.auth;
+        sourceParameters.user = getUser(parameters, credentials.credentials);
+        return sourceParameters;
+      }
+    );
+  } else {
+    sourceParameters.user = getUser(parameters, parameters.token);
+    return Promise.resolve(sourceParameters);
+  }
 }
 
 async function getSyncedLabel(parameters: AnnotationSourceParameters): Promise<string> {
@@ -726,12 +751,24 @@ async function getSyncedLabel(parameters: AnnotationSourceParameters): Promise<s
 
 export class DVIDDataSource extends DataSource {
   dvidAnnotationSourceKey: Promise<any>;
-  constructor() {
+  constructor(public credentialsManager: CredentialsManager) {
     super();
   }
 
   get description() {
     return 'DVID';
+  }
+
+  getCredentialsProvider(authServer: string|undefined|null) {
+    if (authServer) {
+      if (!isDVIDCredentialsProviderRegistered(authServer)) {
+        registerDVIDCredentialsProvider(authServer);
+      }
+
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(authServer, authServer);
+    } else {
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(credentialsKey, authServer);
+    }
   }
 
   getVolume(chunkManager: ChunkManager, url: string) {
@@ -749,9 +786,10 @@ export class DVIDDataSource extends DataSource {
         {
           type: 'dvid:getMultiscaleInfo',
           volumeId,
-          instance
+          instance,
+          credentialsProvider: getObjectId(this.getCredentialsProvider(parameters.authServer))
         },
-        () => makeRequest(instance, {
+        () => makeRequestWithCredentials(instance, this.getCredentialsProvider(parameters.authServer), {
                 method: 'GET',
                 path: `/${volumeId}/info`,
                 responseType: 'json'
@@ -766,13 +804,14 @@ export class DVIDDataSource extends DataSource {
           .then(label => this.getMultiscaleInfo(chunkManager, { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': label }))
           .then(multiscaleVolumeInfo => chunkManager.getChunkSource(DVIDAnnotationSource, {
             parameters,
+            credentialsProvider: this.getCredentialsProvider(parameters.authServer),
             multiscaleVolumeInfo
           }));
       }));
   }
 
   getAnnotationSource(chunkManager: ChunkManager, key: string) {
-    this.dvidAnnotationSourceKey = parseAnnotationKey(key).then(
+    this.dvidAnnotationSourceKey = parseAnnotationKey(key, this.getCredentialsProvider.bind(this)).then(
       parameters => {
         return {
           type: 'dvid:getAnnotationSource',

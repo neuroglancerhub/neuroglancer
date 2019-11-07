@@ -28,12 +28,13 @@ import {cancellableFetchOk, responseArrayBuffer} from 'neuroglancer/util/http_re
 import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {DVIDInstance, makeRequest} from 'neuroglancer/datasource/dvid/api';
+import {DVIDInstance, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
 import {DVIDPointAnnotation, updateAnnotationTypeHandler} from 'neuroglancer/datasource/dvid/utils';
 import {Annotation, AnnotationId, AnnotationSerializer, AnnotationType, Point} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
 import {verifyObject, verifyObjectProperty, verifyOptionalString, parseIntVec, verifyString} from 'neuroglancer/util/json';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
+import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 
 @registerSharedObject() export class DVIDSkeletonSource extends
 (WithParameters(SkeletonSource, SkeletonSourceParameters)) {
@@ -134,7 +135,8 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
 function DVIDSource<Parameters, TBase extends {new (...args: any[]): SharedObject}>(
   Base: TBase, parametersConstructor: ChunkSourceParametersConstructor<Parameters>) {
-  return WithParameters(Base, parametersConstructor);
+  return WithParameters(
+    WithSharedCredentialsProviderCounterpart<DVIDToken>()(Base), parametersConstructor);
 }
 
 export function parseUint64ToArray(out: Uint64[], v: string): Uint64[] {
@@ -266,8 +268,10 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
 
     if (parameters.usertag) {
       if (parameters.user) {
-        return makeRequest(
-          new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+        return makeRequestWithCredentials(
+          new DVIDInstance(parameters.baseUrl, parameters.nodeKey), 
+          this.credentialsProvider,
+          {
             method: 'GET',
             path: this.getPathByUserTag(parameters.user),
             payload: undefined,
@@ -281,20 +285,20 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
         throw Error('Expecting a valid user name.')
       }
     } else {
-      console.log('Annotaition chunk position', chunk.chunkGridPosition);
       if (chunk.source.spec.upperChunkBound[0] <= chunk.source.spec.lowerChunkBound[0]) {
         return Promise.resolve(parseAnnotations(chunk, []));
       }
-      // console.log('downloadGeometry:', parameters);
       const chunkDataSize = annotationChunkDataSize;
       const chunkPosition = vec3.multiply(vec3.create(), chunk.chunkGridPosition, chunkDataSize);
-      return makeRequest(
-        new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
-        method: 'GET',
-        path: this.getPath(chunkPosition, chunkDataSize),
-        payload: undefined,
-        responseType: 'json',
-      },
+      return makeRequestWithCredentials(
+        new DVIDInstance(parameters.baseUrl, parameters.nodeKey),
+        this.credentialsProvider,
+        {
+          method: 'GET',
+          path: this.getPath(chunkPosition, chunkDataSize),
+          payload: undefined,
+          responseType: 'json',
+        },
         cancellationToken)
         .then(values => {
           parseAnnotations(chunk, values);
@@ -306,8 +310,10 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
     chunk: AnnotationSubsetGeometryChunk, cancellationToken: CancellationToken) {
     const { parameters } = this;
 
-    return makeRequest(
-      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+    return makeRequestWithCredentials(
+      new DVIDInstance(parameters.baseUrl, parameters.nodeKey),
+      this.credentialsProvider,
+      {
         method: 'GET',
         path: this.getPathByBodyId(chunk.objectId),
         payload: undefined,
@@ -322,8 +328,10 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
   downloadMetadata(chunk: AnnotationMetadataChunk, cancellationToken: CancellationToken) {
     const { parameters } = this;
     const id = chunk.key!;
-    return makeRequest(
-      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
+    return makeRequestWithCredentials(
+      new DVIDInstance(parameters.baseUrl, parameters.nodeKey),
+      this.credentialsProvider,
+      {
         method: 'GET',
         path: this.getPathByAnnotationId(id),
         payload: undefined,
@@ -358,13 +366,15 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
     const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
 
     if (this.uploadable(annotation)) {
-      return makeRequest(
-        new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
-        method: 'POST',
-        path: this.getElementsPath(),
-        payload: JSON.stringify([dvidAnnotation]),
-        responseType: '',
-      })
+      return makeRequestWithCredentials(
+        new DVIDInstance(parameters.baseUrl, parameters.nodeKey),
+        this.credentialsProvider,
+        {
+          method: 'POST',
+          path: this.getElementsPath(),
+          payload: JSON.stringify([dvidAnnotation]),
+          responseType: '',
+        })
         .then(() => {
           return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
         });
@@ -377,13 +387,15 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
     if (this.uploadable(annotation)) {
       const { parameters } = this;
       const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
-      return makeRequest(
-        new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
-        method: 'POST',
-        path: this.getElementsPath(),
-        payload: JSON.stringify([dvidAnnotation]),
-        responseType: '',
-      });
+      return makeRequestWithCredentials(
+        new DVIDInstance(parameters.baseUrl, parameters.nodeKey),
+        this.credentialsProvider,
+        {
+          method: 'POST',
+          path: this.getElementsPath(),
+          payload: JSON.stringify([dvidAnnotation]),
+          responseType: '',
+        });
     } else {
       return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
     }
@@ -391,12 +403,14 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
 
   delete (id: AnnotationId) {
     const {parameters} = this;
-    return makeRequest(
-      new DVIDInstance(parameters.baseUrl, parameters.nodeKey), {
-             method: 'DELETE',
-             path: `/${parameters.dataInstanceKey}/element/${id}`,
-             payload: undefined,
-             responseType: '',
-           });
+    return makeRequestWithCredentials(
+      new DVIDInstance(parameters.baseUrl, parameters.nodeKey),
+      this.credentialsProvider,
+      {
+        method: 'DELETE',
+        path: `/${parameters.dataInstanceKey}/element/${id}`,
+        payload: undefined,
+        responseType: '',
+      });
   }
 }

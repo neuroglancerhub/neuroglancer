@@ -57,6 +57,7 @@ const DEFAULT_DATA_SOURCES = exports.DEFAULT_DATA_SOURCES = [
   },
   {
     source: 'neuroglancer/datasource/render',
+    registerCredentials: 'neuroglancer/datasource/dvid/register_credentials_provider',
     asyncComputation: [
       'neuroglancer/async_computation/decode_jpeg',
     ],

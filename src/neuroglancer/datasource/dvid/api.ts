@@ -19,7 +19,16 @@
  */
 
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {responseJson, cancellableFetchOk} from 'neuroglancer/util/http_request';
+import {responseJson, cancellableFetchOk, responseArrayBuffer, ResponseTransform} from 'neuroglancer/util/http_request';
+import {CredentialsProvider} from 'neuroglancer/credentials_provider';
+import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
+// import {DVIDCredentialsProvider} from 'neuroglancer/datasource/dvid/credentials_provider';
+
+export type DVIDToken = string;
+
+export const credentialsKey = 'DVID';
+
+// export type DVIDCredentialsProvider = CredentialsProvider<DVIDToken>;
 
 export interface HttpCall {
   method: 'GET' | 'POST' | 'DELETE';
@@ -64,4 +73,64 @@ export function makeRequest(
     } else {
       return cancellableFetchOk(requestInfo, init, responseJson, cancellationToken);
     }
+}
+
+export function makeRequestWithCredentials(
+  instance: DVIDInstance,
+  credentialsProvider: CredentialsProvider<DVIDToken>,
+  httpCall: HttpCall & { responseType: 'arraybuffer' },
+  cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
+
+export function makeRequestWithCredentials(
+  instance: DVIDInstance,
+  credentialsProvider: CredentialsProvider<DVIDToken>,
+  httpCall: HttpCall & { responseType: 'json' }, cancellationToken?: CancellationToken): Promise<any>;
+
+export function makeRequestWithCredentials(
+  instance: DVIDInstance,
+  credentialsProvider: CredentialsProvider<DVIDToken>,
+  httpCall: HttpCall & { responseType: '' }, cancellationToken?: CancellationToken): Promise<any>;
+
+export function makeRequestWithCredentials(
+  instance: DVIDInstance, credentialsProvider: CredentialsProvider<DVIDToken>,
+  httpCall: HttpCall & { responseType: XMLHttpRequestResponseType },
+  cancellationToken: CancellationToken = uncancelableToken): Promise<any> {
+    return fetchWithDVIDCredentials(
+      credentialsProvider, 
+      `${instance.getNodeApiUrl()}${httpCall.path}`, 
+      { method: httpCall.method, body: httpCall.payload }, 
+      httpCall.responseType === '' ? responseText : (httpCall.responseType === 'json' ? responseJson : responseArrayBuffer),
+      cancellationToken
+    );
+}
+
+export function fetchWithDVIDCredentials<T>(
+  credentialsProvider: CredentialsProvider<DVIDToken>,
+  input: string,
+  init: RequestInit,
+  transformResponse: ResponseTransform<T>,
+  cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
+  return fetchWithCredentials(
+    credentialsProvider, input, init, transformResponse,
+    credentials => {
+      const headers = new Headers(init.headers);
+      if (input.startsWith('https')) {
+        headers.set('Authorization', `Bearer ${credentials}`);
+        headers.set('Access-Control-Allow-Origin', '*');
+      }
+      return { ...init, headers };
+    },
+    error => {
+      const { status } = error;
+      if (status === 403 || status === 401) {
+        // Authorization needed.  Retry with refreshed token.
+        return 'refresh';
+      }
+      if (status === 504) {
+        // Gateway timeout can occur if the server takes too long to reply.  Retry.
+        return 'retry';
+      }
+      throw error;
+    },
+    cancellationToken);
 }

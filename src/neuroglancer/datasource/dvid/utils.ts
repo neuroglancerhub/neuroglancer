@@ -219,6 +219,6 @@ export function getUserFromToken(token: string): string|null {
   return null;
 }
 
-export function isNonEmptyString(str: string|null|undefined) {
-  return (str && str.length > 0);
+export function isNonEmptyString(str: string|null|undefined): str is string {
+  return (str && str.length > 0) ? true : false;
 }
