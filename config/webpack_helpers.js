@@ -461,13 +461,6 @@ function getViewerConfigFromEnv(options, env) {
   if (envParts.has('module')) {
     const srcDir = resolveReal(__dirname, '../src');
     options.frontendModules = [resolveReal(srcDir, 'main_module.ts')];
-    options.defines = {
-      // Sets the root url where the bundled files will be served from. By
-      // default, they are served from the same relative path as the main
-      // neuroglancer application. When the application is included as a module
-      // that path doesn't always work and the url root needs to be specified.
-      'NEUROGLANCER_BUNDLE_ROOT': JSON.stringify('/')
-    };
   }
   return getViewerConfig(options);
 }
