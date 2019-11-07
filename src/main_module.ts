@@ -32,7 +32,7 @@ import {BrainmapsCredentialsProvider} from 'neuroglancer/datasource/brainmaps/cr
 
 export function setupDefaultViewer(options: {
   BrainMapsClientId: string | undefined,
-  Target: HTMLElement | undefined
+  target: HTMLElement | undefined
 }) {
   // image_register();
   registerLayerType('image', ImageUserLayer);
@@ -55,7 +55,7 @@ export function setupDefaultViewer(options: {
     );
   }
 
-  let viewer = makeMinimalViewer(undefined, options.Target);
+  let viewer = makeMinimalViewer(undefined, options.target);
   setDefaultInputEventBindings(viewer.inputEventBindings);
 
   /* const hashBinding = viewer.registerDisposer(new UrlHashBinding(viewer.state));
