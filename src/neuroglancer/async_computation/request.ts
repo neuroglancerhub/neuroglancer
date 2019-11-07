@@ -17,9 +17,7 @@
 import {AsyncComputationSpec} from 'neuroglancer/async_computation';
 import {CANCELED, CancellationToken} from 'neuroglancer/util/cancellation';
 
-declare var NEUROGLANCER_BUNDLE_ROOT: string|undefined
-const bundleRoot = "undefined" === typeof NEUROGLANCER_BUNDLE_ROOT ? '' : NEUROGLANCER_BUNDLE_ROOT;
-const bundleUrl =  bundleRoot + 'async_computation.bundle.js';
+const bundleUrl = 'async_computation.bundle.js';
 
 const freeWorkers: Worker[] = [];
 const pendingTasks = new Map<number, {msg: any, transfer: Transferable[] | undefined}>();
