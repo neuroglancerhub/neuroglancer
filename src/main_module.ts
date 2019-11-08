@@ -31,7 +31,7 @@ import {BrainmapsCredentialsProvider} from 'neuroglancer/datasource/brainmaps/cr
 // }
 
 export function setupDefaultViewer(options: {
-  BrainMapsClientId: string | undefined,
+  brainMapsClientId: string | undefined,
   target: HTMLElement | undefined,
   bundleRoot: string | undefined
 }) {
@@ -46,8 +46,8 @@ export function setupDefaultViewer(options: {
   registerProvider('dvid', () => new DVIDDataSource());
 
   // register_brainmaps
-  if (options.BrainMapsClientId) {
-    const clientId: string = options.BrainMapsClientId;
+  if (options.brainMapsClientId) {
+    const clientId: string = options.brainMapsClientId;
     defaultCredentialsManager.register(credentialsKey, () => new BrainmapsCredentialsProvider(clientId));
     registerProvider('brainmaps',
       options => new BrainmapsDataSource(
