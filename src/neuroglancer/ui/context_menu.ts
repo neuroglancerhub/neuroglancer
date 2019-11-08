@@ -21,6 +21,10 @@ import {NullarySignal} from 'neuroglancer/util/signal';
 import './context_menu.css';
 
 export function positionContextMenu(menu: HTMLElement, event: MouseEvent) {
+  // Set the display to block before checking the offset, or the offset will be
+  // reported as 0 and the context menu wont display correctly when too close to
+  // the right side of the browser window.
+  menu.style.display = 'block';
   const {offsetWidth, offsetHeight} = menu;
   const viewportWidth = document.documentElement!.clientWidth;
   const viewportHeight = document.documentElement!.clientHeight;
@@ -30,7 +34,6 @@ export function positionContextMenu(menu: HTMLElement, event: MouseEvent) {
       document.documentElement!.scrollTop + Math.min(viewportHeight - offsetHeight, event.clientY);
   menu.style.left = posX + 'px';
   menu.style.top = posY + 'px';
-  menu.style.display = 'block';
 }
 
 export class ContextMenu extends RefCounted {
