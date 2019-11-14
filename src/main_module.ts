@@ -6,6 +6,7 @@ import {VolumeType} from 'neuroglancer/sliceview/volume/base';
 
 import {ImageUserLayer} from 'neuroglancer/image_user_layer';
 import {SegmentationUserLayer} from 'neuroglancer/segmentation_user_layer';
+import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
 // import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 
 import {DVIDDataSource} from 'neuroglancer/datasource/dvid/frontend';
@@ -42,6 +43,10 @@ export function setupDefaultViewer(options: {
   // segmentation_register();
   registerLayerType('segmentation', SegmentationUserLayer);
   registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
+
+  // register annotation layer
+  registerLayerType('annotation', AnnotationUserLayer);
+  registerLayerType('pointAnnotation', AnnotationUserLayer);
 
   registerProvider('dvid', (options) => new DVIDDataSource(options.credentialsManager));
 
