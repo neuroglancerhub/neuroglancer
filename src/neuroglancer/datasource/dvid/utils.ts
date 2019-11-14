@@ -30,7 +30,7 @@ let EnvMemoize = new StringMemoize();
 export let Env = {
     getUser: function () {
         return EnvMemoize.getUncounted(
-            'user', () => prompt('User:') || '');
+            'user', () => 'janelia_flyem'/*prompt('User:') || ''*/); // mockup user for testing
     }
 };
 

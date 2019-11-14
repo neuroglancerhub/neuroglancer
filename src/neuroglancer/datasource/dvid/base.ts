@@ -48,6 +48,7 @@ export class MeshSourceParameters extends DVIDSourceParameters {
 
 export class AnnotationSourceParameters extends DVIDSourceParameters {
   static RPC_ID = 'dvid/Annotation';
+  syncedLabel?: string;
   readonly?: boolean;
   usertag?: boolean;
   user?: string;

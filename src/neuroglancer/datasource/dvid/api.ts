@@ -134,3 +134,38 @@ export function fetchWithDVIDCredentials<T>(
     },
     cancellationToken);
 }
+
+
+export function fetchWithReadyDVIDCredentials<T>(
+  credentials: DVIDToken,
+  input: string,
+  init: RequestInit,
+  transformResponse: ResponseTransform<T>,
+  cancellationToken: CancellationToken = uncancelableToken) {
+
+  let applyCredentials = (credentials: DVIDToken, init: RequestInit) => {
+    const headers = new Headers(init.headers);
+    if (input.startsWith('https') && credentials.length > 0) {
+      headers.set('Authorization', `Bearer ${credentials}`);
+      headers.set('Access-Control-Allow-Origin', '*');
+    }
+    return { ...init, headers };
+  }
+
+  return cancellableFetchOk(
+    input, applyCredentials(credentials, init), transformResponse,
+    cancellationToken);
+}
+
+export function makeRequestWithReadyCredentials(
+  instance: DVIDInstance, credentials: DVIDToken,
+  httpCall: HttpCall & { responseType: XMLHttpRequestResponseType },
+  cancellationToken: CancellationToken = uncancelableToken): Promise<any> {
+    return fetchWithReadyDVIDCredentials(
+      credentials, 
+      `${instance.getNodeApiUrl()}${httpCall.path}`, 
+      { method: httpCall.method, body: httpCall.payload }, 
+      httpCall.responseType === '' ? responseText : (httpCall.responseType === 'json' ? responseJson : responseArrayBuffer),
+      cancellationToken
+    );
+}

@@ -32,8 +32,8 @@ import {StatusMessage} from 'neuroglancer/status';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {fetchOk} from 'neuroglancer/util/http_request';
-import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
-import {DVIDInstance, DVIDToken, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
+import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, verifyStringArray} from 'neuroglancer/util/json';
+import {DVIDInstance, DVIDToken, credentialsKey, makeRequestWithCredentials, makeRequestWithReadyCredentials} from 'neuroglancer/datasource/dvid/api';
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
@@ -690,6 +690,20 @@ function getUser(parameters: any, token:string) {
   return isNonEmptyString(parameters.user) ? parameters.user : (parameters.usertag ? Env.getUser() : '');
 }
 
+function getDataInfo(
+  parameters: AnnotationSourceParameters, credentials: DVIDToken): Promise<any> {
+  let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+  return makeRequestWithReadyCredentials(
+    instance,
+    credentials,
+    {
+      method: 'GET',
+      path: getDataInfoPath(parameters),
+      responseType: 'json'
+    }
+  )
+}
+
 function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) => CredentialsProvider<DVIDToken>): Promise<AnnotationSourceParameters> {
   const match = key.match(/^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/);
 
@@ -713,40 +727,55 @@ function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) =
       parameters.usertag = (parameters.usertag === 'true');
       sourceParameters.usertag = parameters.usertag;
     }
+    if (parameters.user) {
+      sourceParameters.user = parameters.user;
+    }
   }
 
-  if (parameters.auth) {
-    // let credentials: CredentialsWithGeneration<DVIDToken>|undefined;
-    return getCredentialsProvider(parameters.auth).get(/*credentials, uncancelableToken*/).then(
-      credentials => {
-        sourceParameters.authServer = parameters.auth;
-        sourceParameters.user = getUser(parameters, credentials.credentials);
+  return getCredentialsProvider(parameters.auth).get().then(
+    credentials => getDataInfo(sourceParameters, credentials.credentials).then(
+      response => {
+        sourceParameters.authServer = 'token:' + credentials.credentials;
+        sourceParameters.usertag = getUserTag(sourceParameters, response);
+        sourceParameters.user = getUser(sourceParameters, credentials.credentials);
+        sourceParameters.syncedLabel = getSyncedLabel(response);
         return sourceParameters;
       }
-    );
+    )
+  );
+}
+
+function getDataInfoPath(parameters: AnnotationSourceParameters): string {
+  return `/${parameters.dataInstanceKey}/info`;
+}
+
+function getDataInstanceTag(dataInfo: any, key: string) {
+  let baseInfo = verifyObjectProperty(dataInfo, 'Base', verifyObject);
+  let tags = verifyObjectProperty(baseInfo, 'Tags', verifyObject);
+
+  return tags[key];
+}
+
+function getSyncedLabel(dataInfo: any): string {
+  let baseInfo = verifyObjectProperty(dataInfo, 'Base', verifyObject);
+  let syncs = verifyObjectProperty(baseInfo, 'Syncs', verifyStringArray);
+
+
+  if (syncs.length === 1) {
+    return syncs[0];
   } else {
-    sourceParameters.user = getUser(parameters, parameters.token);
-    return Promise.resolve(sourceParameters);
+    return '';
   }
 }
 
-async function getSyncedLabel(parameters: AnnotationSourceParameters): Promise<string> {
-  let dataUrl = `${parameters.baseUrl}/api/node/${parameters.nodeKey}/${parameters.dataInstanceKey}`;
-  return fetchOk(`${dataUrl}/info`)
-    .then(response => response.json())
-    .then(response => response['Base'])
-    .then(response => {
-      if (response['TypeName'] !== 'annotation') {
-        throw new Error(`Invalid DVID annotation url: ${dataUrl}`);
-      }
+function getUserTag(parameters: AnnotationSourceParameters, dataInfo: any): boolean {
+  if (parameters.usertag) {
+    return true;
+  } else {
+    return getDataInstanceTag(dataInfo, 'annotation') === 'user-supplied';
+  }
 
-      let syncs: Array<string> = response['Syncs'];
-      if (syncs === undefined || syncs === null || syncs.length !== 1) {
-        throw new Error(`Unexpected label syncs: ${syncs}`);
-      }
-
-      return syncs[0];
-    });
+  return false;
 }
 
 export class DVIDDataSource extends DataSource {
@@ -800,8 +829,7 @@ export class DVIDDataSource extends DataSource {
     return chunkManager.memoize.getUncounted(
       sourceKey,
       () => Promise.resolve(sourceKey['parameters']).then(parameters => {
-        return getSyncedLabel(parameters)
-          .then(label => this.getMultiscaleInfo(chunkManager, { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': label }))
+        return this.getMultiscaleInfo(chunkManager, { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': parameters.syncedLabel })
           .then(multiscaleVolumeInfo => chunkManager.getChunkSource(DVIDAnnotationSource, {
             parameters,
             credentialsProvider: this.getCredentialsProvider(parameters.authServer),
