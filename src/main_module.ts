@@ -43,7 +43,7 @@ export function setupDefaultViewer(options: {
   registerLayerType('segmentation', SegmentationUserLayer);
   registerVolumeLayerType(VolumeType.SEGMENTATION, SegmentationUserLayer);
 
-  registerProvider('dvid', () => new DVIDDataSource());
+  registerProvider('dvid', (options) => new DVIDDataSource(options.credentialsManager));
 
   // register_brainmaps
   if (options.brainMapsClientId) {
