@@ -23,7 +23,7 @@ import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend'
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
 import {CompletionResult, DataSource} from 'neuroglancer/datasource';
-import {AnnotationSourceParameters, DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, annotationChunkDataSize} from 'neuroglancer/datasource/dvid/base';
+import {AnnotationSourceParameters, DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
@@ -587,7 +587,7 @@ function getAnnotationChunkDataSize(parameters: AnnotationSourceParameters, uppe
   if (parameters.usertag) {
     return upperVoxelBound;
   } else {
-    return annotationChunkDataSize;
+    return parameters.chunkDataSize;
   }
 }
 
@@ -720,6 +720,7 @@ function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) =
 
   let queryString = match[4];
   let sourceParameters: AnnotationSourceParameters = {
+    ...new AnnotationSourceParameters(),
     baseUrl: match[1],
     nodeKey: match[2],
     dataInstanceKey: match[3],
@@ -738,10 +739,20 @@ function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) =
     }
   }
 
-  return getCredentialsProvider(parameters.auth).get().then(
+  let auth = parameters.auth;
+  if (!auth) {
+    if (sourceParameters.baseUrl.startsWith('https')) {
+      auth = `${sourceParameters.baseUrl}/api/server/token`;
+    }
+  }
+
+  return getCredentialsProvider(auth).get().then(
     credentials => getDataInfo(sourceParameters, credentials.credentials).then(
       response => {
         sourceParameters.tags = getInstanceTags(response);
+        if ('BlockSize' in sourceParameters.tags) {
+          sourceParameters.chunkDataSize = JSON.parse(verifyObjectProperty(sourceParameters.tags, "BlockSize", verifyString));
+        }
         sourceParameters.authServer = 'token:' + credentials.credentials;
         sourceParameters.usertag = userTagged(sourceParameters);
         sourceParameters.user = getUser(sourceParameters, credentials.credentials);
@@ -864,16 +875,17 @@ export class DVIDDataSource extends DataSource {
           { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': parameters.syncedLabel })
           .then(info => {return {multiscaleInfo: info, parameters}});
       } else {
-        return Promise.resolve(new MultiscaleVolumeInfo(getVolumeInfoResponseFromTags(parameters.tags)))
-        .then(info => {return {multiscaleInfo: info, parameters}});;
+        return Promise.resolve(
+          new MultiscaleVolumeInfo(getVolumeInfoResponseFromTags(parameters.tags)))
+          .then(info => {return {multiscaleInfo: info, parameters}});
       }
     }
 
     return chunkManager.memoize.getUncounted(
       sourceKey,
       () => Promise.resolve(sourceKey['parameters'])
-      .then(parameters => getMultiscaleInfo(parameters))
-      .then(result => getChunkSource(result.multiscaleInfo, result.parameters)));
+        .then(parameters => getMultiscaleInfo(parameters))
+        .then(result => getChunkSource(result.multiscaleInfo, result.parameters)));
 
     /*
     return chunkManager.memoize.getUncounted(

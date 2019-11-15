@@ -104,6 +104,24 @@ export function makeRequestWithCredentials(
     );
 }
 
+function  applyCredentials(input: string) {
+  return (credentials: DVIDToken, init: RequestInit) => {
+    const headers = new Headers(init.headers);
+    let newInit:RequestInit = {...init};
+  
+    if (input.startsWith('https')) {
+      if (credentials.length > 0) {
+        headers.set('Authorization', `Bearer ${credentials}`);
+        headers.set('Access-Control-Allow-Origin', '*');
+        newInit.headers = headers;
+      } else {
+        newInit.credentials = 'same-origin';
+      }
+    }
+    return newInit;
+  } 
+}
+
 export function fetchWithDVIDCredentials<T>(
   credentialsProvider: CredentialsProvider<DVIDToken>,
   input: string,
@@ -112,14 +130,7 @@ export function fetchWithDVIDCredentials<T>(
   cancellationToken: CancellationToken = uncancelableToken): Promise<T> {
   return fetchWithCredentials(
     credentialsProvider, input, init, transformResponse,
-    credentials => {
-      const headers = new Headers(init.headers);
-      if (input.startsWith('https')) {
-        headers.set('Authorization', `Bearer ${credentials}`);
-        headers.set('Access-Control-Allow-Origin', '*');
-      }
-      return { ...init, headers };
-    },
+    applyCredentials(input),
     error => {
       const { status } = error;
       if (status === 403 || status === 401) {
@@ -143,17 +154,8 @@ export function fetchWithReadyDVIDCredentials<T>(
   transformResponse: ResponseTransform<T>,
   cancellationToken: CancellationToken = uncancelableToken) {
 
-  let applyCredentials = (credentials: DVIDToken, init: RequestInit) => {
-    const headers = new Headers(init.headers);
-    if (input.startsWith('https') && credentials.length > 0) {
-      headers.set('Authorization', `Bearer ${credentials}`);
-      headers.set('Access-Control-Allow-Origin', '*');
-    }
-    return { ...init, headers };
-  }
-
   return cancellableFetchOk(
-    input, applyCredentials(credentials, init), transformResponse,
+    input, applyCredentials(input)(credentials, init), transformResponse,
     cancellationToken);
 }
 

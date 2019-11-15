@@ -15,7 +15,7 @@
  */
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {AnnotationSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, annotationChunkDataSize} from 'neuroglancer/datasource/dvid/base';
+import {AnnotationSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {assignMeshFragmentData, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
@@ -288,7 +288,7 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
       if (chunk.source.spec.upperChunkBound[0] <= chunk.source.spec.lowerChunkBound[0]) {
         return Promise.resolve(parseAnnotations(chunk, []));
       }
-      const chunkDataSize = annotationChunkDataSize;
+      const chunkDataSize = this.parameters.chunkDataSize;
       const chunkPosition = vec3.multiply(vec3.create(), chunk.chunkGridPosition, chunkDataSize);
       return makeRequestWithCredentials(
         new DVIDInstance(parameters.baseUrl, parameters.nodeKey),

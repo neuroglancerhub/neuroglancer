@@ -24,18 +24,20 @@ import {CANCELED, CancellationTokenSource, uncancelableToken} from 'neuroglancer
 import {responseJson, cancellableFetchOk} from 'neuroglancer/util/http_request';
 import {DVIDToken} from 'neuroglancer/datasource/dvid/api';
 
-export function getAuthToken(
+function getAuthToken(
   authServer: string,
   cancellationToken = uncancelableToken) {
   console.log('getAuthToken:', authServer);
-  if (!authServer || authServer.length === 0) {
+  if (!authServer) {
     return Promise.resolve('');
   } else if (authServer.startsWith('token:')) {
     return Promise.resolve(authServer.substring(6));
   } else {
-    return cancellableFetchOk(authServer, {'method': 'GET', credentials: "same-origin"}, responseJson, cancellationToken).then(
-      response => response.token
-    );
+    return cancellableFetchOk(
+      authServer, 
+      {'method': 'GET', credentials: "same-origin"}, 
+      responseJson, 
+      cancellationToken).then( response => response.token);
   }
 }
 
