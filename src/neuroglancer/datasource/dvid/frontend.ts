@@ -38,7 +38,7 @@ import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal} from 'neuroglancer/util/signal';
-import {Env, getUserFromToken, isNonEmptyString, DVIDPointAnnotation, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
+import {Env, getUserFromToken, DVIDPointAnnotation, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
 import { getObjectId } from 'neuroglancer/util/object_id';
 import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
 
@@ -605,7 +605,7 @@ function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVo
   };
 
   if (parameters.usertag) {
-    if (isNonEmptyString(parameters.user)) {
+    if (parameters.user) {
       return [makeSpec(multiscaleInfo.scales[0])];
     } else {
       throw("Expecting a valid user");
@@ -646,7 +646,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       this.readonly = this.parameters.readonly;
     }
   
-    if (!isNonEmptyString(this.parameters.user) || !this.parameters.usertag) {
+    if (!this.parameters.user || !this.parameters.usertag) {
       this.readonly = true;
     }
   }
@@ -673,21 +673,28 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   }
 }
 
-function getUser(parameters: any, token:string) {
-  if (token) {
-    const tokenUser = getUserFromToken(token);
-    if (isNonEmptyString(tokenUser)) {
-      if (parameters.user) {
-        if (parameters.user !== tokenUser) {
-          return undefined;
-        }
-      } else {
-        parameters.user = tokenUser;
+function getUser(parameters: AnnotationSourceParameters, token:string) {
+  const tokenUser = getUserFromToken(token);
+  if (tokenUser) {
+    if (parameters.user) {
+      if (parameters.user !== tokenUser) {
+        return undefined;
       }
+    } else {
+      return tokenUser;
     }
   }
 
-  return isNonEmptyString(parameters.user) ? parameters.user : (parameters.usertag ? Env.getUser() : '');
+  if (parameters.usertag && !parameters.user) {
+    if (parameters.tags) {
+      parameters.user = parameters.tags['guest'];
+    }
+    if (!parameters.user) {
+      return Env.getUser();
+    }
+  }
+
+  return parameters.user;
 }
 
 function getDataInfo(
@@ -716,7 +723,7 @@ function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) =
     baseUrl: match[1],
     nodeKey: match[2],
     dataInstanceKey: match[3],
-    usertag: false
+    usertag: undefined
   };
 
   let parameters:any = {};
@@ -724,8 +731,7 @@ function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) =
   if (queryString && queryString.length > 1) {
     parameters = parseQueryStringParameters(queryString.substring(1));
     if (parameters.usertag) {
-      parameters.usertag = (parameters.usertag === 'true');
-      sourceParameters.usertag = parameters.usertag;
+      sourceParameters.usertag =  (parameters.usertag === 'true');
     }
     if (parameters.user) {
       sourceParameters.user = parameters.user;
@@ -735,8 +741,9 @@ function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) =
   return getCredentialsProvider(parameters.auth).get().then(
     credentials => getDataInfo(sourceParameters, credentials.credentials).then(
       response => {
+        sourceParameters.tags = getInstanceTags(response);
         sourceParameters.authServer = 'token:' + credentials.credentials;
-        sourceParameters.usertag = getUserTag(sourceParameters, response);
+        sourceParameters.usertag = userTagged(sourceParameters);
         sourceParameters.user = getUser(sourceParameters, credentials.credentials);
         sourceParameters.syncedLabel = getSyncedLabel(response);
         return sourceParameters;
@@ -749,11 +756,28 @@ function getDataInfoPath(parameters: AnnotationSourceParameters): string {
   return `/${parameters.dataInstanceKey}/info`;
 }
 
-function getDataInstanceTag(dataInfo: any, key: string) {
+function getInstanceTags(dataInfo: any) {
   let baseInfo = verifyObjectProperty(dataInfo, 'Base', verifyObject);
-  let tags = verifyObjectProperty(baseInfo, 'Tags', verifyObject);
 
-  return tags[key];
+  return verifyObjectProperty(baseInfo, 'Tags', verifyObject);
+}
+
+function getVolumeInfoResponseFromTags(tags: any) {
+  let MaxDownresLevel = parseInt(verifyObjectProperty(tags, 'MaxDownresLevel', verifyString));
+  let MaxPoint = JSON.parse(verifyObjectProperty(tags, "MaxPoint", verifyString));
+  let MinPoint = JSON.parse(verifyObjectProperty(tags, "MinPoint", verifyString));
+  let VoxelSize = JSON.parse(verifyObjectProperty(tags, "VoxelSize", verifyString));
+
+  return {
+    Base: {
+    },
+    Extended: {
+      VoxelSize,
+      MinPoint,
+      MaxPoint,
+      MaxDownresLevel
+    }
+  };
 }
 
 function getSyncedLabel(dataInfo: any): string {
@@ -768,11 +792,11 @@ function getSyncedLabel(dataInfo: any): string {
   }
 }
 
-function getUserTag(parameters: AnnotationSourceParameters, dataInfo: any): boolean {
+function userTagged(parameters: AnnotationSourceParameters) {
   if (parameters.usertag) {
     return true;
-  } else {
-    return getDataInstanceTag(dataInfo, 'annotation') === 'user-supplied';
+  } else if (parameters.tags && parameters.usertag === undefined) {
+    return parameters.tags['annotation'] === 'user-supplied';
   }
 
   return false;
@@ -826,16 +850,49 @@ export class DVIDDataSource extends DataSource {
   }
 
   getAnnotationSourceFromSourceKey(chunkManager: ChunkManager, sourceKey: any) {
+    let getChunkSource = (multiscaleVolumeInfo: any, parameters: any) => chunkManager.getChunkSource(
+      DVIDAnnotationSource, {
+      parameters,
+      credentialsProvider: this.getCredentialsProvider(parameters.authServer),
+      multiscaleVolumeInfo
+    });
+
+    let getMultiscaleInfo = (parameters: any) => {
+      if (parameters.syncedLabel) {
+        return this.getMultiscaleInfo(
+          chunkManager, 
+          { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': parameters.syncedLabel })
+          .then(info => {return {multiscaleInfo: info, parameters}});
+      } else {
+        return Promise.resolve(new MultiscaleVolumeInfo(getVolumeInfoResponseFromTags(parameters.tags)))
+        .then(info => {return {multiscaleInfo: info, parameters}});;
+      }
+    }
+
+    return chunkManager.memoize.getUncounted(
+      sourceKey,
+      () => Promise.resolve(sourceKey['parameters'])
+      .then(parameters => getMultiscaleInfo(parameters))
+      .then(result => getChunkSource(result.multiscaleInfo, result.parameters)));
+
+    /*
     return chunkManager.memoize.getUncounted(
       sourceKey,
       () => Promise.resolve(sourceKey['parameters']).then(parameters => {
-        return this.getMultiscaleInfo(chunkManager, { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': parameters.syncedLabel })
-          .then(multiscaleVolumeInfo => chunkManager.getChunkSource(DVIDAnnotationSource, {
+        if (parameters.syncedLabel) {
+          return this.getMultiscaleInfo(
+            chunkManager, 
+            { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': parameters.syncedLabel })
+          .then(multiscaleVolumeInfo => chunkManager.getChunkSource(
+            DVIDAnnotationSource, {
             parameters,
             credentialsProvider: this.getCredentialsProvider(parameters.authServer),
             multiscaleVolumeInfo
           }));
+        }
+        
       }));
+      */
   }
 
   getAnnotationSource(chunkManager: ChunkManager, key: string) {

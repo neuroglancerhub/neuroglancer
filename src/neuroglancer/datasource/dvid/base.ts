@@ -52,4 +52,5 @@ export class AnnotationSourceParameters extends DVIDSourceParameters {
   readonly?: boolean;
   usertag?: boolean;
   user?: string;
+  tags?: any;
 }

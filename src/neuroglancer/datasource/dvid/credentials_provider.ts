@@ -33,7 +33,7 @@ export function getAuthToken(
   } else if (authServer.startsWith('token:')) {
     return Promise.resolve(authServer.substring(6));
   } else {
-    return cancellableFetchOk(authServer, {'method': 'GET'}, responseJson, cancellationToken).then(
+    return cancellableFetchOk(authServer, {'method': 'GET', credentials: "same-origin"}, responseJson, cancellationToken).then(
       response => response.token
     );
   }

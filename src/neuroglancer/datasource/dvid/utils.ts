@@ -30,7 +30,7 @@ let EnvMemoize = new StringMemoize();
 export let Env = {
     getUser: function () {
         return EnvMemoize.getUncounted(
-            'user', () => 'janelia_flyem'/*prompt('User:') || ''*/); // mockup user for testing
+            'user', () => prompt('User:') || '');
     }
 };
 
@@ -206,19 +206,13 @@ export function updateRenderHelper() {
 }
 
 export function getUserFromToken(token: string): string|null {
-  if (token) {
-    const payload = token.split('.')[1];
-    if (payload) {
-      const obj = JSON.parse(window.atob(payload));
-      if ('email' in obj) {
-        return obj['email'];
-      }
+  const payload = token.split('.')[1];
+  if (payload) {
+    const obj = JSON.parse(window.atob(payload));
+    if ('email' in obj) {
+      return obj['email'];
     }
   }
 
   return null;
-}
-
-export function isNonEmptyString(str: string|null|undefined): str is string {
-  return (str && str.length > 0) ? true : false;
 }
