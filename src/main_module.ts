@@ -12,6 +12,7 @@ import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
 import {DVIDDataSource} from 'neuroglancer/datasource/dvid/frontend';
 import {BrainmapsDataSource, productionInstance} from 'neuroglancer/datasource/brainmaps/frontend';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
+import {disableContextMenu, disableWheel} from 'neuroglancer/ui/disable_default_actions';
 
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {credentialsKey} from 'neuroglancer/datasource/brainmaps/api';
@@ -60,6 +61,9 @@ export function setupDefaultViewer(options: {
       )
     );
   }
+
+  disableContextMenu(options.target);
+  disableWheel(options.target);
 
   let viewer = makeMinimalViewer({ bundleRoot: options.bundleRoot }, options.target);
   setDefaultInputEventBindings(viewer.inputEventBindings);
