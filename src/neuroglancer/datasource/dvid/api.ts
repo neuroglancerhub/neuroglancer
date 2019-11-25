@@ -30,17 +30,21 @@ export const credentialsKey = 'DVID';
 
 // export type DVIDCredentialsProvider = CredentialsProvider<DVIDToken>;
 
-export interface HttpCall {
+interface HttpCall {
   method: 'GET' | 'POST' | 'DELETE';
-  path: string;
+  url: string;
   payload?: string;
 }
 
 export class DVIDInstance {
   constructor(public baseUrl: string, public nodeKey: string) {}
 
-  getNodeApiUrl(): string {
-    return `${this.baseUrl}/api/node/${this.nodeKey}`;
+  getNodeApiUrl(path = ''): string {
+    return `${this.baseUrl}/api/node/${this.nodeKey}${path}`;
+  }
+
+  getRepoInfoUrl(): string {
+    return `${this.baseUrl}/api/repos/info`;
   }
 }
 
@@ -49,23 +53,19 @@ function responseText(response: Response): Promise<any> {
 }
 
 export function makeRequest(
-  instance: DVIDInstance,
   httpCall: HttpCall & { responseType: 'arraybuffer' },
   cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
 
 export function makeRequest(
-  instance: DVIDInstance,
   httpCall: HttpCall & { responseType: 'json' }, cancellationToken?: CancellationToken): Promise<any>;
 
 export function makeRequest(
-  instance: DVIDInstance,
   httpCall: HttpCall & { responseType: '' }, cancellationToken?: CancellationToken): Promise<any>;
 
 export function makeRequest(
-  instance: DVIDInstance,
   httpCall: HttpCall & { responseType: XMLHttpRequestResponseType },
   cancellationToken: CancellationToken = uncancelableToken): any {
-    let requestInfo = `${instance.getNodeApiUrl()}${httpCall.path}`;
+    let requestInfo = `${httpCall.url}`;
     let init = { method: httpCall.method, body: httpCall.payload };
 
     if (httpCall.responseType === '') {
@@ -74,7 +74,7 @@ export function makeRequest(
       return cancellableFetchOk(requestInfo, init, responseJson, cancellationToken);
     }
 }
-
+/*
 export function makeRequestWithCredentials(
   instance: DVIDInstance,
   credentialsProvider: CredentialsProvider<DVIDToken>,
@@ -103,6 +103,33 @@ export function makeRequestWithCredentials(
       cancellationToken
     );
 }
+*/
+
+export function makeRequestWithCredentials(
+  credentialsProvider: CredentialsProvider<DVIDToken>,
+  httpCall: HttpCall & { responseType: 'arraybuffer' },
+  cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
+
+export function makeRequestWithCredentials(
+  credentialsProvider: CredentialsProvider<DVIDToken>,
+  httpCall: HttpCall & { responseType: 'json' }, cancellationToken?: CancellationToken): Promise<any>;
+
+export function makeRequestWithCredentials(
+  credentialsProvider: CredentialsProvider<DVIDToken>,
+  httpCall: HttpCall & { responseType: '' }, cancellationToken?: CancellationToken): Promise<any>;
+
+export function makeRequestWithCredentials(
+  credentialsProvider: CredentialsProvider<DVIDToken>,
+  httpCall: HttpCall & { responseType: XMLHttpRequestResponseType },
+  cancellationToken: CancellationToken = uncancelableToken): Promise<any> {
+    return fetchWithDVIDCredentials(
+      credentialsProvider, 
+      httpCall.url, 
+      { method: httpCall.method, body: httpCall.payload }, 
+      httpCall.responseType === '' ? responseText : (httpCall.responseType === 'json' ? responseJson : responseArrayBuffer),
+      cancellationToken
+    );
+}
 
 function  applyCredentials(input: string) {
   return (credentials: DVIDToken, init: RequestInit) => {
@@ -112,11 +139,10 @@ function  applyCredentials(input: string) {
     if (input.startsWith('https')) {
       if (credentials.length > 0) {
         headers.set('Authorization', `Bearer ${credentials}`);
-        headers.set('Access-Control-Allow-Origin', '*');
-        newInit.headers = headers;
       } else {
-        newInit.credentials = 'same-origin';
+        newInit.credentials = 'include';
       }
+      newInit.headers = headers;
     }
     return newInit;
   } 
@@ -160,12 +186,12 @@ export function fetchWithReadyDVIDCredentials<T>(
 }
 
 export function makeRequestWithReadyCredentials(
-  instance: DVIDInstance, credentials: DVIDToken,
+  credentials: DVIDToken,
   httpCall: HttpCall & { responseType: XMLHttpRequestResponseType },
   cancellationToken: CancellationToken = uncancelableToken): Promise<any> {
     return fetchWithReadyDVIDCredentials(
       credentials, 
-      `${instance.getNodeApiUrl()}${httpCall.path}`, 
+      `${httpCall.url}`, 
       { method: httpCall.method, body: httpCall.payload }, 
       httpCall.responseType === '' ? responseText : (httpCall.responseType === 'json' ? responseJson : responseArrayBuffer),
       cancellationToken
