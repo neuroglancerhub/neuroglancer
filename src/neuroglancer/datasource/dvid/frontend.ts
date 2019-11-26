@@ -937,7 +937,7 @@ export class DVIDDataSource extends DataSource {
       if (parameters.syncedLabel) {
         return this.getMultiscaleInfo(
           chunkManager, 
-          { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': parameters.syncedLabel })
+          { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': parameters.syncedLabel, 'authServer': parameters.authServer })
           .then(info => {return {multiscaleInfo: info, parameters}});
       } else {
         return Promise.resolve(

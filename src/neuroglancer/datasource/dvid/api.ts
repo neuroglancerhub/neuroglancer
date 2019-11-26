@@ -133,12 +133,12 @@ export function makeRequestWithCredentials(
 
 function  applyCredentials(input: string) {
   return (credentials: DVIDToken, init: RequestInit) => {
-    const headers = new Headers(init.headers);
+  const headers:any = {};
     let newInit:RequestInit = {...init};
   
     if (input.startsWith('https')) {
       if (credentials.length > 0) {
-        headers.set('Authorization', `Bearer ${credentials}`);
+        headers.Authorization = `Bearer ${credentials}`;
       } else {
         newInit.credentials = 'include';
       }
