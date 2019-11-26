@@ -48,7 +48,7 @@ export class DVIDInstance {
   }
 }
 
-function responseText(response: Response): Promise<any> {
+export function responseText(response: Response): Promise<any> {
   return response.text();
 }
 

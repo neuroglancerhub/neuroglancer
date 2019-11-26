@@ -21,8 +21,8 @@
 import {CredentialsProvider, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
 import {StatusMessage} from 'neuroglancer/status';
 import {CANCELED, CancellationTokenSource, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {responseJson, cancellableFetchOk} from 'neuroglancer/util/http_request';
-import {DVIDToken} from 'neuroglancer/datasource/dvid/api';
+import {cancellableFetchOk} from 'neuroglancer/util/http_request';
+import {DVIDToken, responseText} from 'neuroglancer/datasource/dvid/api';
 
 function getAuthToken(
   authServer: string,
@@ -38,8 +38,8 @@ function getAuthToken(
     return cancellableFetchOk(
       authServer, 
       {'method': 'GET', credentials: 'include', headers}, 
-      responseJson, 
-      cancellationToken).then( response => response.token);
+      responseText, 
+      cancellationToken);
   }
 }
 
