@@ -221,9 +221,9 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
           'baseUrl': parameters.baseUrl,
           'nodeKey': parameters.nodeKey,
           'authServer': parameters.authServer,
-          'dataInstanceKey': this.meshSrc,
-          credentialsProvider: credentialsProvider
-        }
+          'dataInstanceKey': this.meshSrc
+        },
+        credentialsProvider: credentialsProvider
       });
     } else {
       return null;
@@ -237,9 +237,9 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
           'baseUrl': parameters.baseUrl,
           'nodeKey': parameters.nodeKey,
           'authServer': parameters.authServer,
-          'dataInstanceKey': this.skeletonSrc,
-          credentialsProvider: credentialsProvider
-        }
+          'dataInstanceKey': this.skeletonSrc
+        },
+        credentialsProvider: credentialsProvider
       });
     } else {
       return null;
