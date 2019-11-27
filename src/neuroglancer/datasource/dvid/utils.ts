@@ -209,7 +209,9 @@ export function getUserFromToken(token: string): string|null {
   const payload = token.split('.')[1];
   if (payload) {
     const obj = JSON.parse(window.atob(payload));
-    if ('email' in obj) {
+    if ('user' in obj) {
+      return obj['user'];
+    } else if ('email' in obj) {
       return obj['email'];
     }
   }
