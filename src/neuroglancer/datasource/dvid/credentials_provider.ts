@@ -27,7 +27,7 @@ import {DVIDToken, responseText} from 'neuroglancer/datasource/dvid/api';
 function getAuthToken(
   authServer: string,
   cancellationToken = uncancelableToken) {
-  console.log('getAuthToken:', authServer);
+  // console.log('getAuthToken:', authServer);
   if (!authServer) {
     return Promise.resolve('');
   } else if (authServer.startsWith('token:')) {
