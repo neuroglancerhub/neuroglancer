@@ -35,6 +35,7 @@ import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk
 import {verifyObject, verifyObjectProperty, verifyOptionalString, parseIntVec, verifyString} from 'neuroglancer/util/json';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
+import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base';
 
 @registerSharedObject() export class DVIDSkeletonSource extends
 (DVIDSource(SkeletonSource, SkeletonSourceParameters)) {
@@ -208,6 +209,7 @@ function parseAnnotation(entry: any): DVIDPointAnnotation|null {
 }
 
 function parseAnnotations(
+  source: DVIDAnnotationSource,
   chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any[]) {
   const serializer = new AnnotationSerializer();
   if (responses) {
@@ -217,6 +219,12 @@ function parseAnnotations(
           let annotation = parseAnnotation(response);
           if (annotation) {
             serializer.add(annotation);
+            if (annotation.kind === 'Note') {
+              source.rpc!.invoke(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, {
+                id: source.rpcId,
+                newAnnotation: (annotation.properties && annotation.properties.type) ? { ...annotation, description: annotation.description + ` (type:${annotation.properties.type})`} : annotation
+              });
+            }
           }
         } catch (e) {
           throw new Error(`Error parsing annotation: ${e.message}`);
@@ -302,14 +310,14 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
           },
           cancellationToken)
           .then(values => {
-            parseAnnotations(chunk, values);
+            parseAnnotations(this, chunk, values);
           });
       } else {
         throw Error('Expecting a valid user name.')
       }
     } else {
       if (chunk.source.spec.upperChunkBound[0] <= chunk.source.spec.lowerChunkBound[0]) {
-        return Promise.resolve(parseAnnotations(chunk, []));
+        return Promise.resolve(parseAnnotations(this, chunk, []));
       }
       const chunkDataSize = this.parameters.chunkDataSize;
       const chunkPosition = vec3.multiply(vec3.create(), chunk.chunkGridPosition, chunkDataSize);
@@ -324,7 +332,7 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
         },
         cancellationToken)
         .then(values => {
-          parseAnnotations(chunk, values);
+          parseAnnotations(this, chunk, values);
         });
     }
   }
@@ -343,7 +351,7 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
       },
       cancellationToken)
       .then(values => {
-        parseAnnotations(chunk, values);
+        parseAnnotations(this, chunk, values);
       });
   }
 

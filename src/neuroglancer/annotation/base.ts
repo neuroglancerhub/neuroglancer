@@ -23,6 +23,7 @@ export const ANNOTATION_REFERENCE_ADD_RPC_ID = 'annotation.reference.add';
 export const ANNOTATION_REFERENCE_DELETE_RPC_ID = 'annotation.reference.delete';
 export const ANNOTATION_COMMIT_UPDATE_RPC_ID = 'annotation.commit';
 export const ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID = 'annotation.commit';
+export const ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID = 'annotation.add.signal';
 
 export class AnnotationGeometryChunkSpecification extends SliceViewChunkSpecification {}
 

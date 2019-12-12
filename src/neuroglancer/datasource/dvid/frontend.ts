@@ -247,6 +247,22 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
   }
 }
 
+/*
+function parseDataInstances(obj: any, name: string, instanceNames: Array<string>): DataInstanceInfo {
+  verifyObject(obj);
+  let dataObj = verifyObjectProperty(obj, name, verifyObject);
+  let baseInfo = verifyObjectProperty(obj, 'Base', x => new DataInstanceBaseInfo(x));
+  if (baseInfo.typeName === 'annotation') {
+    let syncedLabel = getSyncedLabel(baseInfo);
+    if (syncedLabel) {
+      dataObj = verifyObjectProperty(obj, syncedLabel, verifyObject);
+      baseInfo = verifyObjectProperty(obj, 'Base', x => new DataInstanceBaseInfo(x));
+    }
+  }
+
+}
+*/
+
 export function parseDataInstance(
     obj: any, name: string, instanceNames: Array<string>): DataInstanceInfo {
   verifyObject(obj);
@@ -382,10 +398,11 @@ export function getServerInfo(chunkManager: ChunkManager, parameters: DVIDSource
  * this requires an extra api call
  */
 export function getDataInstanceDetails(
-    chunkManager: ChunkManager, parameters: DVIDSourceParameters, info: VolumeDataInstanceInfo, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>) {
+    chunkManager: ChunkManager, parameters: DVIDSourceParameters, info: VolumeDataInstanceInfo, 
+    getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>) {
   let {baseUrl, nodeKey} = parameters;
   return chunkManager.memoize.getUncounted(
-      {type: 'dvid:getInstanceDetails', baseUrl, nodeKey, name: info.name}, () => {
+      {type: 'dvid:getInstanceDetails', baseUrl, nodeKey, name: info.name}, async () => {
         /*
         let result = fetchOk(`${baseUrl}/api/node/${nodeKey}/${info.name}/info`)
                          .then(response => response.json());
@@ -405,6 +422,34 @@ export function getDataInstanceDetails(
           errorPrefix: `Error retrieving ${description}: `,
         });
 
+        let instanceDetails = await result;
+        let baseInfo = verifyObjectProperty(instanceDetails, 'Base', verifyObject);
+        let typeName = verifyObjectProperty(baseInfo, 'TypeName', verifyString);
+        if (typeName == 'annotation') {
+          let syncedLabel = getSyncedLabel(instanceDetails);
+          if (syncedLabel) {
+            instanceDetails = await makeRequestWithCredentials(getCredentialsProvider(parameters.authServer), {
+              method: 'GET',
+              url: instance.getNodeApiUrl(`/${syncedLabel}/info`),
+              responseType: 'json'
+            });
+          } else {
+            let tags = getInstanceTags(instanceDetails);
+            info.lowerVoxelBound = parseIntVec(vec3.create(), JSON.parse(verifyObjectProperty(tags, "MinPoint", verifyString)));
+            info.upperVoxelBound = parseIntVec(vec3.create(), JSON.parse(verifyObjectProperty(tags, "MaxPoint", verifyString)));
+            return info;
+          }
+        } 
+        
+        let extended = verifyObjectProperty(instanceDetails, 'Extended', verifyObject);
+        info.lowerVoxelBound =
+          verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
+        info.upperVoxelBound =
+          verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
+
+        return info;
+
+        /*
         return result.then(instanceDetails => {
           let extended = verifyObjectProperty(instanceDetails, 'Extended', verifyObject);
           info.lowerVoxelBound =
@@ -413,6 +458,7 @@ export function getDataInstanceDetails(
               verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
           return info;
         });
+        */
       });
 }
 
@@ -766,7 +812,7 @@ function getDataInfo(
   )
 }
 
-function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) => CredentialsProvider<DVIDToken>): Promise<AnnotationSourceParameters> {
+async function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) => CredentialsProvider<DVIDToken>): Promise<AnnotationSourceParameters> {
   const match = key.match(/^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/);
 
   if (match === null) {
@@ -801,6 +847,20 @@ function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) =
     }
   }
 
+  let credentials = await getCredentialsProvider(auth).get();
+  let dataInfo = await getDataInfo(sourceParameters, credentials.credentials);
+
+  sourceParameters.tags = getInstanceTags(dataInfo);
+  if ('BlockSize' in sourceParameters.tags) {
+    sourceParameters.chunkDataSize = JSON.parse(verifyObjectProperty(sourceParameters.tags, "BlockSize", verifyString));
+  }
+  sourceParameters.authServer = 'token:' + credentials.credentials;
+  sourceParameters.usertag = userTagged(sourceParameters);
+  sourceParameters.user = getUser(sourceParameters, credentials.credentials);
+  sourceParameters.syncedLabel = getSyncedLabel(dataInfo);
+  return sourceParameters;
+
+  /*
   return getCredentialsProvider(auth).get().then(
     credentials => getDataInfo(sourceParameters, credentials.credentials).then(
       response => {
@@ -816,6 +876,7 @@ function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) =
       }
     )
   );
+  */
 }
 
 /*
