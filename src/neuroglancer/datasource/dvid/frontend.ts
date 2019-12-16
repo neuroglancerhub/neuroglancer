@@ -38,9 +38,11 @@ import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal} from 'neuroglancer/util/signal';
-import {Env, getUserFromToken, DVIDPointAnnotation, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
+import {Env, getUserFromToken, DVIDPointAnnotation, getAnnotationDescription, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
 import { getObjectId } from 'neuroglancer/util/object_id';
 import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
+import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/ui/widgets';
+import { JsonObject } from 'src/neuroglancer/ui/jsonschema';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -738,6 +740,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       ...options
     });
 
+    // this.annotationSchema = this.parameters.schema;
     mat4.fromScaling(this.objectToLocal, options.multiscaleVolumeInfo.scales[0].voxelSize);
     this.updateAnnotationHandlers();
     this.childAdded = this.childAdded || new Signal<(annotation: Annotation) => void>();
@@ -750,6 +753,38 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   
     if (!this.parameters.user || !this.parameters.usertag) {
       this.readonly = true;
+    }
+
+    if (this.parameters.schema) {
+      this.createAnnotationWidget = (reference: AnnotationReference) => {
+        let schema = this.parameters.schema;
+        const annotation = reference.value!;
+        const properties: JsonObject = (<DVIDPointAnnotation>(annotation)).properties || {};
+
+        let widget = createAnnotationWidget(schema, {'Prop': properties});
+        console.log(annotation);
+        // setWidgetFromObject(widget, annotation.property, 'annotation\\Prop');
+        let button = document.createElement('button');
+        button.textContent = 'update';
+        button.onclick = () => {
+          let result: any = {};
+          getObjectFromWidget(schema, '', result, 'annotation');
+          // alert(JSON.stringify(result));
+          const x = result['Prop'];
+          let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
+          if (newAnnotation.properties) {
+            newAnnotation.properties = {...newAnnotation.properties, ...x};
+          } else {
+            newAnnotation.properties = x;
+          }
+          newAnnotation.description = getAnnotationDescription(newAnnotation);
+          this.update(reference, newAnnotation);
+          this.commit(reference);
+        };
+        widget.appendChild(button);
+
+        return widget;
+      }
     }
   }
 
@@ -858,6 +893,8 @@ async function parseAnnotationKey(key: string, getCredentialsProvider: (auth:str
   sourceParameters.usertag = userTagged(sourceParameters);
   sourceParameters.user = getUser(sourceParameters, credentials.credentials);
   sourceParameters.syncedLabel = getSyncedLabel(dataInfo);
+  sourceParameters.schema = getSchema(sourceParameters);
+
   return sourceParameters;
 
   /*
@@ -922,6 +959,15 @@ function getSyncedLabel(dataInfo: any): string {
     return syncs[0];
   } else {
     return '';
+  }
+}
+
+function getSchema(parameters: AnnotationSourceParameters) {
+  if (parameters.tags) {
+    let schemaJson = parameters.tags['schema'];
+    if (schemaJson) {
+      return JSON.parse(schemaJson);
+    }
   }
 }
 

@@ -46,6 +46,7 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
+// import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/ui/widgets';
 
 type AnnotationIdAndPart = {
   id: string,
@@ -804,21 +805,37 @@ export class AnnotationDetailsTab extends Tab {
     }
     element.appendChild(segmentListWidget.element);
 
-    const description = document.createElement('textarea');
-    description.value = annotation.description || '';
-    description.rows = 3;
-    description.className = 'neuroglancer-annotation-details-description';
-    description.placeholder = 'Description';
-    if (annotationLayer.source.readonly) {
-      description.readOnly = true;
-    } else {
-      description.addEventListener('change', () => {
-        const x = description.value;
-        annotationLayer.source.update(reference, {...annotation, description: x ? x : undefined});
-        annotationLayer.source.commit(reference);
-      });
+    let widgetCreated = false;
+
+    if (annotation.type === AnnotationType.POINT) {
+      if (annotationLayer.source instanceof MultiscaleAnnotationSource) {
+        if (annotationLayer.source.createAnnotationWidget) {
+          const widget = annotationLayer.source.createAnnotationWidget(reference);
+          if (widget) {
+            element.appendChild(widget);
+            widgetCreated = true;
+          }
+        }
+      }
     }
-    element.appendChild(description);
+
+    if (!widgetCreated) {
+      const description = document.createElement('textarea');
+      description.value = annotation.description || '';
+      description.rows = 3;
+      description.className = 'neuroglancer-annotation-details-description';
+      description.placeholder = 'Description';
+      if (annotationLayer.source.readonly) {
+        description.readOnly = true;
+      } else {
+        description.addEventListener('change', () => {
+          const x = description.value;
+          annotationLayer.source.update(reference, { ...annotation, description: x ? x : undefined });
+          annotationLayer.source.commit(reference);
+        });
+      }
+      element.appendChild(description);
+    }
   }
 }
 

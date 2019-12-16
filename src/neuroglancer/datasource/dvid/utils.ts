@@ -39,6 +39,19 @@ export interface DVIDPointAnnotation extends Point {
   properties?: {[key:string]: any};
 }
 
+export function getAnnotationDescription(annotation: DVIDPointAnnotation): string {
+
+  let description = '';
+  if (annotation.properties) {
+    description = annotation.properties.comment || annotation.properties.annotation || '';
+    if (annotation.properties.type && annotation.properties.type !== 'Other') {
+      description += ` (Type: ${annotation.properties.type})`;
+    }
+  }
+
+  return description;
+}
+
 function getRenderingAttribute(annotation: Point): number {
   let {kind, properties} = <DVIDPointAnnotation>annotation;
   if (properties) {

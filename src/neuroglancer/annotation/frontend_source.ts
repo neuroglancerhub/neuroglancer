@@ -301,6 +301,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       this.registerDisposer(new AnnotationMetadataChunkSource(this.chunkManager, this));
   sources: Owned<AnnotationGeometryChunkSource>[][];
   segmentFilteredSource: Owned<AnnotationSubsetGeometryChunkSource>;
+  createAnnotationWidget: (reference: AnnotationReference) => HTMLElement|null;
   objectToLocal = mat4.create();
   constructor(public chunkManager: Borrowed<ChunkManager>, options: {
     sourceSpecifications: {parameters: any, spec: AnnotationGeometryChunkSpecification}[][]

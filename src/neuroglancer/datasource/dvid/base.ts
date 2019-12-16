@@ -54,4 +54,5 @@ export class AnnotationSourceParameters extends DVIDSourceParameters {
   usertag?: boolean;
   user?: string;
   tags?: any;
+  schema?: any;
 }
