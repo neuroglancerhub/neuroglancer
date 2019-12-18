@@ -67,8 +67,8 @@ function serializeTransformedSource(
     source: tsource.source.addCounterpartRef(),
     effectiveVoxelSize: tsource.effectiveVoxelSize,
     layerRank: tsource.layerRank,
-    lowerClipBound: tsource.lowerClipBound,
-    upperClipBound: tsource.upperClipBound,
+    nonDisplayLowerClipBound: tsource.nonDisplayLowerClipBound,
+    nonDisplayUpperClipBound: tsource.nonDisplayUpperClipBound,
     chunkDisplayDimensionIndices: tsource.chunkDisplayDimensionIndices,
     lowerChunkDisplayBound: tsource.lowerChunkDisplayBound,
     upperChunkDisplayBound: tsource.upperChunkDisplayBound,
@@ -229,6 +229,10 @@ export class SliceView extends Base {
                 transform, singleResolutionSource.chunkToMultiscaleTransform);
             const {chunkDataSize} = spec;
             const {chunkChannelDimensionIndices} = chunkTransform;
+            const nonDisplayLowerClipBound = new Float32Array(chunkRank);
+            const nonDisplayUpperClipBound = new Float32Array(chunkRank);
+            nonDisplayLowerClipBound.set(lowerClipBound);
+            nonDisplayUpperClipBound.set(upperClipBound);
             const channelRank = channelCoordinateSpace.rank;
             for (let channelDim = 0; channelDim < channelRank; ++channelDim) {
               const chunkDim = chunkChannelDimensionIndices[channelDim];
@@ -241,6 +245,8 @@ export class SliceView extends Base {
                     `[${lower}, ${upper}) but corresponding chunk dimension has range ` +
                     `[0, ${chunkDataSize[chunkDim]})`);
               }
+              nonDisplayLowerClipBound[chunkDim] = Number.NEGATIVE_INFINITY;
+              nonDisplayUpperClipBound[chunkDim] = Number.POSITIVE_INFINITY;
             }
             const chunkDisplayTransform =
                 getChunkDisplayTransformParameters(chunkTransform, layerDisplayDimensionMapping);
@@ -268,6 +274,8 @@ export class SliceView extends Base {
                 upperChunkDisplayBound[chunkDisplayDimIndex] = spec.upperChunkBound[chunkDim];
                 lowerClipDisplayBound[chunkDisplayDimIndex] = lowerClipBound[chunkDim];
                 upperClipDisplayBound[chunkDisplayDimIndex] = upperClipBound[chunkDim];
+                nonDisplayLowerClipBound[chunkDim] = Number.NEGATIVE_INFINITY;
+                nonDisplayUpperClipBound[chunkDim] = Number.POSITIVE_INFINITY;
               } else {
                 chunkDisplaySize[chunkDisplayDimIndex] = 1;
                 lowerChunkDisplayBound[chunkDisplayDimIndex] = 0;
@@ -295,8 +303,8 @@ export class SliceView extends Base {
             effectiveVoxelSize.fill(1, displayRank);
             return {
               layerRank,
-              lowerClipBound,
-              upperClipBound,
+              nonDisplayLowerClipBound,
+              nonDisplayUpperClipBound,
               renderLayer: layer,
               source,
               lowerChunkDisplayBound,

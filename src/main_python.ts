@@ -31,7 +31,7 @@ import {TrackableBasedStatusMessages} from 'neuroglancer/python_integration/remo
 import {ScreenshotHandler} from 'neuroglancer/python_integration/screenshots';
 import {ServerConnection} from 'neuroglancer/python_integration/server_connection';
 import {TrackableValue} from 'neuroglancer/trackable_value';
-import {bindDefaultCopyHandler} from 'neuroglancer/ui/default_clipboard_handling';
+import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeDefaultViewer} from 'neuroglancer/ui/default_viewer';
 import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
@@ -135,8 +135,8 @@ window.addEventListener('DOMContentLoaded', () => {
   configState.add('showHelpButton', viewer.uiConfiguration.showHelpButton);
   configState.add('showLocation', viewer.uiConfiguration.showLocation);
   configState.add('showPanelBorders', viewer.uiConfiguration.showPanelBorders);
+  configState.add('showLayerHoverValues', viewer.uiConfiguration.showLayerHoverValues);
   configState.add('scaleBarOptions', viewer.scaleBarOptions);
-
   const size = new TrackableValue<[number, number]|undefined>(
       undefined,
       x => x == null ? undefined : parseFixedLengthArray(<[number, number]>[0, 0], x, verifyInt));
@@ -175,4 +175,5 @@ window.addEventListener('DOMContentLoaded', () => {
       state => serverConnection.sendActionNotification('screenshot', state));
 
   bindDefaultCopyHandler(viewer);
+  bindDefaultPasteHandler(viewer);
 });

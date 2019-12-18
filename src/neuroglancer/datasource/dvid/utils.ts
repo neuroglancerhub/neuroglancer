@@ -161,13 +161,6 @@ vec4 getBorderColor() {
   return `getBorderColor()`;
 }
 
-/*
-class EmptyRenderHelper extends AnnotationRenderHelper {
-  draw(_: AnnotationRenderContext) {
-  }
-}
-*/
-
 function makeRenderHelper<TBase extends {new (...args: any[]): DVIDRenderHelper}>(Base: TBase, perspective = false) {
   return class extends Base {
     constructor(...args: any[]) {
