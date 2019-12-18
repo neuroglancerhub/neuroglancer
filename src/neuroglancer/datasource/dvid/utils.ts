@@ -40,6 +40,19 @@ export interface DVIDPointAnnotation extends Point {
   properties?: {[key:string]: any};
 }
 
+export function getAnnotationDescription(annotation: DVIDPointAnnotation): string {
+
+  let description = '';
+  if (annotation.properties) {
+    description = annotation.properties.comment || annotation.properties.annotation || '';
+    if (annotation.properties.type && annotation.properties.type !== 'Other') {
+      description += ` (Type: ${annotation.properties.type})`;
+    }
+  }
+
+  return description;
+}
+
 function getRenderingAttribute(annotation: Point): number {
   let {kind, properties} = <DVIDPointAnnotation>annotation;
   if (properties) {
@@ -50,9 +63,9 @@ function getRenderingAttribute(annotation: Point): number {
         }
       }
       if (properties.type) {
-        if (properties.type === 'Merge') {
+        if (properties.type === 'False Split') {
           return 2;
-        } else if (properties.type === 'Split') {
+        } else if (properties.type === 'False Merge') {
           return 3;
         }
       }
@@ -114,11 +127,9 @@ void setFillColor() {
     if (vRenderingAttribute == 1) {
       vColor.rgb = vec3(0.0, 1.0, 0.0);
     } else if (vRenderingAttribute == 2) {
-      vColor.rgb = hsv2rgb(vec3(mod(hsv.x - 0.1, 1.0), 1.0, hsv.z));
+      vColor.rgb = hsv2rgb(vec3(mod(hsv.x - 0.25, 1.0), 1.0, hsv.z));
     } else if (vRenderingAttribute == 3) {
-      vColor.rgb = hsv2rgb(vec3(mod(hsv.x - 0.3, 1.0), 1.0, hsv.z));
-    } else if (vRenderingAttribute == 4) {
-      vColor.rgb = vec3(1.0, 1.0, 1.0);
+      vColor.rgb = hsv2rgb(vec3(mod(hsv.x + 0.1, 1.0), 1.0, hsv.z));
     } else if (vRenderingAttribute == 5) {
       vColor.rgb = vec3(0.5, 0.5, 0.5);
     }
@@ -133,6 +144,7 @@ function getBorderColor(builder: ShaderBuilder) {
   let s = `
 vec4 getBorderColor() {
   vec4 borderColor = vec4(0.0, 0.0, 0.0, 1.0);
+  /*
   if (vRenderingAttribute == 2) {
     borderColor = vec4(1.0, 0.0, 0.0, 1.0);
   } else if (vRenderingAttribute == 3) {
@@ -140,6 +152,7 @@ vec4 getBorderColor() {
   } else if (vRenderingAttribute == 1) {
     borderColor = vec4(0.0, 1.0, 0.0, 1.0);
   }
+  */
   return borderColor;
 }
   `;
@@ -148,15 +161,27 @@ vec4 getBorderColor() {
   return `getBorderColor()`;
 }
 
+/*
 class EmptyRenderHelper extends AnnotationRenderHelper {
   draw(_: AnnotationRenderContext) {
   }
 }
+*/
+
+function makeRenderHelper<TBase extends {new (...args: any[]): DVIDRenderHelper}>(Base: TBase, perspective = false) {
+  return class extends Base {
+    constructor(...args: any[]) {
+      super(...args);
+      this.perspective = perspective;
+    }
+  }
+}
 
 class DVIDRenderHelper extends AnnotationRenderHelper {
-  private circleShader = this.registerDisposer(new CircleShader(this.gl));
-  private shaderGetter =
+  circleShader = this.registerDisposer(new CircleShader(this.gl));
+  shaderGetter =
       emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => this.defineShader(builder));
+  perspective = false;
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
@@ -166,9 +191,10 @@ class DVIDRenderHelper extends AnnotationRenderHelper {
     defineVectorArrayVertexShaderInput(builder, 'float', 'VertexPosition', rank);
     defineVectorArrayVertexShaderInput(builder, 'float', 'RenderingAtrribute', 1);
 
+    // Position of point in camera coordinates.
+    builder.addUniform('highp float', 'uFillOpacity');
     builder.addVarying('int', 'vRenderingAttribute', 'flat');
     builder.addVarying('highp float', 'vClipCoefficient');
-    builder.addUniform('highp float', 'uFillOpacity');
     builder.setVertexMain(`
 float modelPosition[${rank}] = getVertexPosition0();
 float renderingAttribute = getRenderingAtrribute0()[0];
@@ -194,7 +220,16 @@ emitAnnotation(color);
   }
 
   draw(context: AnnotationRenderContext) {
-    const fillOpacity = context.annotationLayer.state.displayState.fillOpacity.value;
+    let fillOpacity = context.annotationLayer.state.displayState.fillOpacity.value;
+
+    if (this.perspective) {
+      if (context.annotationLayer.state.displayState.filterBySegmentation.value) {
+        fillOpacity *= 0.5;
+      } else {
+        fillOpacity *= 0.1;
+      }
+    }
+
     let {gl} = this;
     
     const shader = this.shaderGetter(context.renderContext.emitter);
@@ -230,7 +265,7 @@ export function updateRenderHelper() {
   // renderHandler.bytes = DVIDPointAnnotationRank * 4;
   // renderHandler.serializer = DVIDPointAnnotationSerializer;
   renderHandler.sliceViewRenderHelper = DVIDRenderHelper;
-  renderHandler.perspectiveViewRenderHelper = EmptyRenderHelper;
+  renderHandler.perspectiveViewRenderHelper = makeRenderHelper(DVIDRenderHelper, true);
 }
 
 export function getUserFromToken(token: string): string|null {
@@ -246,3 +281,29 @@ export function getUserFromToken(token: string): string|null {
 
   return null;
 }
+
+export const defaultJsonSchema = {
+  "definitions": {},
+  "type": "object",
+  "required": [
+    "Prop"
+  ],
+  "properties": {
+    "Prop": {
+      "$id": "#/properties/Prop",
+      "type": "object",
+      "title": "Properties",
+      "required": [
+        "comment",
+      ],
+      "properties": {
+        "comment": {
+          "$id": "#/properties/Prop/properties/comment",
+          "type": "string",
+          "title": "Comment",
+          "default": ""
+        }
+      }
+    }
+  }
+};

@@ -52,6 +52,7 @@ import {makeIcon} from 'neuroglancer/widget/icon';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
+// import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/ui/widgets';
 
 interface AnnotationIdAndPart {
   id: string, sourceIndex: number;
@@ -497,14 +498,14 @@ export class AnnotationLayerView extends Tab {
       }
       const source = state.source;
       const refCounted = new RefCounted();
-      if (source instanceof AnnotationSource) {
+      // if (source instanceof AnnotationSource) {
         refCounted.registerDisposer(
             source.childAdded.add((annotation) => this.addAnnotationElement(annotation, state)));
         refCounted.registerDisposer(source.childUpdated.add(
             (annotation) => this.updateAnnotationElement(annotation, state)));
         refCounted.registerDisposer(source.childDeleted.add(
             (annotationId) => this.deleteAnnotationElement(annotationId, state)));
-      }
+      // }
       refCounted.registerDisposer(state.transform.changed.add(this.forceUpdateView));
       const sublistContainer = document.createElement('div');
       sublistContainer.classList.add('neuroglancer-annotation-sublist');
@@ -1147,21 +1148,35 @@ export class AnnotationDetailsTab extends Tab {
     }
     element.appendChild(segmentListWidget.element);
 
-    const description = document.createElement('textarea');
-    description.value = annotation.description || '';
-    description.rows = 3;
-    description.className = 'neuroglancer-annotation-details-description';
-    description.placeholder = 'Description';
-    if (annotationLayer.source.readonly) {
-      description.readOnly = true;
-    } else {
-      description.addEventListener('change', () => {
-        const x = description.value;
-        annotationLayer.source.update(reference, {...annotation, description: x ? x : undefined});
-        annotationLayer.source.commit(reference);
-      });
+    let widget = null;
+
+    if (annotation.type === AnnotationType.POINT) {
+      if (annotationLayer.source instanceof MultiscaleAnnotationSource) {
+        if (annotationLayer.source.makeEditWidget) {
+          widget = annotationLayer.source.makeEditWidget(reference);
+        }
+      }
     }
-    element.appendChild(description);
+
+    if (widget) {
+      element.appendChild(widget);
+    } else {
+      const description = document.createElement('textarea');
+      description.value = annotation.description || '';
+      description.rows = 3;
+      description.className = 'neuroglancer-annotation-details-description';
+      description.placeholder = 'Description';
+      if (annotationLayer.source.readonly) {
+        description.readOnly = true;
+      } else {
+        description.addEventListener('change', () => {
+          const x = description.value;
+          annotationLayer.source.update(reference, { ...annotation, description: x ? x : undefined });
+          annotationLayer.source.commit(reference);
+        });
+      }
+      element.appendChild(description);
+    }
   }
 }
 

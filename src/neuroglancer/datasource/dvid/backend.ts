@@ -29,12 +29,13 @@ import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {DVIDInstance, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
-import {DVIDPointAnnotation, updateAnnotationTypeHandler} from 'neuroglancer/datasource/dvid/utils';
+import {DVIDPointAnnotation, updateAnnotationTypeHandler, getAnnotationDescription} from 'neuroglancer/datasource/dvid/utils';
 import {Annotation, AnnotationId, AnnotationSerializer, AnnotationType, Point} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk} from 'neuroglancer/annotation/backend';
-import {verifyObject, verifyObjectProperty, verifyOptionalString, parseIntVec, verifyString} from 'neuroglancer/util/json';
+import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
+import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base';
 
 @registerSharedObject() export class DVIDSkeletonSource extends
 (DVIDSource(SkeletonSource, SkeletonSourceParameters)) {
@@ -176,38 +177,58 @@ function parseAnnotation(entry: any): DVIDPointAnnotation|null {
     if (kind !== 'Unknown') {
       const properties = verifyObjectProperty(entry, 'Prop', verifyObject);
       const corner = verifyObjectProperty(entry, 'Pos', x => parseIntVec(vec3.create(), x));
-      let description: string | undefined;
       let segments: Array<Uint64> = new Array<Uint64>();
 
       if (kind === 'Note') {
-        let isCustom = false;
-        if (properties.custom) {
-          isCustom = (properties.custom === '1');
+        if (properties.type) {
+          properties.type = DVIDToAnnotationType(properties.type);
         }
-        if (isCustom) {
-          description = verifyObjectProperty(properties, 'comment', verifyOptionalString);
-          segments = verifyObjectProperty(properties, 'body ID', x => parseUint64ToArray(Array<Uint64>(), x));
-        }
-      } else if (kind === 'PreSyn' || kind === 'PostSyn') {
-        description = verifyObjectProperty(properties, 'annotation', verifyOptionalString);
+        segments = verifyObjectProperty(properties, 'body ID', x => parseUint64ToArray(Array<Uint64>(), x));
       }
 
-      return {
+      let annotation: DVIDPointAnnotation =  {
         type: AnnotationType.POINT,
         id: `${corner[0]}_${corner[1]}_${corner[2]}`,
         point: corner,
-        description,
         segments,
         kind,
         properties
       };
+      let description = getAnnotationDescription(annotation);
+      if (description) {
+        annotation.description = description;
+      }
+      return annotation;
     }
   }
 
   return null;
 }
 
+function annotationToDVIDType(typestr: string): string {
+  switch (typestr) {
+    case 'False Merge':
+      return 'Split';
+    case 'False Split':
+      return 'Merge';
+    default:
+      return typestr;
+  }
+}
+
+function DVIDToAnnotationType(typestr: string): string {
+  switch (typestr) {
+    case 'Split':
+      return 'False Merge';
+    case 'Merge':
+      return 'False Split';
+    default:
+      return typestr;
+  }
+}
+
 function parseAnnotations(
+  source: DVIDAnnotationSource,
   chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any[]) {
   const serializer = new AnnotationSerializer(3);
   if (responses) {
@@ -217,6 +238,12 @@ function parseAnnotations(
           let annotation = parseAnnotation(response);
           if (annotation) {
             serializer.add(annotation);
+            if (annotation.kind === 'Note') {
+              source.rpc!.invoke(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, {
+                id: source.rpcId,
+                newAnnotation: {...annotation, description: getAnnotationDescription(annotation)}
+              });
+            }
           }
         } catch (e) {
           throw new Error(`Error parsing annotation: ${e.message}`);
@@ -228,36 +255,34 @@ function parseAnnotations(
 }
 
 function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefined): any {
-  const payload = annotation.description || '';
   const objectLabels =
-      annotation.segments === undefined ? undefined : annotation.segments.map(x => x.toString());
-  switch (annotation.type) {
-    case AnnotationType.POINT: {
-      let obj: {[key: string]: any} = {
-        Kind: 'Note',
-        Pos: [annotation.point[0], annotation.point[1], annotation.point[2]],
-        Prop: {
-          comment: payload
-        }
-      };
-      if (annotation.properties) {
-        if (annotation.properties.custom) {
-          obj['Prop']['custom'] = annotation.properties.custom;
-        }
-        if (annotation.properties.type) {
-          obj['Prop']['type'] = annotation.properties.type;
-        }
-      }
-      if (objectLabels && objectLabels.length > 0) {
-        obj['Prop']['body ID'] = objectLabels[0];
-      }
-      if (user) {
-        obj['Tags'] = ['user:' + user];
-        obj['Prop']['user'] = user;
-      }
-      return obj;
+    annotation.segments === undefined ? undefined : annotation.segments.map(x => x.toString());
+
+  let obj: { [key: string]: any } = {
+    Kind: 'Note',
+    Pos: [annotation.point[0], annotation.point[1], annotation.point[2]],
+    Prop: {}
+  };
+  if (annotation.properties) {
+    if (annotation.properties.comment) {
+      obj['Prop']['comment'] = annotation.properties.comment;
+    }
+    if (annotation.properties.custom) {
+      obj['Prop']['custom'] = annotation.properties.custom;
+    }
+    if (annotation.properties.type) {
+      obj['Prop']['type'] = annotationToDVIDType(annotation.properties.type);
     }
   }
+  if (objectLabels && objectLabels.length > 0) {
+    obj['Prop']['body ID'] = objectLabels[0];
+  }
+  if (user) {
+    obj['Tags'] = ['user:' + user];
+    obj['Prop']['user'] = user;
+  }
+
+  return obj;
 }
 
 @registerSharedObject() export class DVIDAnnotationSource extends (DVIDSource(AnnotationSource, AnnotationSourceParameters)) {
@@ -302,14 +327,14 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
           },
           cancellationToken)
           .then(values => {
-            parseAnnotations(chunk, values);
+            parseAnnotations(this, chunk, values);
           });
       } else {
         throw Error('Expecting a valid user name.')
       }
     } else {
       if (chunk.source.spec.upperChunkBound[0] <= chunk.source.spec.lowerChunkBound[0]) {
-        return Promise.resolve(parseAnnotations(chunk, []));
+        return Promise.resolve(parseAnnotations(this, chunk, []));
       }
       const chunkDataSize = this.parameters.chunkDataSize;
       const chunkPosition = chunk.chunkGridPosition.map((x, index) => x * chunkDataSize[index]);
@@ -325,7 +350,7 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
         },
         cancellationToken)
         .then(values => {
-          parseAnnotations(chunk, values);
+          parseAnnotations(this, chunk, values);
         });
     }
   }
@@ -344,7 +369,7 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
       },
       cancellationToken)
       .then(values => {
-        parseAnnotations(chunk, values);
+        parseAnnotations(this, chunk, values);
       });
   }
 

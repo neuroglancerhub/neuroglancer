@@ -15,7 +15,7 @@
  */
 
 import {Annotation, AnnotationId, AnnotationReference, AnnotationSourceSignals, AnnotationType, annotationTypes, deserializeAnnotation, getAnnotationTypeHandler, makeAnnotationId} from 'neuroglancer/annotation';
-import {ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
+import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
 import {emptyInvalidCoordinateSpace} from 'neuroglancer/coordinate_transform';
@@ -306,6 +306,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   sources: SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][];
   segmentFilteredSource: Owned<AnnotationSubsetGeometryChunkSource>;
   rank: number;
+  makeEditWidget: (reference: AnnotationReference) => HTMLElement|null;
   constructor(public chunkManager: Borrowed<ChunkManager>, options: {
     rank: number,
     sourceSpecifications: {
@@ -536,6 +537,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       }
       localUpdate.reference.changed.dispatch();
     }
+    let added = localUpdate.existingAnnotation === undefined;
     localUpdate.existingAnnotation = newAnnotation || undefined;
     localUpdate.commitInProgress = undefined;
     let {pendingCommit} = localUpdate;
@@ -549,6 +551,13 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       }
       this.sendCommitRequest(localUpdate, pendingCommit);
     } else {
+      if (added) {
+        this.childAdded.dispatch(newAnnotation!);
+      } else if (newAnnotation === null) {
+        this.childDeleted.dispatch(id);
+      } else {
+        this.childUpdated.dispatch(newAnnotation);
+      }
       this.revertLocalUpdate(localUpdate);
     }
   }
@@ -638,3 +647,11 @@ export class DataFetchSliceViewRenderLayer extends
   // Does nothing.
   draw() {}
 }
+
+registerRPC(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, function(x) {
+  const source = <MultiscaleAnnotationSource>this.get(x.id);
+  const newAnnotation: Annotation|null = deserializeAnnotation(x.newAnnotation);
+  if (newAnnotation) {
+    source.childAdded.dispatch(newAnnotation);
+  }
+});
