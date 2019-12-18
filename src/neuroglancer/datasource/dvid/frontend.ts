@@ -41,8 +41,9 @@ import {Signal} from 'neuroglancer/util/signal';
 import {Env, getUserFromToken, DVIDPointAnnotation, getAnnotationDescription, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
 import { getObjectId } from 'neuroglancer/util/object_id';
 import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
-import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/ui/widgets';
-import { JsonObject } from 'src/neuroglancer/ui/jsonschema';
+import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/datasource/dvid/widgets';
+import { JsonObject } from 'neuroglancer/datasource/dvid/jsonschema';
+import {defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -755,36 +756,34 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       this.readonly = true;
     }
 
-    if (this.parameters.schema) {
-      this.createAnnotationWidget = (reference: AnnotationReference) => {
-        let schema = this.parameters.schema;
-        const annotation = reference.value!;
-        const properties: JsonObject = (<DVIDPointAnnotation>(annotation)).properties || {};
+    this.makeEditWidget = (reference: AnnotationReference) => {
+      let schema = this.parameters.schema || defaultJsonSchema;
+      const annotation = reference.value!;
+      const properties: JsonObject = (<DVIDPointAnnotation>(annotation)).properties || {};
 
-        let widget = createAnnotationWidget(schema, {'Prop': properties});
-        console.log(annotation);
-        // setWidgetFromObject(widget, annotation.property, 'annotation\\Prop');
-        let button = document.createElement('button');
-        button.textContent = 'update';
-        button.onclick = () => {
-          let result: any = {};
-          getObjectFromWidget(schema, '', result, 'annotation');
-          // alert(JSON.stringify(result));
-          const x = result['Prop'];
-          let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
-          if (newAnnotation.properties) {
-            newAnnotation.properties = {...newAnnotation.properties, ...x};
-          } else {
-            newAnnotation.properties = x;
-          }
-          newAnnotation.description = getAnnotationDescription(newAnnotation);
-          this.update(reference, newAnnotation);
-          this.commit(reference);
-        };
-        widget.appendChild(button);
+      let widget = createAnnotationWidget(schema, { 'Prop': properties }, this.readonly);
+      // console.log(annotation);
+      // setWidgetFromObject(widget, annotation.property, 'annotation\\Prop');
+      let button = document.createElement('button');
+      button.textContent = 'update';
+      button.onclick = () => {
+        let result: any = {};
+        getObjectFromWidget(schema, '', result, 'annotation');
+        // alert(JSON.stringify(result));
+        const x = result['Prop'];
+        let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
+        if (newAnnotation.properties) {
+          newAnnotation.properties = { ...newAnnotation.properties, ...x };
+        } else {
+          newAnnotation.properties = x;
+        }
+        newAnnotation.description = getAnnotationDescription(newAnnotation);
+        this.update(reference, newAnnotation);
+        this.commit(reference);
+      };
+      widget.appendChild(button);
 
-        return widget;
-      }
+      return widget;
     }
   }
 
@@ -796,6 +795,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         throw Error(errorMessage);
       }
 
+      (<DVIDPointAnnotation>annotation).kind = 'Note';
       annotation.point = vec3.round(vec3.create(), annotation.point);
       let {properties} = <DVIDPointAnnotation>annotation;
       if (properties) { // Always assume user-defined bookmark

@@ -805,21 +805,19 @@ export class AnnotationDetailsTab extends Tab {
     }
     element.appendChild(segmentListWidget.element);
 
-    let widgetCreated = false;
+    let widget = null;
 
     if (annotation.type === AnnotationType.POINT) {
       if (annotationLayer.source instanceof MultiscaleAnnotationSource) {
-        if (annotationLayer.source.createAnnotationWidget) {
-          const widget = annotationLayer.source.createAnnotationWidget(reference);
-          if (widget) {
-            element.appendChild(widget);
-            widgetCreated = true;
-          }
+        if (annotationLayer.source.makeEditWidget) {
+          widget = annotationLayer.source.makeEditWidget(reference);
         }
       }
     }
 
-    if (!widgetCreated) {
+    if (widget) {
+      element.appendChild(widget);
+    } else {
       const description = document.createElement('textarea');
       description.value = annotation.description || '';
       description.rows = 3;
