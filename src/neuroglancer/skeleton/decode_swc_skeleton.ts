@@ -2,21 +2,41 @@ import {SkeletonChunk} from 'neuroglancer/skeleton/backend';
 
 export function decodeSwcSkeletonChunk(chunk: SkeletonChunk, swcStr: string) {
   let swcObjects: Array<PointObj> = parseSwc(swcStr);
-  if (swcObjects.length < 2) {
+
+  if (swcObjects.length < 1) {
     throw new Error(`ERROR parsing swc file`);
   }
 
-  let glVertices = new Float32Array(3 * (swcObjects.length));
-  let glIndices = new Uint32Array(2 * (swcObjects.length - 1));
+  let indexMap = new Uint32Array(swcObjects.length);
 
-  swcObjects.forEach(function(swc_obj, i) {
-    glVertices[3 * i] = swc_obj.z;
-    glVertices[3 * i + 1] = swc_obj.y;
-    glVertices[3 * i + 2] = swc_obj.x;
+  let nodeCount = 0;
+  let edgeCount = 0;
+  swcObjects.forEach((swc_obj, i) => {
+    if (swc_obj) {
+      indexMap[i] = nodeCount++;
+      if (swc_obj.parent >= 0) {
+        ++edgeCount;
+      }
+    }
+  });
 
-    if (swc_obj.parent !== -1) {
-      glIndices[2 * (i - 1)] = i;
-      glIndices[2 * i - 1] = swc_obj.parent;
+  let glVertices = new Float32Array(3 * nodeCount);
+  let glIndices = new Uint32Array(2 * edgeCount);
+
+  let nodeIndex = 0;
+  let edgetIndex = 0;
+  swcObjects.forEach(function(swc_obj) {
+    if (swc_obj) {
+      glVertices[3 * nodeIndex] = swc_obj.x;
+      glVertices[3 * nodeIndex + 1] = swc_obj.y;
+      glVertices[3 * nodeIndex + 2] = swc_obj.z;
+  
+      if (swc_obj.parent >= 0) {
+        glIndices[2 * edgetIndex] = nodeIndex;
+        glIndices[2 * edgetIndex + 1] = indexMap[swc_obj.parent];
+        ++edgetIndex;
+      }
+      ++nodeIndex;
     }
   });
 
@@ -49,13 +69,13 @@ function parseSwc(swcStr: string) {
     // subtract 1 from indices to convert 1-indexing to 0-indexing
     let match = e.match(pattern);
     if (match) {
-      let point = swcObjectsAr[parseInt(match[1], 10) - 1] = new PointObj();
+      let point = swcObjectsAr[parseInt(match[1], 10)] = new PointObj();
       point.type = parseInt(match[2], 10);
       point.x = parseFloat(match[3]);
       point.y = parseFloat(match[4]);
       point.z = parseFloat(match[5]);
       point.radius = parseFloat(match[6]);
-      point.parent = parseInt(match[7], 10) - 1;
+      point.parent = parseInt(match[7], 10);
     }
   });
   return swcObjectsAr;

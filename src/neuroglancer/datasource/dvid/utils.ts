@@ -24,6 +24,7 @@ import {CircleShader} from 'neuroglancer/webgl/circles';
 import {emitterDependentShaderGetter, ShaderBuilder} from 'neuroglancer/webgl/shader';
 import {Point} from 'neuroglancer/annotation/index';
 import {StringMemoize} from 'neuroglancer/util/memoize';
+import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
 
 let EnvMemoize = new StringMemoize();
 
@@ -65,24 +66,26 @@ function getRenderingAttribute(annotation: Point): number {
   return 0;
 }
 
-const numDVIDPointAnnotationElements = 4;
+// const DVIDPointAnnotationRank = 4;
 
-function DVIDPointAnnotationSerializer(buffer: ArrayBuffer, offset: number, numAnnotations: number) {
-  const coordinates = new Float32Array(buffer, offset, numAnnotations * numDVIDPointAnnotationElements);
+function DVIDPointAnnotationSerializer(buffer: ArrayBuffer, offset: number, numAnnotations: number, rank: number) {
+  const coordinates = new Float32Array(buffer, offset, numAnnotations * (rank + 1));
   return (annotation: Point, index: number) => {
     const {point} = annotation;
-    const coordinateOffset = index * numDVIDPointAnnotationElements;
-    coordinates[coordinateOffset] = point[0];
-    coordinates[coordinateOffset + 1] = point[1];
-    coordinates[coordinateOffset + 2] = point[2];
-    coordinates[coordinateOffset + 3] = getRenderingAttribute(annotation);
+    const coordinateOffset = index * (rank+1);
+    coordinates.set(point, coordinateOffset);
+    // coordinates[coordinateOffset] = point[0];
+    // coordinates[coordinateOffset + 1] = point[1];
+    // coordinates[coordinateOffset + 2] = point[2];
+    coordinates[coordinateOffset + rank] = getRenderingAttribute(annotation);
   };
 }
 
 export function updateAnnotationTypeHandler() {
   let typeHandler = getAnnotationTypeHandler(AnnotationType.POINT);
   typeHandler.serializer = DVIDPointAnnotationSerializer;
-  typeHandler.serializedBytes = numDVIDPointAnnotationElements * 4;
+  typeHandler.serializedBytes = (rank: number) => (rank + 1) * 4;
+  // typeHandler.serializedBytes = DVIDPointAnnotationRank * 4;
 }
 
 function setFillColor(builder: ShaderBuilder) {
@@ -145,6 +148,11 @@ vec4 getBorderColor() {
   return `getBorderColor()`;
 }
 
+class EmptyRenderHelper extends AnnotationRenderHelper {
+  draw(_: AnnotationRenderContext) {
+  }
+}
+
 class DVIDRenderHelper extends AnnotationRenderHelper {
   private circleShader = this.registerDisposer(new CircleShader(this.gl));
   private shaderGetter =
@@ -152,57 +160,77 @@ class DVIDRenderHelper extends AnnotationRenderHelper {
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
-    this.circleShader.defineShader(builder, /*crossSectionFade=*/this.targetIsSliceView);
-    // Position of point in camera coordinates.
-    builder.addAttribute('highp vec3', 'aVertexPosition');
-    builder.addAttribute('highp float', 'aRenderingAttribute');
+    const { rank } = this;
+    this.circleShader.defineShader(builder, /*crossSectionFade=*/ this.targetIsSliceView);
+    // Position of point in model coordinates.
+    defineVectorArrayVertexShaderInput(builder, 'float', 'VertexPosition', rank);
+    defineVectorArrayVertexShaderInput(builder, 'float', 'RenderingAtrribute', 1);
+
     builder.addVarying('int', 'vRenderingAttribute', 'flat');
+    builder.addVarying('highp float', 'vClipCoefficient');
+    builder.addUniform('highp float', 'uFillOpacity');
     builder.setVertexMain(`
-emitCircle(uProjection * vec4(aVertexPosition, 1.0));
+float modelPosition[${rank}] = getVertexPosition0();
+float renderingAttribute = getRenderingAtrribute0()[0];
+vClipCoefficient = getSubspaceClipCoefficient(modelPosition);
+if (vClipCoefficient == 0.0) {
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+  return;
+}
+emitCircle(uModelViewProjection *
+           vec4(projectModelVectorToSubspace(modelPosition), 1.0));
 ${this.setPartIndex(builder)};
-vRenderingAttribute = int(aRenderingAttribute);
+vRenderingAttribute = int(renderingAttribute);
 ${setFillColor(builder)};
 `);
-    builder.setFragmentMain(`
+
+builder.setFragmentMain(`
+// vec4 borderColor = vec4(0.0, 0.0, 0.0, 1.0);
 vec4 borderColor = ${getBorderColor(builder)};
-emitAnnotation(getCircleColor(vColor, borderColor));
+vec4 color = getCircleColor(vColor, borderColor);
+color.a *= vClipCoefficient * uFillOpacity;
+emitAnnotation(color);
 `);
   }
 
   draw(context: AnnotationRenderContext) {
+    const fillOpacity = context.annotationLayer.state.displayState.fillOpacity.value;
+    let {gl} = this;
+    
     const shader = this.shaderGetter(context.renderContext.emitter);
+    let {rank} = this;
     this.enable(shader, context, () => {
-      const {gl} = this;
-      const aVertexPosition = shader.attribute('aVertexPosition');
-      const aRenderingAttribute = shader.attribute('aRenderingAttribute');
-      context.buffer.bindToVertexAttrib(
-          aVertexPosition, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-          /*normalized=*/false,
-          /*stride=*/numDVIDPointAnnotationElements * 4, /*offset=*/context.bufferOffset);
-      context.buffer.bindToVertexAttrib(
-        aRenderingAttribute, /*components=*/1, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-        /*normalized=*/false,
-        /*stride=*/numDVIDPointAnnotationElements * 4, /*offset=*/context.bufferOffset + 3 * 4);
-      gl.vertexAttribDivisor(aVertexPosition, 1);
-      gl.vertexAttribDivisor(aRenderingAttribute, 1);
+      const binder = shader.vertexShaderInputBinders['VertexPosition'];
+      binder.enable(1);
+      binder.bind(
+        context.buffer.buffer!, WebGL2RenderingContext.FLOAT, /*normalized=*/ false,
+              /*stride=*/ (rank + 1) * 4, context.bufferOffset);
+
+      gl.uniform1f(shader.uniform('uFillOpacity'), fillOpacity);
+      const renderAttrBinder = shader.vertexShaderInputBinders['RenderingAtrribute'];
+      renderAttrBinder.enable(1);
+      renderAttrBinder.bind(
+        context.buffer.buffer!, WebGL2RenderingContext.FLOAT, /*normalized=*/ false,
+              /*stride=*/ (rank + 1) * 4, context.bufferOffset + rank * 4);
+
+
       this.circleShader.draw(
-          shader, context.renderContext,
-          {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},
-          context.count);
-      gl.vertexAttribDivisor(aRenderingAttribute, 0);
-      gl.vertexAttribDivisor(aVertexPosition, 0);
-      gl.disableVertexAttribArray(aVertexPosition);
-      gl.disableVertexAttribArray(aRenderingAttribute);
+        shader, context.renderContext,
+        { interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1 },
+        context.count);
+      
+      binder.disable();
+      renderAttrBinder.disable();
     });
   }
 }
 
 export function updateRenderHelper() {
   let renderHandler = getAnnotationTypeRenderHandler(AnnotationType.POINT);
-  renderHandler.bytes = numDVIDPointAnnotationElements * 4;
-  renderHandler.serializer = DVIDPointAnnotationSerializer;
+  // renderHandler.bytes = DVIDPointAnnotationRank * 4;
+  // renderHandler.serializer = DVIDPointAnnotationSerializer;
   renderHandler.sliceViewRenderHelper = DVIDRenderHelper;
-  renderHandler.perspectiveViewRenderHelper = DVIDRenderHelper;
+  renderHandler.perspectiveViewRenderHelper = EmptyRenderHelper;
 }
 
 export function getUserFromToken(token: string): string|null {

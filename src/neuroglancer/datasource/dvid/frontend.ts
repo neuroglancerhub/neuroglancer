@@ -19,28 +19,31 @@
  * Support for DVID (https://github.com/janelia-flyem/dvid) servers.
  */
 
+import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
-import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider';
-import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
-import {CompletionResult, DataSource} from 'neuroglancer/datasource';
+import {BoundingBox, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
+import {CompleteUrlOptions, CompletionResult, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {AnnotationSourceParameters, DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
-import {DataType, VolumeChunkSpecification, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
-import {MultiscaleVolumeChunkSource as GenericMultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
+import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
+import {DataType, makeDefaultVolumeChunkSpecifications, VolumeSourceOptions, VolumeType} from 'neuroglancer/sliceview/volume/base';
+import {MultiscaleVolumeChunkSource, VolumeChunkSource} from 'neuroglancer/sliceview/volume/frontend';
 import {StatusMessage} from 'neuroglancer/status';
+import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 // import {fetchOk} from 'neuroglancer/util/http_request';
-import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, verifyStringArray} from 'neuroglancer/util/json';
-import {DVIDInstance, DVIDToken, credentialsKey, makeRequestWithCredentials, makeRequestWithReadyCredentials} from 'neuroglancer/datasource/dvid/api';
-import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
+import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, verifyStringArray, verifyFiniteNonNegativeFloat} from 'neuroglancer/util/json';
+import {DVIDToken, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal} from 'neuroglancer/util/signal';
 import {Env, getUserFromToken, DVIDPointAnnotation, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
-import { getObjectId } from 'neuroglancer/util/object_id';
 import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
+import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider'
+import { makeSliceViewChunkSpecification } from 'neuroglancer/sliceview/base';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -75,12 +78,57 @@ class DVIDSkeletonSource extends
 class DVIDMeshSource extends
 (WithParameters(WithCredentialsProvider<DVIDToken>()(MeshSource), MeshSourceParameters)) {}
 
+export class AnnotationDataInstanceInfo extends DataInstanceInfo {
+  lowerVoxelBound: vec3;
+  upperVoxelBoundInclusive: vec3;
+  voxelSize: vec3;
+  blockSize: vec3;
+  numLevels: number;
+
+  get extended() {
+    return verifyObjectProperty(this.obj, 'Extended', verifyObject);
+  }
+
+  get tags() {
+    return verifyObjectProperty(this.base.obj, 'Tags', verifyObject);
+  }
+
+  constructor(
+    obj: any, name: string, base: DataInstanceBaseInfo) {
+    super(obj, name, base);
+
+    this.numLevels = 1;
+
+    let extended = this.extended;
+
+    if ('MaxDownresLevel' in extended) {
+      // retrieve maximum downres level
+      let maxdownreslevel = verifyObjectProperty(extended, 'MaxDownresLevel', verifyPositiveInt);
+      this.numLevels = maxdownreslevel + 1;
+    }
+
+    this.voxelSize = verifyObjectProperty(
+      extended, 'VoxelSize',
+      x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
+    this.lowerVoxelBound = verifyObjectProperty(
+      extended, 'MinPoint',
+      x => parseFixedLengthArray(vec3.create(), x, verifyFiniteNonNegativeFloat));
+    this.upperVoxelBoundInclusive = verifyObjectProperty(
+      extended, 'MaxPoint',
+      x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
+    if ('BlockSize' in extended) {
+      this.blockSize = verifyObjectProperty(
+        extended, 'BlockSize',
+        x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
+    }
+  }
+}
+
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
   lowerVoxelBound: vec3;
-  upperVoxelBound: vec3;
+  upperVoxelBoundInclusive: vec3;
   voxelSize: vec3;
-  numChannels: number;
   numLevels: number;
   meshSrc: string;
   skeletonSrc: string;
@@ -111,17 +159,16 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       }
     }
 
-    // only allow mesh or skeletons as sources but not both
-    this.meshSrc = '';
     if (instSet.has(name + '_meshes')) {
       this.meshSrc = name + '_meshes';
+    } else {
+      this.meshSrc = '';
     }
 
-    this.skeletonSrc = '';
-    if (this.meshSrc !== '') {
-      if (instSet.has(name + '_skeletons')) {
-        this.skeletonSrc = name + '_skeletons';
-      }
+    if (instSet.has(name + '_skeletons')) {
+      this.skeletonSrc = name + '_skeletons';
+    } else {
+      this.skeletonSrc = '';
     }
 
 
@@ -130,7 +177,10 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     this.voxelSize = verifyObjectProperty(
         extended, 'VoxelSize',
         x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
-    this.numChannels = 1;
+    this.lowerVoxelBound =
+        verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
+    this.upperVoxelBoundInclusive =
+        verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
   }
 
   get volumeType() {
@@ -145,21 +195,20 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
       chunkManager: ChunkManager, parameters: DVIDSourceParameters,
       volumeSourceOptions: VolumeSourceOptions, credentialsProvider: CredentialsProvider<DVIDToken>) {
     let {encoding} = this;
-    let sources: VolumeChunkSource[][] = [];
+    let sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
 
     // must be 64 block size to work with neuroglancer properly
     let blocksize = 64;
     for (let level = 0; level < this.numLevels; ++level) {
-      let voxelSize = vec3.scale(vec3.create(), this.voxelSize, Math.pow(2, level));
+      const downsampleFactor = Math.pow(2, level);
+      const invDownsampleFactor = Math.pow(2, -level);
       let lowerVoxelBound = vec3.create();
       let upperVoxelBound = vec3.create();
       for (let i = 0; i < 3; ++i) {
-        let lowerVoxelNotAligned =
-            Math.floor(this.lowerVoxelBound[i] * (this.voxelSize[i] / voxelSize[i]));
+        let lowerVoxelNotAligned = Math.floor(this.lowerVoxelBound[i] * invDownsampleFactor);
         // adjust min to be a multiple of blocksize
         lowerVoxelBound[i] = lowerVoxelNotAligned - (lowerVoxelNotAligned % blocksize);
-        let upperVoxelNotAligned =
-            Math.ceil((this.upperVoxelBound[i] + 1) * (this.voxelSize[i] / voxelSize[i]));
+        let upperVoxelNotAligned = Math.ceil((this.upperVoxelBoundInclusive[i] + 1) * invDownsampleFactor);
         upperVoxelBound[i] = upperVoxelNotAligned;
         // adjust max to be a multiple of blocksize
         if ((upperVoxelNotAligned % blocksize) !== 0) {
@@ -182,68 +231,53 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
         'dataScale': level.toString(),
         'encoding': encoding,
       };
+      const chunkToMultiscaleTransform = mat4.create();
+      for (let i = 0; i < 3; ++i) {
+        chunkToMultiscaleTransform[5 * i] = downsampleFactor;
+        chunkToMultiscaleTransform[12 + i] = lowerVoxelBound[i] * downsampleFactor;
+      }
       let alternatives =
-          VolumeChunkSpecification
-              .getDefaults({
-                voxelSize: voxelSize,
-                dataType: this.dataType,
-                numChannels: this.numChannels,
-                transform: mat4.fromTranslation(
-                    mat4.create(), vec3.multiply(vec3.create(), lowerVoxelBound, voxelSize)),
-                baseVoxelOffset: lowerVoxelBound,
-                upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
-                volumeType: this.volumeType,
-                volumeSourceOptions,
-                compressedSegmentationBlockSize:
-                    ((encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ||
-                      encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) ?
-                         vec3.fromValues(8, 8, 8) :
-                         undefined)
-              })
-              .map(spec => {
-                return chunkManager.getChunkSource(
-                    DVIDVolumeChunkSource, 
-                    {
-                      spec,
-                      credentialsProvider: credentialsProvider,
-                      parameters: volParameters
-                    });
-              });
+          makeDefaultVolumeChunkSpecifications({
+            rank: 3,
+            chunkToMultiscaleTransform,
+            dataType: this.dataType,
+
+            baseVoxelOffset: lowerVoxelBound,
+            upperVoxelBound: vec3.subtract(vec3.create(), upperVoxelBound, lowerVoxelBound),
+            volumeType: this.volumeType,
+            volumeSourceOptions,
+            compressedSegmentationBlockSize:
+                ((encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATION ||
+                  encoding === VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) ?
+                     vec3.fromValues(8, 8, 8) :
+                     undefined)
+          }).map(spec => ({
+                   chunkSource: chunkManager.getChunkSource(
+                       DVIDVolumeChunkSource, {spec, parameters: volParameters, credentialsProvider}),
+                   chunkToMultiscaleTransform,
+                 }));
       sources.push(alternatives);
     }
-    return sources;
+    return transposeNestedArrays(sources);
   }
+}
 
-  getMeshSource(chunkManager: ChunkManager, parameters: DVIDSourceParameters, credentialsProvider: CredentialsProvider<DVIDToken>) {
-    if (this.meshSrc !== '') {
-      return chunkManager.getChunkSource(DVIDMeshSource, {
-        parameters: {
-          'baseUrl': parameters.baseUrl,
-          'nodeKey': parameters.nodeKey,
-          'authServer': parameters.authServer,
-          'dataInstanceKey': this.meshSrc
-        },
-        credentialsProvider: credentialsProvider
-      });
+export function parseDataInstanceFromRepoInfo(
+  dataInstanceObjs: any, name: string, instanceNames: Array<string>): DataInstanceInfo {
+  verifyObject(dataInstanceObjs);
+  let dataInstance = dataInstanceObjs[name];
+  let baseInfo = verifyObjectProperty(dataInstance, 'Base', x => new DataInstanceBaseInfo(x));
+  if (baseInfo.typeName === 'annotation') {
+    let syncedLabel = getSyncedLabel(dataInstance);
+    if (syncedLabel) {
+      dataInstance = dataInstanceObjs[syncedLabel];
     } else {
-      return null;
+      dataInstance = getVolumeInfoResponseFromTags(getInstanceTags(dataInstance));
     }
-  }
 
-  getSkeletonSource(chunkManager: ChunkManager, parameters: DVIDSourceParameters, credentialsProvider: CredentialsProvider<DVIDToken>) {
-    if (this.skeletonSrc !== '') {
-      return chunkManager.getChunkSource(DVIDSkeletonSource, {
-        parameters: {
-          'baseUrl': parameters.baseUrl,
-          'nodeKey': parameters.nodeKey,
-          'authServer': parameters.authServer,
-          'dataInstanceKey': this.skeletonSrc
-        },
-        credentialsProvider: credentialsProvider
-      });
-    } else {
-      return null;
-    }
+    return new AnnotationDataInstanceInfo(dataInstance, name, baseInfo);
+  } else {
+    return parseDataInstance(dataInstance, name, instanceNames);
   }
 }
 
@@ -294,7 +328,8 @@ export class RepositoryInfo {
     let instanceKeys = Object.keys(dataInstanceObjs);
     for (let key of instanceKeys) {
       try {
-        this.dataInstances.set(key, parseDataInstance(dataInstanceObjs[key], key, instanceKeys));
+        this.dataInstances.set(key, parseDataInstanceFromRepoInfo(dataInstanceObjs, key, instanceKeys));
+        // this.dataInstances.set(key, parseDataInstance(dataInstanceObjs[key], key, instanceKeys));
       } catch (parseError) {
         let message = `Failed to parse data instance ${JSON.stringify(key)}: ${parseError.message}`;
         console.log(message);
@@ -358,16 +393,18 @@ export class ServerInfo {
   }
 }
 
-export function getServerInfo(chunkManager: ChunkManager, parameters: DVIDSourceParameters, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>) {
-  return chunkManager.memoize.getUncounted({type: 'dvid:getServerInfo', parameters}, () => {
-    const result = makeRequestWithCredentials(getCredentialsProvider(parameters.authServer), {url: `${parameters.baseUrl}/api/repos/info`, method: 'GET', responseType: "json"})
+type AuthType = string|undefined|null;
+
+export function getServerInfo(chunkManager: ChunkManager, baseUrl: string, credentialsProvider: CredentialsProvider<DVIDToken>) {
+  return chunkManager.memoize.getUncounted({type: 'dvid:getServerInfo', baseUrl}, () => {
+    const result = makeRequestWithCredentials(credentialsProvider, {url: `${baseUrl}/api/repos/info`, method: 'GET', responseType: "json"})
     .then(response => new ServerInfo(response));
     /*
     const result = fetchOk(`${parameters.baseUrl}/api/repos/info`)
                        .then(response => response.json())
                        .then(response => new ServerInfo(response));
                        */
-    const description = `repository info for DVID server ${parameters.baseUrl}`;
+    const description = `repository info for DVID server ${baseUrl}`;
     StatusMessage.forPromise(result, {
       initialMessage: `Retrieving ${description}.`,
       delay: true,
@@ -377,21 +414,109 @@ export function getServerInfo(chunkManager: ChunkManager, parameters: DVIDSource
   });
 }
 
+function getInstanceTags(dataInfo: any) {
+  let baseInfo = verifyObjectProperty(dataInfo, 'Base', verifyObject);
+
+  return verifyObjectProperty(baseInfo, 'Tags', verifyObject);
+}
+
+function getVolumeInfoResponseFromTags(tags: any) {
+  let MaxDownresLevel = parseInt(verifyObjectProperty(tags, 'MaxDownresLevel', verifyString));
+  let MaxPoint = JSON.parse(verifyObjectProperty(tags, "MaxPoint", verifyString));
+  let MinPoint = JSON.parse(verifyObjectProperty(tags, "MinPoint", verifyString));
+  let VoxelSize = JSON.parse(verifyObjectProperty(tags, "VoxelSize", verifyString));
+
+  let response: any = {
+    Base: {
+    },
+    Extended: {
+      VoxelSize,
+      MinPoint,
+      MaxPoint,
+      MaxDownresLevel
+    }
+  };
+
+  if ('BlockSize' in tags) {
+    response.BlockSize = JSON.parse(verifyObjectProperty(tags, "BlockSize", verifyString));
+  }
+
+  return response;
+}
+
+function getSyncedLabel(dataInfo: any): string {
+  let baseInfo = verifyObjectProperty(dataInfo, 'Base', verifyObject);
+  let syncs = verifyObjectProperty(baseInfo, 'Syncs', verifyStringArray);
+
+
+  if (syncs.length === 1) {
+    return syncs[0];
+  } else {
+    return '';
+  }
+}
+
+function userTagged(parameters: AnnotationSourceParameters) {
+  if (parameters.usertag) {
+    return true;
+  } else if (parameters.tags && parameters.usertag === undefined) {
+    return parameters.tags['annotation'] === 'user-supplied';
+  }
+
+  return false;
+}
+
+/*
+function getAnnotationDataInstanceDetails(chunkManager: ChunkManager, parameters: AnnotationSourceParameters, info: DataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
+  let {baseUrl, nodeKey} = parameters;
+  return chunkManager.memoize.getUncounted(
+      {type: 'dvid:getInstanceDetails', baseUrl, nodeKey, name: info.name}, async () => {
+      let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+      let result = makeRequestWithCredentials(credentialsProvider, {
+        method: 'GET',
+        url: instance.getNodeApiUrl(`/${info.name}/info`),
+        responseType: 'json'
+      });
+      const description = `datainstance info for node ${nodeKey} and instance ${info.name} ` +
+        `on DVID server ${baseUrl}`;
+
+      StatusMessage.forPromise(result, {
+        initialMessage: `Retrieving ${description}.`,
+        delay: true,
+        errorPrefix: `Error retrieving ${description}: `,
+      });
+
+      let instanceDetails = await result;
+
+      let syncedLabel = getSyncedLabel(instanceDetails);
+      if (syncedLabel) {
+        instanceDetails = await makeRequestWithCredentials(credentialsProvider, {
+          method: 'GET',
+          url: instance.getNodeApiUrl(`/${syncedLabel}/info`),
+          responseType: 'json'
+        });
+      } else {        
+        instanceDetails = getVolumeInfoResponseFromTags(getInstanceTags(instanceDetails));
+      }
+
+      return new AnnotationDataInstanceInfo(instanceDetails, info.name, info.base);
+  });
+}
+*/
+
 /**
  * Get extra dataInstance info that isn't available on the server level.
  * this requires an extra api call
  */
+/*
 export function getDataInstanceDetails(
-    chunkManager: ChunkManager, parameters: DVIDSourceParameters, info: VolumeDataInstanceInfo, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>) {
+    chunkManager: ChunkManager, parameters: DVIDSourceParameters, info: VolumeDataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
   let {baseUrl, nodeKey} = parameters;
   return chunkManager.memoize.getUncounted(
-      {type: 'dvid:getInstanceDetails', baseUrl, nodeKey, name: info.name}, () => {
-        /*
-        let result = fetchOk(`${baseUrl}/api/node/${nodeKey}/${info.name}/info`)
-                         .then(response => response.json());
-                         */
-        let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-        let result = makeRequestWithCredentials(getCredentialsProvider(parameters.authServer), {
+      {type: 'dvid:getInstanceDetails', baseUrl, nodeKey, name: info.name}, async () => {
+        // let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+        let instanceDetails = info.obj;
+        let result = makeRequestWithCredentials(credentialsProvider, {
           method: 'GET',
           url: instance.getNodeApiUrl(`/${info.name}/info`),
           responseType: 'json'
@@ -405,52 +530,53 @@ export function getDataInstanceDetails(
           errorPrefix: `Error retrieving ${description}: `,
         });
 
-        return result.then(instanceDetails => {
-          let extended = verifyObjectProperty(instanceDetails, 'Extended', verifyObject);
-          info.lowerVoxelBound =
-              verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
-          info.upperVoxelBound =
-              verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
-          return info;
-        });
+        let instanceDetails = await result;
+
+        
+        let extended = verifyObjectProperty(instanceDetails, 'Extended', verifyObject);
+        info.lowerVoxelBound =
+          verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
+        info.upperVoxelBoundInclusive =
+          verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
+        return info;
       });
 }
+*/
 
-export class MultiscaleVolumeChunkSource implements  GenericMultiscaleVolumeChunkSource {
+class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.info.dataType;
-  }
-  get numChannels() {
-    return this.info.numChannels;
   }
   get volumeType() {
     return this.info.volumeType;
   }
 
+  get rank() {
+    return 3;
+  }
+
   constructor(
-      public chunkManager: ChunkManager,
-      public credentialsProvider: CredentialsProvider<DVIDToken>,
-      public parameters: DVIDSourceParameters, public info: VolumeDataInstanceInfo) {}
+      chunkManager: ChunkManager, public baseUrl: string, public nodeKey: string,
+      public dataInstanceKey: string, public info: VolumeDataInstanceInfo, public credentialsProvider: CredentialsProvider<DVIDToken>) {
+    super(chunkManager);
+  }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     return this.info.getSources(
-        this.chunkManager, this.parameters,
-        volumeSourceOptions, this.credentialsProvider);
-  }
-
-  getMeshSource() {
-    let meshSource = this.info.getMeshSource(this.chunkManager, this.parameters, this.credentialsProvider);
-    if (meshSource === null) {
-      return this.info.getSkeletonSource(this.chunkManager, this.parameters, this.credentialsProvider);
-    }
-    return meshSource;
+        this.chunkManager, {
+          'baseUrl': this.baseUrl,
+          'nodeKey': this.nodeKey,
+          'dataInstanceKey': this.dataInstanceKey
+        },
+        volumeSourceOptions,
+        this.credentialsProvider);
   }
 }
 
 // const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)(\?.*)?$/;
 const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/;
 
-function parseVolumeKey(url: string): DVIDSourceParameters {
+function parseVolumeKey(url: string): AnnotationSourceParameters {
   let match = url.match(urlPattern);
   if (match === null) {
     throw new Error(`Invalid DVID URL: ${JSON.stringify(url)}.`);
@@ -467,6 +593,12 @@ function parseVolumeKey(url: string): DVIDSourceParameters {
   let parameters:any = {};
   if (queryString && queryString.length > 1) {
     parameters = parseQueryStringParameters(queryString.substring(1));
+    if (parameters.usertag) {
+      sourceParameters.usertag =  (parameters.usertag === 'true');
+    }
+    if (parameters.user) {
+      sourceParameters.user = parameters.user;
+    }
   }
 
   let auth = parameters.auth;
@@ -483,42 +615,175 @@ function parseVolumeKey(url: string): DVIDSourceParameters {
   return sourceParameters;
 }
 
-export function getVolume(chunkManager: ChunkManager, url: string, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>) {
-  /*
-  let match = url.match(urlPattern);
-  if (match === null) {
-    throw new Error(`Invalid DVID URL: ${JSON.stringify(url)}.`);
+async function getAnnotationChunkSource(options: GetDataSourceOptions, sourceParameters: AnnotationSourceParameters, dataInstanceInfo: AnnotationDataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
+  let getChunkSource = (multiscaleVolumeInfo: any, parameters: any) => options.chunkManager.getChunkSource(
+    DVIDAnnotationSource, {
+    parameters,
+    credentialsProvider,
+    multiscaleVolumeInfo
+  });
+
+  let multiscaleVolumeInfo = new MultiscaleVolumeInfo(dataInstanceInfo.obj);
+
+  return getChunkSource(multiscaleVolumeInfo, sourceParameters);
+}
+
+async function getAnnotationSource(options: GetDataSourceOptions, sourceParameters: AnnotationSourceParameters, dataInstanceInfo: AnnotationDataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
+
+  const box: BoundingBox = {
+    lowerBounds: new Float64Array(dataInstanceInfo.lowerVoxelBound),
+    upperBounds: Float64Array.from(dataInstanceInfo.upperVoxelBoundInclusive, x => x + 1)
+  };
+  const modelSpace = makeCoordinateSpace({
+    rank: 3,
+    names: ['x', 'y', 'z'],
+    units: ['m', 'm', 'm'],
+    scales: Float64Array.from(dataInstanceInfo.voxelSize, x => x / 1e9),
+    boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
+  });
+
+  const annotation = await getAnnotationChunkSource(options, sourceParameters, dataInstanceInfo, credentialsProvider);
+
+  const dataSource: DataSource = {
+    modelTransform: makeIdentityTransform(modelSpace),
+    subsources: [{
+      id: 'default',
+      subsource: { annotation },
+      default: true,
+    }],
+  };
+
+  return dataSource;
+}
+
+async function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSourceParameters, dataInstanceInfo: DataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
+  const baseUrl = sourceParameters.baseUrl;
+  const nodeKey = sourceParameters.nodeKey;
+  const dataInstanceKey = sourceParameters.dataInstanceKey;
+
+  const info = <VolumeDataInstanceInfo>dataInstanceInfo;
+    // await getDataInstanceDetails(options.chunkManager, sourceParameters, <VolumeDataInstanceInfo>dataInstanceInfo, credentialsProvider);
+
+  const box: BoundingBox = {
+    lowerBounds: new Float64Array(info.lowerVoxelBound),
+    upperBounds: Float64Array.from(info.upperVoxelBoundInclusive, x => x + 1)
+  };
+  const modelSpace = makeCoordinateSpace({
+    rank: 3,
+    names: ['x', 'y', 'z'],
+    units: ['m', 'm', 'm'],
+    scales: Float64Array.from(info.voxelSize, x => x / 1e9),
+    boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
+  });
+
+  const volume = new DvidMultiscaleVolumeChunkSource(
+    options.chunkManager, baseUrl, nodeKey, dataInstanceKey, info, credentialsProvider);
+
+  const dataSource: DataSource = {
+    modelTransform: makeIdentityTransform(modelSpace),
+    subsources: [{
+      id: 'default',
+      subsource: { volume },
+      default: true,
+    }],
+  };
+  if (info.meshSrc) {
+    const subsourceToModelSubspaceTransform = mat4.create();
+    for (let i = 0; i < 3; ++i) {
+      subsourceToModelSubspaceTransform[5 * i] = 1 / info.voxelSize[i];
+    }
+    dataSource.subsources.push({
+      id: 'meshes',
+      default: true,
+      subsource: {
+        mesh: options.chunkManager.getChunkSource(DVIDMeshSource, {
+          parameters: {
+            'baseUrl': baseUrl,
+            'nodeKey': nodeKey,
+            'dataInstanceKey': info.meshSrc
+          },
+          'credentialsProvider': credentialsProvider
+        })
+      },
+      subsourceToModelSubspaceTransform,
+    });
   }
-  const baseUrl = match[1];
-  const nodeKey = match[2];
-  const dataInstanceKey = match[3];
-  */
+  if (info.skeletonSrc) {
+    dataSource.subsources.push({
+      id: 'skeletons',
+      default: true,
+      subsource: {
+        mesh: options.chunkManager.getChunkSource(DVIDSkeletonSource, {
+          parameters: {
+            'baseUrl': baseUrl,
+            'nodeKey': nodeKey,
+            'dataInstanceKey': info.skeletonSrc
+          },
+          'credentialsProvider': credentialsProvider
+        })
+      },
+    });
+  }
+  dataSource.subsources.push({
+    id: 'bounds',
+    subsource: { staticAnnotations: makeDataBoundsBoundingBoxAnnotationSet(box) },
+    default: true,
+  });
 
-  let parameters = parseVolumeKey(url);
-  let {baseUrl, nodeKey, dataInstanceKey} = parameters;
+  return dataSource;
+}
 
-  return getServerInfo(chunkManager, parameters, getCredentialsProvider)
-      .then(serverInfo => {
-        let repositoryInfo = serverInfo.getNode(parameters.nodeKey);
+export function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<DataSource> {
+  // let match = options.providerUrl.match(urlPattern);
+  // if (match === null) {
+  //   throw new Error(`Invalid DVID URL: ${JSON.stringify(options.providerUrl)}.`);
+  // }
+
+  let sourceParameters = parseVolumeKey(options.providerUrl);
+
+  const baseUrl = sourceParameters.baseUrl;
+  const nodeKey = sourceParameters.nodeKey;
+  const dataInstanceKey = sourceParameters.dataInstanceKey;
+  
+  return options.chunkManager.memoize.getUncounted(
+      {
+        type: 'dvid:MultiscaleVolumeChunkSource',
+        baseUrl,
+        nodeKey: nodeKey,
+        dataInstanceKey,
+      },
+      async () => {
+        let credentials = await getCredentialsProvider(sourceParameters.authServer).get();
+        const credentialsProvider = getCredentialsProvider('token:' + credentials.credentials);
+        const serverInfo = await getServerInfo(options.chunkManager, baseUrl, credentialsProvider);
+        let repositoryInfo = serverInfo.getNode(nodeKey);
         if (repositoryInfo === undefined) {
-          throw new Error(`Invalid node: ${JSON.stringify(parameters.nodeKey)}.`);
+          throw new Error(`Invalid node: ${JSON.stringify(nodeKey)}.`);
         }
-        const dataInstanceInfo = repositoryInfo.dataInstances.get(parameters.dataInstanceKey);
-        if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo)) {
-          throw new Error(`Invalid data instance ${parameters.dataInstanceKey}.`);
+        const dataInstanceInfo = repositoryInfo.dataInstances.get(dataInstanceKey);
+
+        if (!dataInstanceInfo) {
+          throw new Error(`Invalid data instance ${dataInstanceKey}.`);
         }
-        return getDataInstanceDetails(chunkManager, parameters, dataInstanceInfo, getCredentialsProvider);
-      })
-      .then((info: VolumeDataInstanceInfo) => {
-        return chunkManager.memoize.getUncounted(
-            {
-              type: 'dvid:MultiscaleVolumeChunkSource',
-              baseUrl,
-              nodeKey: nodeKey,
-              dataInstanceKey,
-            },
-            () => new MultiscaleVolumeChunkSource(
-                chunkManager, getCredentialsProvider(parameters.authServer), parameters, info));
+
+        if (dataInstanceInfo.base.typeName === 'annotation') {
+          if (!(dataInstanceInfo instanceof AnnotationDataInstanceInfo)) {
+            throw new Error(`Invalid data instance ${dataInstanceKey}.`);
+          }
+
+          sourceParameters.tags = dataInstanceInfo.tags;
+          sourceParameters.usertag = userTagged(sourceParameters);
+          sourceParameters.user = getUser(sourceParameters, credentials.credentials);
+
+          // let annotationDataInstanceInfo = await getAnnotationDataInstanceDetails(options.chunkManager, sourceParameters, dataInstanceInfo, credentialsProvider);
+          
+          return getAnnotationSource(options, sourceParameters, dataInstanceInfo, credentialsProvider);
+        } else {
+          if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo)) {
+            throw new Error(`Invalid data instance ${dataInstanceKey}.`);
+          }
+          return getVolumeSource(options, sourceParameters, dataInstanceInfo, credentialsProvider);
+        }
       });
 }
 
@@ -553,34 +818,25 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
   return applyCompletionOffset(nodeKey.length + 1, completeInstanceName(repositoryInfo, match[2]));
 }
 
-export function volumeCompleter(
-    url: string, chunkManager: ChunkManager, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<CompletionResult> {
+export async function completeUrl(options: CompleteUrlOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<CompletionResult> {
   const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/(.*)$/;
-  let match = url.match(curUrlPattern);
+  let match = options.providerUrl.match(curUrlPattern);
   if (match === null) {
     // We don't yet have a full hostname.
-    return Promise.reject<CompletionResult>(null);
+    throw null;
   }
   let baseUrl = match[1];
   let path = match[2];
-  let parameters = new DVIDSourceParameters;
-  parameters.baseUrl = baseUrl;
+  let auth: string|undefined = undefined;
   if (baseUrl.startsWith('https')) {
-    parameters.authServer = `${baseUrl}/api/server/token`;
+    auth = `${baseUrl}/api/server/token`;
   }
-  return getServerInfo(chunkManager, parameters, getCredentialsProvider)
-      .then(
-          serverInfo =>
-              applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path)));
+  const serverInfo = await getServerInfo(options.chunkManager, baseUrl, getCredentialsProvider(auth));
+  return applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path));
 }
-
-const SERVER_DATA_TYPES = new Map<string, DataType>();
-SERVER_DATA_TYPES.set('UINT8', DataType.UINT8);
-SERVER_DATA_TYPES.set('UINT64', DataType.UINT64);
 
 export class VolumeInfo {
   numChannels: number;
-  dataType: DataType;
   voxelSize: vec3;
   upperVoxelBound: vec3;
   boundingBoxes: {corner: vec3, size: vec3, metadata?: string}[];
@@ -589,8 +845,6 @@ export class VolumeInfo {
     try {
       verifyObject(obj);
       this.numChannels = 1;
-      let baseObj = verifyObjectProperty(obj, 'Base', verifyObject);
-      this.dataType = verifyObjectProperty(baseObj, 'TypeName', x => x === undefined ? 'UINT8' : x.TypeName);
 
       let extended = verifyObjectProperty(obj, 'Extended', verifyObject);
       let maxdownreslevel = verifyObjectProperty(extended, 'MaxDownresLevel', verifyPositiveInt);
@@ -614,7 +868,6 @@ export class VolumeInfo {
 export class MultiscaleVolumeInfo {
   scales: VolumeInfo[];
   numChannels: number;
-  dataType: DataType;
   constructor(volumeInfoResponse: any) {
     try {
       verifyObject(volumeInfoResponse);
@@ -631,7 +884,6 @@ export class MultiscaleVolumeInfo {
       }
       let baseScale = this.scales[0];
       this.numChannels = this.numChannels = baseScale.numChannels;
-      this.dataType = this.dataType = baseScale.dataType;
     } catch (parseError) {
       throw new Error(
           `Failed to parse DVID multiscale volume specification: ${parseError.message}`);
@@ -651,13 +903,13 @@ function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVo
   let makeSpec = (scale: VolumeInfo) => {
     const upperVoxelBound = scale.upperVoxelBound;
     const chunkDataSize = getAnnotationChunkDataSize(parameters, upperVoxelBound);
-    let spec = new AnnotationGeometryChunkSpecification({
-      voxelSize: scale.voxelSize,
-      chunkSize: vec3.multiply(vec3.create(), chunkDataSize, scale.voxelSize),
-      upperChunkBound: vec3.ceil(vec3.create(), vec3.divide(vec3.create(), upperVoxelBound, chunkDataSize))
+    let spec = makeSliceViewChunkSpecification({
+      rank: 3,
+      chunkDataSize: Uint32Array.from(chunkDataSize),
+      upperVoxelBound: scale.upperVoxelBound
     });
 
-    return [{ parameters: undefined, spec }];
+    return [{ parameters: undefined, spec, chunkToMultiscaleTransform: mat4.create()}];
   };
 
   if (parameters.usertag) {
@@ -671,61 +923,33 @@ function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVo
   }
 }
 
-const MultiscaleAnnotationSourceBase = WithParameters(
-  WithCredentialsProvider<DVIDToken>()(MultiscaleAnnotationSource), AnnotationSourceParameters);
-
-export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
-  key: any;
-  private updateAnnotationHandlers() {
-    updateRenderHelper();
-    updateAnnotationTypeHandler();
+export class DVIDDataSource extends DataSourceProvider {
+  constructor(public credentialsManager: CredentialsManager) {
+    super();
   }
 
-  constructor(chunkManager: ChunkManager, options: {
-    credentialsProvider: CredentialsProvider<DVIDToken>,
-    parameters: AnnotationSourceParameters,
-    multiscaleVolumeInfo: MultiscaleVolumeInfo
-  }) {
-    super(chunkManager, <any>{
-      sourceSpecifications:
-          makeAnnotationGeometrySourceSpecifications(options.multiscaleVolumeInfo, options.parameters),
-      ...options
-    });
+  get description() {
+    return 'DVID';
+  }
 
-    mat4.fromScaling(this.objectToLocal, options.multiscaleVolumeInfo.scales[0].voxelSize);
-    this.updateAnnotationHandlers();
-    this.childAdded = this.childAdded || new Signal<(annotation: Annotation) => void>();
-    this.childUpdated = this.childUpdated || new Signal<(annotation: Annotation) => void>();
-    this.childDeleted = this.childDeleted || new Signal<(annotationId: string) => void>();
+  getCredentialsProvider(authServer: AuthType) {
+    if (authServer) {
+      if (!isDVIDCredentialsProviderRegistered(authServer)) {
+        registerDVIDCredentialsProvider(authServer);
+      }
 
-    if (this.parameters.readonly !== undefined) {
-      this.readonly = this.parameters.readonly;
-    }
-  
-    if (!this.parameters.user || !this.parameters.usertag) {
-      this.readonly = true;
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(authServer, authServer);
+    } else {
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(credentialsKey, authServer);
     }
   }
 
-  add(annotation: Annotation, commit: boolean = true): AnnotationReference {
-    if (annotation.type === AnnotationType.POINT) {
-      if (this.readonly) {
-        let errorMessage = 'Permission denied for changing annotations.';
-        StatusMessage.showTemporaryMessage(errorMessage);
-        throw Error(errorMessage);
-      }
+  get(options: GetDataSourceOptions): Promise<DataSource> {
+    return getDataSource(options, this.getCredentialsProvider.bind(this));
+  }
 
-      annotation.point = vec3.round(vec3.create(), annotation.point);
-      let {properties} = <DVIDPointAnnotation>annotation;
-      if (properties) { // Always assume user-defined bookmark
-        if (!('custom'in properties)) {
-          properties['custom'] = '1';
-        }
-      } else {
-        (<DVIDPointAnnotation>annotation).properties = {'custom': '1'};
-      }
-    }
-    return super.add(annotation, commit);
+  completeUrl(options: CompleteUrlOptions) {
+    return completeUrl(options, this.getCredentialsProvider.bind(this));
   }
 }
 
@@ -753,6 +977,11 @@ function getUser(parameters: AnnotationSourceParameters, token:string) {
   return parameters.user;
 }
 
+/*
+function getDataInfoUrl(parameters: AnnotationSourceParameters): string {
+  return `${parameters.baseUrl}/api/node/${parameters.nodeKey}/${parameters.dataInstanceKey}/info`;
+}
+
 function getDataInfo(
   parameters: AnnotationSourceParameters, credentials: DVIDToken): Promise<any> {
   // let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
@@ -765,223 +994,64 @@ function getDataInfo(
     }
   )
 }
-
-function parseAnnotationKey(key: string, getCredentialsProvider: (auth:string) => CredentialsProvider<DVIDToken>): Promise<AnnotationSourceParameters> {
-  const match = key.match(/^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/);
-
-  if (match === null) {
-    throw new Error(`Invalid DVID volume key: ${JSON.stringify(key)}.`);
-  }
-
-  let queryString = match[4];
-  let sourceParameters: AnnotationSourceParameters = {
-    ...new AnnotationSourceParameters(),
-    baseUrl: match[1],
-    nodeKey: match[2],
-    dataInstanceKey: match[3],
-    usertag: undefined
-  };
-
-  let parameters:any = {};
-
-  if (queryString && queryString.length > 1) {
-    parameters = parseQueryStringParameters(queryString.substring(1));
-    if (parameters.usertag) {
-      sourceParameters.usertag =  (parameters.usertag === 'true');
-    }
-    if (parameters.user) {
-      sourceParameters.user = parameters.user;
-    }
-  }
-
-  let auth = parameters.auth;
-  if (!auth) {
-    if (sourceParameters.baseUrl.startsWith('https')) {
-      auth = `${sourceParameters.baseUrl}/api/server/token`;
-    }
-  }
-
-  return getCredentialsProvider(auth).get().then(
-    credentials => getDataInfo(sourceParameters, credentials.credentials).then(
-      response => {
-        sourceParameters.tags = getInstanceTags(response);
-        if ('BlockSize' in sourceParameters.tags) {
-          sourceParameters.chunkDataSize = JSON.parse(verifyObjectProperty(sourceParameters.tags, "BlockSize", verifyString));
-        }
-        sourceParameters.authServer = 'token:' + credentials.credentials;
-        sourceParameters.usertag = userTagged(sourceParameters);
-        sourceParameters.user = getUser(sourceParameters, credentials.credentials);
-        sourceParameters.syncedLabel = getSyncedLabel(response);
-        return sourceParameters;
-      }
-    )
-  );
-}
-
-/*
-function getDataInfoPath(parameters: AnnotationSourceParameters): string {
-  return `/${parameters.dataInstanceKey}/info`;
-}
 */
 
-function getDataInfoUrl(parameters: AnnotationSourceParameters): string {
-  return `${parameters.baseUrl}/api/node/${parameters.nodeKey}/${parameters.dataInstanceKey}/info`;
-}
+const MultiscaleAnnotationSourceBase = WithParameters(
+  WithCredentialsProvider<DVIDToken>()(MultiscaleAnnotationSource), AnnotationSourceParameters);
 
-function getInstanceTags(dataInfo: any) {
-  let baseInfo = verifyObjectProperty(dataInfo, 'Base', verifyObject);
-
-  return verifyObjectProperty(baseInfo, 'Tags', verifyObject);
-}
-
-function getVolumeInfoResponseFromTags(tags: any) {
-  let MaxDownresLevel = parseInt(verifyObjectProperty(tags, 'MaxDownresLevel', verifyString));
-  let MaxPoint = JSON.parse(verifyObjectProperty(tags, "MaxPoint", verifyString));
-  let MinPoint = JSON.parse(verifyObjectProperty(tags, "MinPoint", verifyString));
-  let VoxelSize = JSON.parse(verifyObjectProperty(tags, "VoxelSize", verifyString));
-
-  return {
-    Base: {
-    },
-    Extended: {
-      VoxelSize,
-      MinPoint,
-      MaxPoint,
-      MaxDownresLevel
-    }
-  };
-}
-
-function getSyncedLabel(dataInfo: any): string {
-  let baseInfo = verifyObjectProperty(dataInfo, 'Base', verifyObject);
-  let syncs = verifyObjectProperty(baseInfo, 'Syncs', verifyStringArray);
-
-
-  if (syncs.length === 1) {
-    return syncs[0];
-  } else {
-    return '';
-  }
-}
-
-function userTagged(parameters: AnnotationSourceParameters) {
-  if (parameters.usertag) {
-    return true;
-  } else if (parameters.tags && parameters.usertag === undefined) {
-    return parameters.tags['annotation'] === 'user-supplied';
+export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
+  key: any;
+  private updateAnnotationHandlers() {
+    updateRenderHelper();
+    updateAnnotationTypeHandler();
   }
 
-  return false;
-}
-
-type AuthType = string|undefined|null;
-
-export class DVIDDataSource extends DataSource {
-  dvidAnnotationSourceKey: Promise<any>;
-  constructor(public credentialsManager: CredentialsManager) {
-    super();
-  }
-
-  get description() {
-    return 'DVID';
-  }
-
-  getCredentialsProvider(authServer: AuthType) {
-    if (authServer) {
-      if (!isDVIDCredentialsProviderRegistered(authServer)) {
-        registerDVIDCredentialsProvider(authServer);
-      }
-
-      return this.credentialsManager.getCredentialsProvider<DVIDToken>(authServer, authServer);
-    } else {
-      return this.credentialsManager.getCredentialsProvider<DVIDToken>(credentialsKey, authServer);
-    }
-  }
-
-  getVolume(chunkManager: ChunkManager, url: string) {
-    return getVolume(chunkManager, url, this.getCredentialsProvider.bind(this));
-  }
-
-  volumeCompleter(url: string, chunkManager: ChunkManager) {
-    return volumeCompleter(url, chunkManager, this.getCredentialsProvider.bind(this));
-  }
-
-  getMultiscaleInfo(chunkManager: ChunkManager, parameters: DVIDSourceParameters) {
-    let volumeId: string = parameters.dataInstanceKey;
-    let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-    return chunkManager.memoize.getUncounted(
-        {
-          type: 'dvid:getMultiscaleInfo',
-          volumeId,
-          instance,
-          credentialsProvider: getObjectId(this.getCredentialsProvider(parameters.authServer))
-        },
-        () => makeRequestWithCredentials(
-          this.getCredentialsProvider(parameters.authServer), 
-          {
-            method: 'GET',
-            url: instance.getNodeApiUrl(`/${volumeId}/info`), 
-            responseType: 'json'
-          }).then(response => new MultiscaleVolumeInfo(response)));
-  }
-
-  getAnnotationSourceFromSourceKey(chunkManager: ChunkManager, sourceKey: any) {
-    let getChunkSource = (multiscaleVolumeInfo: any, parameters: any) => chunkManager.getChunkSource(
-      DVIDAnnotationSource, {
-      parameters,
-      credentialsProvider: this.getCredentialsProvider(parameters.authServer),
-      multiscaleVolumeInfo
+  constructor(chunkManager: ChunkManager, options: {
+    credentialsProvider: CredentialsProvider<DVIDToken>,
+    parameters: AnnotationSourceParameters,
+    multiscaleVolumeInfo: MultiscaleVolumeInfo
+  }) {
+    super(chunkManager, <any>{
+      rank: 3,
+      sourceSpecifications:
+          makeAnnotationGeometrySourceSpecifications(options.multiscaleVolumeInfo, options.parameters),
+      ...options
     });
 
-    let getMultiscaleInfo = (parameters: any) => {
-      if (parameters.syncedLabel) {
-        return this.getMultiscaleInfo(
-          chunkManager, 
-          { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': parameters.syncedLabel, 'authServer': parameters.authServer })
-          .then(info => {return {multiscaleInfo: info, parameters}});
+    // mat4.fromScaling(this.objectToLocal, options.multiscaleVolumeInfo.scales[0].voxelSize);
+    this.updateAnnotationHandlers();
+    this.childAdded = this.childAdded || new Signal<(annotation: Annotation) => void>();
+    this.childUpdated = this.childUpdated || new Signal<(annotation: Annotation) => void>();
+    this.childDeleted = this.childDeleted || new Signal<(annotationId: string) => void>();
+
+    if (this.parameters.readonly !== undefined) {
+      this.readonly = this.parameters.readonly;
+    }
+  
+    if (!this.parameters.user || !this.parameters.usertag) {
+      this.readonly = true;
+    }
+  }
+
+  add(annotation: Annotation, commit: boolean = true): AnnotationReference {
+    if (annotation.type === AnnotationType.POINT) {
+      if (this.readonly) {
+        let errorMessage = 'Permission denied for changing annotations.';
+        StatusMessage.showTemporaryMessage(errorMessage);
+        throw Error(errorMessage);
+      }
+
+      annotation.point = annotation.point.map(x => Math.round(x));
+      let {properties} = <DVIDPointAnnotation>annotation;
+      if (properties) { // Always assume user-defined bookmark
+        if (!('custom'in properties)) {
+          properties['custom'] = '1';
+        }
       } else {
-        return Promise.resolve(
-          new MultiscaleVolumeInfo(getVolumeInfoResponseFromTags(parameters.tags)))
-          .then(info => {return {multiscaleInfo: info, parameters}});
+        (<DVIDPointAnnotation>annotation).properties = {'custom': '1'};
       }
     }
-
-    return chunkManager.memoize.getUncounted(
-      sourceKey,
-      () => Promise.resolve(sourceKey['parameters'])
-        .then(parameters => getMultiscaleInfo(parameters))
-        .then(result => getChunkSource(result.multiscaleInfo, result.parameters)));
-
-    /*
-    return chunkManager.memoize.getUncounted(
-      sourceKey,
-      () => Promise.resolve(sourceKey['parameters']).then(parameters => {
-        if (parameters.syncedLabel) {
-          return this.getMultiscaleInfo(
-            chunkManager, 
-            { 'baseUrl': parameters.baseUrl, 'nodeKey': parameters.nodeKey, 'dataInstanceKey': parameters.syncedLabel })
-          .then(multiscaleVolumeInfo => chunkManager.getChunkSource(
-            DVIDAnnotationSource, {
-            parameters,
-            credentialsProvider: this.getCredentialsProvider(parameters.authServer),
-            multiscaleVolumeInfo
-          }));
-        }
-        
-      }));
-      */
-  }
-
-  getAnnotationSource(chunkManager: ChunkManager, key: string) {
-    this.dvidAnnotationSourceKey = parseAnnotationKey(key, this.getCredentialsProvider.bind(this)).then(
-      parameters => {
-        return {
-          type: 'dvid:getAnnotationSource',
-          parameters
-        };
-      });
-
-    return this.dvidAnnotationSourceKey.then(
-      sourceKey => this.getAnnotationSourceFromSourceKey(chunkManager, sourceKey));
+    return super.add(annotation, commit);
   }
 }
+

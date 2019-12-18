@@ -123,7 +123,7 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
         chunk, cancellationToken,
         (params.encoding === VolumeChunkEncoding.JPEG) ? response.slice(16) : response);
   }
-  getPath(chunkPosition: Float32Array, chunkDataSize: Float32Array) {
+  getPath(chunkPosition: Float32Array, chunkDataSize: Uint32Array) {
     let params = this.parameters;
     if (params.encoding === VolumeChunkEncoding.JPEG) {
       return `/api/node/${params['nodeKey']}/${params['dataInstanceKey']}/subvolblocks/` +
@@ -209,7 +209,7 @@ function parseAnnotation(entry: any): DVIDPointAnnotation|null {
 
 function parseAnnotations(
   chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any[]) {
-  const serializer = new AnnotationSerializer();
+  const serializer = new AnnotationSerializer(3);
   if (responses) {
     responses.forEach((response) => {
       if (response) {
@@ -312,7 +312,8 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
         return Promise.resolve(parseAnnotations(chunk, []));
       }
       const chunkDataSize = this.parameters.chunkDataSize;
-      const chunkPosition = vec3.multiply(vec3.create(), chunk.chunkGridPosition, chunkDataSize);
+      const chunkPosition = chunk.chunkGridPosition.map((x, index) => x * chunkDataSize[index]);
+      // const chunkPosition = vec3.multiply(vec3.create(), chunk.chunkGridPosition, chunkDataSize);
       let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
       return makeRequestWithCredentials(
         this.credentialsProvider,
