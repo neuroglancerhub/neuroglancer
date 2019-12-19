@@ -79,6 +79,8 @@ const VOXEL_SIZE_JSON_KEY = 'voxelSize';
 const SOURCE_JSON_KEY = 'source';
 const LINKED_SEGMENTATION_LAYER_JSON_KEY = 'linkedSegmentationLayer';
 const FILTER_BY_SEGMENTATION_JSON_KEY = 'filterBySegmentation';
+const FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY = 'filterBySegmentationAvailable';
+
 const Base = UserLayerWithAnnotationsMixin(UserLayerWithCoordinateTransformMixin(UserLayer));
 export class AnnotationUserLayer extends Base {
   localAnnotations = this.registerDisposer(new LocalAnnotationSource());
@@ -87,6 +89,7 @@ export class AnnotationUserLayer extends Base {
   linkedSegmentationLayer = this.registerDisposer(
       new LayerReference(this.manager.rootLayers.addRef(), isValidLinkedSegmentationLayer));
   filterBySegmentation = new TrackableBoolean(false);
+  filterBySegmentationAvailable = new TrackableBoolean(true);
 
   getAnnotationRenderOptions() {
     const segmentationState =
@@ -114,6 +117,7 @@ export class AnnotationUserLayer extends Base {
     const sourceUrl = this.sourceUrl = specification[SOURCE_JSON_KEY];
     this.linkedSegmentationLayer.restoreState(specification[LINKED_SEGMENTATION_LAYER_JSON_KEY]);
     this.filterBySegmentation.restoreState(specification[FILTER_BY_SEGMENTATION_JSON_KEY]);
+    this.filterBySegmentationAvailable.restoreState(specification[FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY]);
     if (sourceUrl === undefined) {
       this.isReady = true;
       this.voxelSize.restoreState(specification[VOXEL_SIZE_JSON_KEY]);
@@ -145,6 +149,7 @@ export class AnnotationUserLayer extends Base {
       this.registerDisposer(this.voxelSize.changed.add(this.specificationChanged.dispatch));
       this.registerDisposer(
           this.filterBySegmentation.changed.add(this.specificationChanged.dispatch));
+      this.registerDisposer(this.filterBySegmentationAvailable.changed.add(this.specificationChanged.dispatch));
       this.registerDisposer(this.voxelSize.changed.add(handleVoxelSizeChanged));
       this.registerDisposer(this.manager.voxelSize.changed.add(handleVoxelSizeChanged));
       handleVoxelSizeChanged();
@@ -182,6 +187,7 @@ export class AnnotationUserLayer extends Base {
       const label = document.createElement('label');
       label.textContent = 'Filter by segmentation: ';
       label.appendChild(checkboxWidget.element);
+      checkboxWidget.element.disabled = !this.filterBySegmentationAvailable.value;
       tab.element.appendChild(label);
       tab.registerDisposer(new ElementVisibilityFromTrackableBoolean(
           this.registerDisposer(makeDerivedWatchableValue(
@@ -200,6 +206,7 @@ export class AnnotationUserLayer extends Base {
     }
     x[LINKED_SEGMENTATION_LAYER_JSON_KEY] = this.linkedSegmentationLayer.toJSON();
     x[FILTER_BY_SEGMENTATION_JSON_KEY] = this.filterBySegmentation.toJSON();
+    x[FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY] = this.filterBySegmentationAvailable.toJSON();
     return x;
   }
 }
