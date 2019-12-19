@@ -47,6 +47,7 @@ export function createBasicElement(
         }
       } else {
         valueElement = document.createElement('input');
+        valueElement.setAttribute('autocomplete', "off");
         if (typeof(value) === 'string') {
           valueElement.value = value;
           valueElement.setAttribute('value', value);
