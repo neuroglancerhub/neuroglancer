@@ -158,11 +158,20 @@ vec4 getBorderColor() {
   return `getBorderColor()`;
 }
 
+function makeRenderHelper<TBase extends {new (...args: any[]): DVIDRenderHelper}>(Base: TBase, perspective = false) {
+  return class extends Base {
+    constructor(...args: any[]) {
+      super(...args);
+      this.perspective = perspective;
+    }
+  }
+}
+
 class DVIDRenderHelper extends AnnotationRenderHelper {
   circleShader = this.registerDisposer(new CircleShader(this.gl));
   shaderGetter =
       emitterDependentShaderGetter(this, this.gl, (builder: ShaderBuilder) => this.defineShader(builder));
-  fillOpacity = 1.0;
+  perspective = false;
 
   defineShader(builder: ShaderBuilder) {
     super.defineShader(builder);
@@ -187,48 +196,20 @@ emitAnnotation(color);
   }
 
   draw(context: AnnotationRenderContext) {
-    this.fillOpacity = context.annotationLayer.state.fillOpacity.value;
-    const shader = this.shaderGetter(context.renderContext.emitter);
-    this.enable(shader, context, () => {
-      const {gl} = this;
-      gl.uniform1f(shader.uniform('uFillOpacity'), this.fillOpacity);
-      const aVertexPosition = shader.attribute('aVertexPosition');
-      const aRenderingAttribute = shader.attribute('aRenderingAttribute');
-      context.buffer.bindToVertexAttrib(
-          aVertexPosition, /*components=*/3, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-          /*normalized=*/false,
-          /*stride=*/numDVIDPointAnnotationElements * 4, /*offset=*/context.bufferOffset);
-      context.buffer.bindToVertexAttrib(
-        aRenderingAttribute, /*components=*/1, /*attributeType=*/WebGL2RenderingContext.FLOAT,
-        /*normalized=*/false,
-        /*stride=*/numDVIDPointAnnotationElements * 4, /*offset=*/context.bufferOffset + 3 * 4);
-      gl.vertexAttribDivisor(aVertexPosition, 1);
-      gl.vertexAttribDivisor(aRenderingAttribute, 1);
-      this.circleShader.draw(
-          shader, context.renderContext,
-          {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},
-          context.count);
-      gl.vertexAttribDivisor(aRenderingAttribute, 0);
-      gl.vertexAttribDivisor(aVertexPosition, 0);
-      gl.disableVertexAttribArray(aVertexPosition);
-      gl.disableVertexAttribArray(aRenderingAttribute);
-    });
-  }
-}
+    let fillOpacity = context.annotationLayer.state.fillOpacity.value;
 
-export class DVIDPerspectiveRenderHelper extends DVIDRenderHelper {
-  draw(context: AnnotationRenderContext) {
-    this.fillOpacity = context.annotationLayer.state.fillOpacity.value;
-    if (context.annotationLayer.state.filterBySegmentation.value) {
-      this.fillOpacity *= 0.5;
-    } else {
-      this.fillOpacity *= 0.1;
+    if (this.perspective) {
+      if (context.annotationLayer.state.filterBySegmentation.value) {
+        fillOpacity *= 0.5;
+      } else {
+        fillOpacity *= 0.1;
+      }
     }
 
     const shader = this.shaderGetter(context.renderContext.emitter);
     this.enable(shader, context, () => {
       const {gl} = this;
-      gl.uniform1f(shader.uniform('uFillOpacity'), this.fillOpacity * 1);
+      gl.uniform1f(shader.uniform('uFillOpacity'), fillOpacity);
       const aVertexPosition = shader.attribute('aVertexPosition');
       const aRenderingAttribute = shader.attribute('aRenderingAttribute');
       context.buffer.bindToVertexAttrib(
@@ -258,7 +239,7 @@ export function updateRenderHelper() {
   renderHandler.bytes = numDVIDPointAnnotationElements * 4;
   renderHandler.serializer = DVIDPointAnnotationSerializer;
   renderHandler.sliceViewRenderHelper = DVIDRenderHelper;
-  renderHandler.perspectiveViewRenderHelper = DVIDPerspectiveRenderHelper;
+  renderHandler.perspectiveViewRenderHelper = makeRenderHelper(DVIDRenderHelper, true);
 }
 
 export function getUserFromToken(token: string): string|null {
