@@ -46,7 +46,7 @@ import {RangeWidget} from 'neuroglancer/widget/range';
 import {StackView, Tab} from 'neuroglancer/widget/tab_view';
 import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
-// import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/ui/widgets';
+import { TrackableFiniteFloat, trackableFiniteFloat } from '../trackable_finite_float';
 
 type AnnotationIdAndPart = {
   id: string,
@@ -413,6 +413,12 @@ export class AnnotationLayerView extends Tab {
     {
       const widget = this.registerDisposer(new RangeWidget(this.annotationLayer.fillOpacity));
       widget.promptElement.textContent = 'Fill opacity';
+      this.element.appendChild(widget.element);
+    }
+
+    {
+      const widget = this.registerDisposer(new RangeWidget(this.annotationLayer.pointRadius, {min: 5, max: 20, step: 1}));
+      widget.promptElement.textContent = 'Point radius';
       this.element.appendChild(widget.element);
     }
 
@@ -1144,16 +1150,19 @@ export interface UserLayerWithAnnotations extends UserLayer {
   selectedAnnotation: SelectedAnnotationState;
   annotationColor: TrackableRGB;
   annotationFillOpacity: TrackableAlphaValue;
+  pointRadius: TrackableFiniteFloat;
   initializeAnnotationLayerViewTab(tab: AnnotationLayerView): void;
 }
 
 export function getAnnotationRenderOptions(userLayer: UserLayerWithAnnotations) {
-  return {color: userLayer.annotationColor, fillOpacity: userLayer.annotationFillOpacity};
+  return {color: userLayer.annotationColor, fillOpacity: userLayer.annotationFillOpacity, pointRadius: userLayer.pointRadius};
 }
 
 const SELECTED_ANNOTATION_JSON_KEY = 'selectedAnnotation';
 const ANNOTATION_COLOR_JSON_KEY = 'annotationColor';
 const ANNOTATION_FILL_OPACITY_JSON_KEY = 'annotationFillOpacity';
+const ANNOTATION_POINT_RADIUS_JSON_KEY = 'pointRadius';
+
 export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]): UserLayer}>(
     Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {
@@ -1162,12 +1171,14 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
         this.registerDisposer(new SelectedAnnotationState(this.annotationLayerState.addRef()));
     annotationColor = new TrackableRGB(vec3.fromValues(1, 1, 0));
     annotationFillOpacity = trackableAlphaValue(0.0);
+    pointRadius = trackableFiniteFloat(6);
 
     constructor(...args: any[]) {
       super(...args);
       this.selectedAnnotation.changed.add(this.specificationChanged.dispatch);
       this.annotationColor.changed.add(this.specificationChanged.dispatch);
       this.annotationFillOpacity.changed.add(this.specificationChanged.dispatch);
+      this.pointRadius.changed.add(this.specificationChanged.dispatch);
       this.tabs.add('annotations', {
         label: 'Annotations',
         order: 10,
@@ -1201,6 +1212,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       this.selectedAnnotation.restoreState(specification[SELECTED_ANNOTATION_JSON_KEY]);
       this.annotationColor.restoreState(specification[ANNOTATION_COLOR_JSON_KEY]);
       this.annotationFillOpacity.restoreState(specification[ANNOTATION_FILL_OPACITY_JSON_KEY]);
+      this.pointRadius.restoreState(specification[ANNOTATION_POINT_RADIUS_JSON_KEY]);
     }
 
     toJSON() {
@@ -1208,6 +1220,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       x[SELECTED_ANNOTATION_JSON_KEY] = this.selectedAnnotation.toJSON();
       x[ANNOTATION_COLOR_JSON_KEY] = this.annotationColor.toJSON();
       x[ANNOTATION_FILL_OPACITY_JSON_KEY] = this.annotationFillOpacity.toJSON();
+      x[ANNOTATION_POINT_RADIUS_JSON_KEY] = this.pointRadius.toJSON();
       return x;
     }
 

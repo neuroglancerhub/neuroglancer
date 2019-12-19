@@ -206,6 +206,8 @@ emitAnnotation(color);
       }
     }
 
+    let pointRadius = context.annotationLayer.state.pointRadius.value;
+
     const shader = this.shaderGetter(context.renderContext.emitter);
     this.enable(shader, context, () => {
       const {gl} = this;
@@ -224,7 +226,7 @@ emitAnnotation(color);
       gl.vertexAttribDivisor(aRenderingAttribute, 1);
       this.circleShader.draw(
           shader, context.renderContext,
-          {interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1},
+          {interiorRadiusInPixels: pointRadius, borderWidthInPixels: 2, featherWidthInPixels: 1},
           context.count);
       gl.vertexAttribDivisor(aRenderingAttribute, 0);
       gl.vertexAttribDivisor(aVertexPosition, 0);

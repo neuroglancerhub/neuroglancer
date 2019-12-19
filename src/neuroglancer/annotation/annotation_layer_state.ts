@@ -25,6 +25,7 @@ import {WatchableValue} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {mat4} from 'neuroglancer/util/geom';
+import { TrackableFiniteFloat } from '../trackable_finite_float';
 
 export class AnnotationHoverState extends
     WatchableValue<{id: string, partIndex: number}|undefined> {}
@@ -36,6 +37,7 @@ export class AnnotationLayerState extends RefCounted {
   role: RenderLayerRole;
   color: TrackableRGB;
   fillOpacity: TrackableAlphaValue;
+  pointRadius: TrackableFiniteFloat;
 
   /**
    * undefined means may have a segmentation state.  null means no segmentation state is supported.
@@ -71,7 +73,7 @@ export class AnnotationLayerState extends RefCounted {
   constructor(options: {
     transform?: CoordinateTransform, source: Owned<AnnotationSource|MultiscaleAnnotationSource>,
     hoverState?: AnnotationHoverState,
-    role?: RenderLayerRole, color: TrackableRGB, fillOpacity: TrackableAlphaValue,
+    role?: RenderLayerRole, color: TrackableRGB, fillOpacity: TrackableAlphaValue, pointRadius: TrackableFiniteFloat,
     segmentationState?: WatchableValue<SegmentationDisplayState|undefined|null>,
     filterBySegmentation?: TrackableBoolean,
   }) {
@@ -83,6 +85,7 @@ export class AnnotationLayerState extends RefCounted {
       role = RenderLayerRole.ANNOTATION,
       color,
       fillOpacity,
+      pointRadius,
       segmentationState = new WatchableValue(null),
       filterBySegmentation = new TrackableBoolean(false),
     } = options;
@@ -92,6 +95,7 @@ export class AnnotationLayerState extends RefCounted {
     this.role = role;
     this.color = color;
     this.fillOpacity = fillOpacity;
+    this.pointRadius = pointRadius;
     this.segmentationState = segmentationState;
     this.filterBySegmentation = filterBySegmentation;
   }

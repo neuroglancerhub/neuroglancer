@@ -217,6 +217,7 @@ export class AnnotationLayer extends RefCounted {
     }
     this.registerDisposer(this.state.color.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.state.fillOpacity.changed.add(this.redrawNeeded.dispatch));
+    this.registerDisposer(this.state.pointRadius.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.hoverState.changed.add(this.redrawNeeded.dispatch));
     this.registerDisposer(this.transform.changed.add(this.redrawNeeded.dispatch));
   }
