@@ -19,3 +19,7 @@ import {makeTextIconButton} from 'neuroglancer/widget/text_icon_button';
 export function makeCloseButton() {
   return makeTextIconButton('❌');
 }
+
+export function makeRefreshButton() {
+  return makeTextIconButton('🔄');
+}

@@ -26,7 +26,7 @@ import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {float32ToString} from 'neuroglancer/util/float32_to_string';
-import {makeCloseButton} from 'neuroglancer/widget/close_button';
+import {makeCloseButton, makeRefreshButton} from 'neuroglancer/widget/close_button';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
 
 import 'neuroglancer/noselect.css';
@@ -165,6 +165,14 @@ class LayerWidget extends RefCounted {
   labelElement: HTMLSpanElement;
   valueElement: HTMLSpanElement;
 
+  private allowingRefresh(layer: ManagedUserLayerWithSpecification): boolean {
+    return (layer.initialSpecification.type === 'annotation');
+  }
+
+  private allowingClose(layer: ManagedUserLayerWithSpecification): boolean {
+    return (layer.initialSpecification.type !== 'annotation');
+  }
+
   constructor(public layer: ManagedUserLayerWithSpecification, public panel: LayerPanel) {
     super();
     let element = this.element = document.createElement('div');
@@ -178,6 +186,16 @@ class LayerWidget extends RefCounted {
     valueElement.className = 'neuroglancer-layer-item-value';
     const closeElement = makeCloseButton();
     closeElement.title = 'Delete layer';
+    const refreshElement = makeRefreshButton();
+    refreshElement.title = 'Refresh data';
+    this.registerEventListener(refreshElement, 'click', (event: MouseEvent) => {
+      event.stopPropagation();
+      let url = <string>this.layer.sourceUrl;
+      let dataSource = this.layer.manager.dataSourceProvider.getDataSource(url);
+      dataSource[0].invalidateAnnotationSourceCache!(
+        this.layer.manager.chunkManager, dataSource[1]);
+    });
+
     this.registerEventListener(closeElement, 'click', (event: MouseEvent) => {
       this.panel.layerManager.removeManagedLayer(this.layer);
       event.stopPropagation();
@@ -185,7 +203,12 @@ class LayerWidget extends RefCounted {
     element.appendChild(layerNumberElement);
     element.appendChild(labelElement);
     element.appendChild(valueElement);
-    element.appendChild(closeElement);
+    if (this.allowingRefresh(layer)) {
+      element.appendChild(refreshElement);
+    }
+    if (this.allowingClose(layer)) {
+      element.appendChild(closeElement);
+    }
     this.registerEventListener(element, 'click', (event: MouseEvent) => {
       if (event.ctrlKey) {
         panel.selectedLayer.layer = layer;

@@ -401,6 +401,8 @@ export class AnnotationLayerView extends Tab {
         source.childUpdated.add((annotation) => this.updateAnnotationElement(annotation)));
     this.registerDisposer(
         source.childDeleted.add((annotationId) => this.deleteAnnotationElement(annotationId)));
+    this.registerDisposer(
+        source.childRefreshed.add(() => this.clearAnnotationListElements()));
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
     this.registerDisposer(annotationLayer.transform.changed.add(updateView));
     this.updateView();
@@ -607,6 +609,11 @@ export class AnnotationLayerView extends Tab {
       this.annotationListElements.delete(annotationId);
     }
     this.resetOnUpdate();
+  }
+
+  clearAnnotationListElements() {
+    removeChildren(this.annotationListContainer);
+    this.annotationListElements.clear()
   }
 
   private resetOnUpdate() {

@@ -104,6 +104,7 @@ export interface DataSource {
   getAnnotationSource?
       (chunkManager: ChunkManager, path: string, cancellationToken: CancellationToken):
           Promise<MultiscaleAnnotationSource>|MultiscaleAnnotationSource;
+  invalidateAnnotationSourceCache?(chunkManager: ChunkManager, urlKey: string): void;
 
   /**
    * Returns a suggested layer name for the given volume source.

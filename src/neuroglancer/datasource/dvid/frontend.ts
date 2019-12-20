@@ -37,7 +37,7 @@ import {DVIDInstance, DVIDToken, credentialsKey, makeRequestWithCredentials, mak
 import {AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
-import {Signal} from 'neuroglancer/util/signal';
+import {Signal, NullarySignal} from 'neuroglancer/util/signal';
 import {Env, getUserFromToken, DVIDPointAnnotation, getAnnotationDescription, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
 import { getObjectId } from 'neuroglancer/util/object_id';
 import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
@@ -747,6 +747,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.childAdded = this.childAdded || new Signal<(annotation: Annotation) => void>();
     this.childUpdated = this.childUpdated || new Signal<(annotation: Annotation) => void>();
     this.childDeleted = this.childDeleted || new Signal<(annotationId: string) => void>();
+    this.childRefreshed = this.childRefreshed || new NullarySignal();
 
     if (this.parameters.readonly !== undefined) {
       this.readonly = this.parameters.readonly;
@@ -785,6 +786,17 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
 
       return widget;
     }
+  }
+
+  invalidateCache() {
+    this.metadataChunkSource.invalidateCache();
+    for (let sources1 of this.sources) {
+      for (let source of sources1) {
+        source.invalidateCache();
+      }
+    }
+    this.segmentFilteredSource.invalidateCache();
+    this.childRefreshed.dispatch();
   }
 
   add(annotation: Annotation, commit: boolean = true): AnnotationReference {
@@ -984,7 +996,7 @@ function userTagged(parameters: AnnotationSourceParameters) {
 type AuthType = string|undefined|null;
 
 export class DVIDDataSource extends DataSource {
-  dvidAnnotationSourceKey: Promise<any>;
+  dvidAnnotationSourceKey = new Map<string, Promise<any>>();
   constructor(public credentialsManager: CredentialsManager) {
     super();
   }
@@ -1030,6 +1042,15 @@ export class DVIDDataSource extends DataSource {
             url: instance.getNodeApiUrl(`/${volumeId}/info`), 
             responseType: 'json'
           }).then(response => new MultiscaleVolumeInfo(response)));
+  }
+
+  invalidateAnnotationSourceCache(chunkManager: ChunkManager, urlKey: string ) {
+    let sourcKeyPromise = this.dvidAnnotationSourceKey.get(urlKey);
+    if (sourcKeyPromise) {
+      sourcKeyPromise
+        .then(sourceKey => this.getAnnotationSourceFromSourceKey(chunkManager, sourceKey))
+        .then(source => source.invalidateCache());
+    }
   }
 
   getAnnotationSourceFromSourceKey(chunkManager: ChunkManager, sourceKey: any) {
@@ -1080,7 +1101,7 @@ export class DVIDDataSource extends DataSource {
   }
 
   getAnnotationSource(chunkManager: ChunkManager, key: string) {
-    this.dvidAnnotationSourceKey = parseAnnotationKey(key, this.getCredentialsProvider.bind(this)).then(
+    let sourceKeyPromise = parseAnnotationKey(key, this.getCredentialsProvider.bind(this)).then(
       parameters => {
         return {
           type: 'dvid:getAnnotationSource',
@@ -1088,7 +1109,9 @@ export class DVIDDataSource extends DataSource {
         };
       });
 
-    return this.dvidAnnotationSourceKey.then(
+    this.dvidAnnotationSourceKey.set(key, sourceKeyPromise);
+
+    return sourceKeyPromise.then(
       sourceKey => this.getAnnotationSourceFromSourceKey(chunkManager, sourceKey));
   }
 }
