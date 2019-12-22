@@ -390,7 +390,9 @@ function startChunkDownload(chunk: Chunk) {
 function cancelChunkDownload(chunk: Chunk) {
   const token = chunk.downloadCancellationToken!;
   chunk.downloadCancellationToken = undefined;
-  token.cancel();
+  if (token) {
+    token.cancel();
+  }
 }
 
 class ChunkPriorityQueue {
