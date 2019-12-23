@@ -38,7 +38,7 @@ import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntV
 import {DVIDToken, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
-import {Signal} from 'neuroglancer/util/signal';
+import {Signal, NullarySignal} from 'neuroglancer/util/signal';
 import {Env, getUserFromToken, DVIDPointAnnotation, getAnnotationDescription, updateAnnotationTypeHandler, updateRenderHelper} from 'neuroglancer/datasource/dvid/utils';
 import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
@@ -1051,6 +1051,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.childAdded = this.childAdded || new Signal<(annotation: Annotation) => void>();
     this.childUpdated = this.childUpdated || new Signal<(annotation: Annotation) => void>();
     this.childDeleted = this.childDeleted || new Signal<(annotationId: string) => void>();
+    this.childRefreshed = this.childRefreshed || new NullarySignal();
 
     if (this.parameters.readonly !== undefined) {
       this.readonly = this.parameters.readonly;
@@ -1091,6 +1092,17 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     }
   }
 
+  invalidateCache() {
+    this.metadataChunkSource.invalidateCache();
+    for (let sources1 of this.sources) {
+      for (let source of sources1) {
+        source.chunkSource.invalidateCache();
+      }
+    }
+    this.segmentFilteredSource.invalidateCache();
+    this.childRefreshed.dispatch();
+  }
+
   add(annotation: Annotation, commit: boolean = true): AnnotationReference {
     if (annotation.type === AnnotationType.POINT) {
       if (this.readonly) {
@@ -1113,4 +1125,13 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     return super.add(annotation, commit);
   }
 }
-
+/*
+invalidateAnnotationSourceCache(chunkManager: ChunkManager, urlKey: string ) {
+  let sourcKeyPromise = this.dvidAnnotationSourceKey.get(urlKey);
+  if (sourcKeyPromise) {
+    sourcKeyPromise
+      .then(sourceKey => this.getAnnotationSourceFromSourceKey(chunkManager, sourceKey))
+      .then(source => source.invalidateCache());
+  }
+}
+*/

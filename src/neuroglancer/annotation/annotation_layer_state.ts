@@ -27,6 +27,7 @@ import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {makeValueOrError, ValueOrError, valueOrThrow} from 'neuroglancer/util/error';
 import {vec3} from 'neuroglancer/util/geom';
+import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
 
 export class AnnotationHoverState extends WatchableValue<
     {id: string, partIndex: number, annotationLayerState: AnnotationLayerState}|undefined> {}
@@ -41,6 +42,7 @@ export class AnnotationDisplayState {
       new WatchableValue(null);
   filterBySegmentation = new TrackableBoolean(false);
   hoverState = new AnnotationHoverState(undefined);
+  pointRadius = trackableFiniteFloat(6);
 }
 
 export class AnnotationLayerState extends RefCounted {

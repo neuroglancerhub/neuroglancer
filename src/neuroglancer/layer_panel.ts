@@ -28,10 +28,11 @@ import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {float32ToString} from 'neuroglancer/util/float32_to_string';
-import {makeCloseButton} from 'neuroglancer/widget/close_button';
 import {makeIcon} from 'neuroglancer/widget/icon';
+import {makeCloseButton, makeRefreshButton} from 'neuroglancer/widget/close_button';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {DataSource, GetDataSourceOptionsBase} from 'neuroglancer/datasource';
 
 function destroyDropLayers(dropLayers: DropLayers, targetLayer?: ManagedUserLayer) {
   if (dropLayers.method === 'move') {
@@ -162,6 +163,14 @@ class LayerWidget extends RefCounted {
   labelElement: HTMLSpanElement;
   valueElement: HTMLSpanElement;
 
+  private allowingRefresh(layer: ManagedUserLayer): boolean {
+    return (layer.initialSpecification.type === 'annotation');
+  }
+
+  private allowingClose(layer: ManagedUserLayer): boolean {
+    return (layer.initialSpecification.type !== 'annotation');
+  }
+
   constructor(public layer: ManagedUserLayer, public panel: LayerPanel) {
     super();
     let element = this.element = document.createElement('div');
@@ -175,6 +184,24 @@ class LayerWidget extends RefCounted {
     valueElement.className = 'neuroglancer-layer-item-value';
     const closeElement = makeCloseButton();
     closeElement.title = 'Remove layer from this layer group';
+    const refreshElement = makeRefreshButton();
+    refreshElement.title = 'Refresh data';
+    this.registerEventListener(refreshElement, 'click', (event: MouseEvent) => {
+      event.stopPropagation();
+      let url = this.layer.layer!.dataSources[0].spec.url!;
+      
+      let options: GetDataSourceOptionsBase = {chunkManager: this.layer.manager.chunkManager, url: url, transform: undefined, globalCoordinateSpace: this.layer.manager.root.coordinateSpace};
+      this.layer.manager.dataSourceProviderRegistry.get(options).then((source: DataSource) => {
+        const annotationSource = source.subsources[0].subsource.annotation!;
+        if (annotationSource.invalidateCache) {
+          annotationSource.invalidateCache();
+        }
+      })
+      // dataSourceProvider[0].get().then(dataSource => {
+      //   dataSource.invalidateAnnotationSourceCache!(
+      //   this.layer.manager.chunkManager, dataSource[1]);
+    });
+
     this.registerEventListener(closeElement, 'click', (event: MouseEvent) => {
       this.panel.layerManager.removeManagedLayer(this.layer);
       event.stopPropagation();
@@ -191,7 +218,13 @@ class LayerWidget extends RefCounted {
     positionWidget.element.addEventListener('dblclick', (event: MouseEvent) => {
       event.stopPropagation();
     });
-    element.appendChild(closeElement);
+
+    if (this.allowingRefresh(layer)) {
+      element.appendChild(refreshElement);
+    }
+    if (this.allowingClose(layer)) {
+      element.appendChild(closeElement);
+    }
     this.registerEventListener(element, 'click', (event: MouseEvent) => {
       if (event.ctrlKey) {
         panel.selectedLayer.layer = layer;

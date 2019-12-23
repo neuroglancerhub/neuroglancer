@@ -225,6 +225,8 @@ emitAnnotation(color);
 
     let {gl} = this;
     
+    let pointRadius = context.annotationLayer.state.displayState.pointRadius.value;
+
     const shader = this.shaderGetter(context.renderContext.emitter);
     let {rank} = this;
     this.enable(shader, context, () => {
@@ -244,7 +246,7 @@ emitAnnotation(color);
 
       this.circleShader.draw(
         shader, context.renderContext,
-        { interiorRadiusInPixels: 6, borderWidthInPixels: 2, featherWidthInPixels: 1 },
+        { interiorRadiusInPixels: pointRadius, borderWidthInPixels: 2, featherWidthInPixels: 1 },
         context.count);
       
       binder.disable();

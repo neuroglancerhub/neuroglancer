@@ -251,6 +251,7 @@ export interface AnnotationSourceSignals {
   childAdded: Signal<(annotation: Annotation) => void>;
   childUpdated: Signal<(annotation: Annotation) => void>;
   childDeleted: Signal<(annotationId: string) => void>;
+  childRefreshed: NullarySignal;
 }
 
 export class AnnotationSource extends RefCounted implements AnnotationSourceSignals {
@@ -260,6 +261,7 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
   childAdded = new Signal<(annotation: Annotation) => void>();
   childUpdated = new Signal<(annotation: Annotation) => void>();
   childDeleted = new Signal<(annotationId: string) => void>();
+  childRefreshed = new NullarySignal();
 
   private pending = new Set<AnnotationId>();
 

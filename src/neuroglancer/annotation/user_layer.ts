@@ -32,6 +32,7 @@ import {AnnotationLayerView, UserLayerWithAnnotationsMixin} from 'neuroglancer/u
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {parseArray, parseFixedLengthArray, verify3dVec, verifyFinitePositiveFloat, verifyOptionalObjectProperty} from 'neuroglancer/util/json';
 import {LayerReferenceWidget} from 'neuroglancer/widget/layer_reference';
+import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
 
 const POINTS_JSON_KEY = 'points';
 const ANNOTATIONS_JSON_KEY = 'annotations';
@@ -77,6 +78,8 @@ function getSegmentationDisplayState(layer: ManagedUserLayer|undefined): Segment
 
 const LINKED_SEGMENTATION_LAYER_JSON_KEY = 'linkedSegmentationLayer';
 const FILTER_BY_SEGMENTATION_JSON_KEY = 'filterBySegmentation';
+const FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY = 'filterBySegmentationAvailable';
+
 const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class AnnotationUserLayer extends Base {
   localAnnotations: LocalAnnotationSource|undefined;
@@ -84,6 +87,7 @@ export class AnnotationUserLayer extends Base {
   private pointAnnotationsJson: any = undefined;
   linkedSegmentationLayer = this.registerDisposer(
       new LayerReference(this.manager.rootLayers.addRef(), isValidLinkedSegmentationLayer));
+  filterBySegmentationAvailable = new TrackableBoolean(true);
 
   disposed() {
     const {localAnnotations} = this;
@@ -96,6 +100,7 @@ export class AnnotationUserLayer extends Base {
   constructor(managedLayer: Borrowed<ManagedUserLayer>, specification: any) {
     super(managedLayer, specification);
     this.linkedSegmentationLayer.restoreState(specification[LINKED_SEGMENTATION_LAYER_JSON_KEY]);
+    this.filterBySegmentationAvailable.restoreState(specification[FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY]);
     this.annotationDisplayState.filterBySegmentation.restoreState(
         specification[FILTER_BY_SEGMENTATION_JSON_KEY]);
     this.registerDisposer(this.annotationDisplayState.filterBySegmentation.changed.add(
@@ -286,6 +291,7 @@ export class AnnotationUserLayer extends Base {
       const label = document.createElement('label');
       label.textContent = 'Filter by segmentation: ';
       label.appendChild(checkboxWidget.element);
+      checkboxWidget.element.disabled = !this.filterBySegmentationAvailable.value;
       tab.element.appendChild(label);
       tab.registerDisposer(new ElementVisibilityFromTrackableBoolean(
           this.registerDisposer(
@@ -303,6 +309,7 @@ export class AnnotationUserLayer extends Base {
     }
     x[LINKED_SEGMENTATION_LAYER_JSON_KEY] = this.linkedSegmentationLayer.toJSON();
     x[FILTER_BY_SEGMENTATION_JSON_KEY] = this.annotationDisplayState.filterBySegmentation.toJSON();
+    x[FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY] = this.filterBySegmentationAvailable.toJSON();
     return x;
   }
 

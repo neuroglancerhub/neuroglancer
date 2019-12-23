@@ -307,6 +307,8 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   segmentFilteredSource: Owned<AnnotationSubsetGeometryChunkSource>;
   rank: number;
   makeEditWidget: (reference: AnnotationReference) => HTMLElement|null;
+  invalidateCache?(): void;
+
   constructor(public chunkManager: Borrowed<ChunkManager>, options: {
     rank: number,
     sourceSpecifications: {
@@ -623,6 +625,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   childAdded: Signal<(annotation: Annotation) => void>;
   childUpdated: Signal<(annotation: Annotation) => void>;
   childDeleted: Signal<(annotationId: string) => void>;
+  childRefreshed: NullarySignal;
 }
 
 registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function(x) {

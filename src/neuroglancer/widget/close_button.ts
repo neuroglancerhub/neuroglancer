@@ -20,3 +20,7 @@ import {makeIcon, MakeIconOptions} from 'neuroglancer/widget/icon';
 export function makeCloseButton(options: MakeIconOptions = {}) {
   return makeIcon({svg: svg_close, ...options});
 }
+
+export function makeRefreshButton() {
+  return makeIcon({text: '\u21BA'});
+}

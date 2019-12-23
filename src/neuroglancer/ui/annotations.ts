@@ -52,7 +52,6 @@ import {makeIcon} from 'neuroglancer/widget/icon';
 import {RangeWidget} from 'neuroglancer/widget/range';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
-// import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/ui/widgets';
 
 interface AnnotationIdAndPart {
   id: string, sourceIndex: number;
@@ -583,6 +582,12 @@ export class AnnotationLayerView extends Tab {
       this.element.appendChild(widget.element);
     }
 
+    {
+      const widget = this.registerDisposer(new RangeWidget(this.displayState.pointRadius, {min: 5, max: 20, step: 1}));
+      widget.promptElement.textContent = 'Point radius';
+      this.element.appendChild(widget.element);
+    }
+
     const colorPicker = this.registerDisposer(new ColorWidget(this.displayState.color));
     colorPicker.element.title = 'Change annotation display color';
     toolbox.appendChild(colorPicker.element);
@@ -845,6 +850,11 @@ export class AnnotationLayerView extends Tab {
       }
     }
     this.resetOnUpdate();
+  }
+
+  clearAnnotationListElements() {
+    // removeChildren(this.annotationListContainer);
+    // this.annotationListElements.clear()
   }
 
   private resetOnUpdate() {
@@ -1497,6 +1507,8 @@ export interface UserLayerWithAnnotations extends UserLayer {
 const SELECTED_ANNOTATION_JSON_KEY = 'selectedAnnotation';
 const ANNOTATION_COLOR_JSON_KEY = 'annotationColor';
 const ANNOTATION_FILL_OPACITY_JSON_KEY = 'annotationFillOpacity';
+const ANNOTATION_POINT_RADIUS_JSON_KEY = 'pointRadius';
+
 export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]): UserLayer}>(
     Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {
@@ -1509,6 +1521,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       this.selectedAnnotation.changed.add(this.specificationChanged.dispatch);
       this.annotationDisplayState.color.changed.add(this.specificationChanged.dispatch);
       this.annotationDisplayState.fillOpacity.changed.add(this.specificationChanged.dispatch);
+      this.annotationDisplayState.pointRadius.changed.add(this.specificationChanged.dispatch);
       this.tabs.add('annotations', {
         label: 'Annotations',
         order: 10,
@@ -1562,6 +1575,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       this.annotationDisplayState.color.restoreState(specification[ANNOTATION_COLOR_JSON_KEY]);
       this.annotationDisplayState.fillOpacity.restoreState(
           specification[ANNOTATION_FILL_OPACITY_JSON_KEY]);
+      this.annotationDisplayState.pointRadius.restoreState(specification[ANNOTATION_POINT_RADIUS_JSON_KEY]);
     }
 
     addLocalAnnotations(
@@ -1624,6 +1638,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       x[SELECTED_ANNOTATION_JSON_KEY] = this.selectedAnnotation.toJSON();
       x[ANNOTATION_COLOR_JSON_KEY] = this.annotationDisplayState.color.toJSON();
       x[ANNOTATION_FILL_OPACITY_JSON_KEY] = this.annotationDisplayState.fillOpacity.toJSON();
+      x[ANNOTATION_POINT_RADIUS_JSON_KEY] = this.annotationDisplayState.pointRadius.toJSON();
       return x;
     }
   }
