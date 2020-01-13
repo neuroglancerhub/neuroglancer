@@ -22,9 +22,10 @@ import {AnnotationRenderContext, AnnotationRenderHelper, getAnnotationTypeRender
 import {AnnotationType, getAnnotationTypeHandler} from 'neuroglancer/annotation';
 import {CircleShader} from 'neuroglancer/webgl/circles';
 import {emitterDependentShaderGetter, ShaderBuilder} from 'neuroglancer/webgl/shader';
-import {Point} from 'neuroglancer/annotation/index';
+import {Point, AnnotationId} from 'neuroglancer/annotation/index';
 import {StringMemoize} from 'neuroglancer/util/memoize';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
+import {Uint64} from 'neuroglancer/util/uint64';
 
 let EnvMemoize = new StringMemoize();
 
@@ -35,45 +36,78 @@ export let Env = {
     }
 };
 
-export interface DVIDPointAnnotation extends Point {
+export class DvidPointAnnotationProperty {
+  comment?: string;
+  annotation?: string;
+  type?: string;
+  checked?: string;
+}
+
+export class DVIDPointAnnotation implements Point {
+  description?: string|undefined|null;
+
+  id: AnnotationId;
+
+  relatedSegments?: Uint64[][];
+  properties: any[];
+
   kind?: string;
-  properties?: {[key:string]: any};
+  point: Float32Array;
+  type: AnnotationType.POINT;
+
+  prop: DvidPointAnnotationProperty;
+
+  get comment() {
+    return this.prop && this.prop.comment;
+  }
+
+  get checked() {
+    return this.prop && this.prop.checked === '1' ? true : false;
+  }
+
+  get bookmarkType() {
+    return this.prop && this.prop.type;
+  }
+
+  get renderingAttribute() {
+    if (this.kind === 'Note') {
+      if (this.checked) {
+        return 1;
+      }
+      if (this.bookmarkType) {
+        if (this.bookmarkType === 'False Split') {
+          return 2;
+        } else if (this.bookmarkType === 'False Merge') {
+          return 3;
+        }
+      }
+    } else if (this.kind === 'PreSyn') {
+      return 4;
+    } else if (this.kind === 'PostSyn') {
+      return 5;
+    }
+
+    return 0;
+  }
 }
 
 export function getAnnotationDescription(annotation: DVIDPointAnnotation): string {
 
   let description = '';
-  if (annotation.properties) {
-    description = annotation.properties.comment || annotation.properties.annotation || '';
-    if (annotation.properties.type && annotation.properties.type !== 'Other') {
-      description += ` (Type: ${annotation.properties.type})`;
+  let prop = annotation.properties[0];
+  if (prop) {
+    description = prop.comment || prop.annotation || '';
+    if (prop.type && prop.type !== 'Other') {
+      description += ` (Type: ${prop.type})`;
     }
   }
 
   return description;
 }
 
-function getRenderingAttribute(annotation: Point): number {
-  let {kind, properties} = <DVIDPointAnnotation>annotation;
-  if (properties) {
-    if (kind === 'Note') {
-      if (properties.checked) {
-        if (properties.checked === '1') {
-          return 1;
-        }
-      }
-      if (properties.type) {
-        if (properties.type === 'False Split') {
-          return 2;
-        } else if (properties.type === 'False Merge') {
-          return 3;
-        }
-      }
-    } else if (kind === 'PreSyn') {
-      return 4;
-    } else if (kind === 'PostSyn') {
-      return 5;
-    }
+function getRenderingAttribute(annotation: DVIDPointAnnotation|undefined): number {
+  if (annotation) {
+    return annotation.renderingAttribute;
   }
 
   return 0;
@@ -90,7 +124,7 @@ function DVIDPointAnnotationSerializer(buffer: ArrayBuffer, offset: number, numA
     // coordinates[coordinateOffset] = point[0];
     // coordinates[coordinateOffset + 1] = point[1];
     // coordinates[coordinateOffset + 2] = point[2];
-    coordinates[coordinateOffset + rank] = getRenderingAttribute(annotation);
+    coordinates[coordinateOffset + rank] = getRenderingAttribute(<DVIDPointAnnotation>annotation);
   };
 }
 

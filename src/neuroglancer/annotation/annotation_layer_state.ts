@@ -20,27 +20,91 @@ import {LayerDataSource} from 'neuroglancer/layer_data_source';
 import {ChunkTransformParameters, getChunkTransformParameters, RenderLayerTransformOrError} from 'neuroglancer/render_coordinate_transform';
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
-import {trackableAlphaValue} from 'neuroglancer/trackable_alpha';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {makeCachedLazyDerivedWatchableValue, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
+import {makeCachedLazyDerivedWatchableValue, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {makeValueOrError, ValueOrError, valueOrThrow} from 'neuroglancer/util/error';
 import {vec3} from 'neuroglancer/util/geom';
 import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
+import {WatchableMap} from 'neuroglancer/util/watchable_map';
+import {makeTrackableFragmentMain, makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
+import {parseShaderUiControls, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 
 export class AnnotationHoverState extends WatchableValue<
     {id: string, partIndex: number, annotationLayerState: AnnotationLayerState}|undefined> {}
 
-export class AnnotationDisplayState {
+// null means loading
+// undefined means no attached layer
+type OptionalSegmentationDisplayState = SegmentationDisplayState|null|undefined;
+
+export interface AnnotationRelationshipState {
+  segmentationState: WatchableValueInterface<OptionalSegmentationDisplayState>;
+  showMatches: TrackableBoolean;
+}
+
+export class WatchableAnnotationRelationshipStates extends
+    WatchableMap<string, AnnotationRelationshipState> {
+  constructor() {
+    super((context, {showMatches, segmentationState}) => {
+      context.registerDisposer(showMatches.changed.add(this.changed.dispatch));
+      context.registerDisposer(segmentationState.changed.add(this.changed.dispatch));
+      context.registerDisposer(registerNested((nestedContext, segmentationState) => {
+        if (segmentationState == null) return;
+        const {visibleSegments} = segmentationState;
+        let wasEmpty = visibleSegments.size === 0;
+        nestedContext.registerDisposer(segmentationState.visibleSegments.changed.add(() => {
+          const isEmpty = visibleSegments.size === 0;
+          if (isEmpty !== wasEmpty) {
+            wasEmpty = isEmpty;
+            this.changed.dispatch();
+          }
+        }));
+      }, segmentationState));
+    });
+  }
+
+  get(name: string): AnnotationRelationshipState {
+    let value = super.get(name);
+    if (value === undefined) {
+      value = {
+        segmentationState: new WatchableValue(undefined),
+        showMatches: new TrackableBoolean(false)
+      };
+      super.set(name, value);
+    }
+    return value;
+  }
+}
+
+const DEFAULT_FRAGMENT_MAIN = `
+void main() {
+  setColor(defaultColor());
+}
+`;
+
+export class AnnotationDisplayState extends RefCounted {
+  shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
+  shaderControls = new ShaderControlState(this.shader);
+  fallbackShaderControls = new WatchableValue(parseShaderUiControls(DEFAULT_FRAGMENT_MAIN));
+  shaderError = makeWatchableShaderError();
   color = new TrackableRGB(vec3.fromValues(1, 1, 0));
-  fillOpacity = trackableAlphaValue(0.0);
-  /**
-   * undefined means may have a segmentation state.  null means no segmentation state is supported.
-   */
-  segmentationState: WatchableValue<SegmentationDisplayState|undefined|null> =
-      new WatchableValue(null);
-  filterBySegmentation = new TrackableBoolean(false);
+  relationshipStates = this.registerDisposer(new WatchableAnnotationRelationshipStates());
+  ignoreNullSegmentFilter = new TrackableBoolean(true);
+  displayUnfiltered = makeCachedLazyDerivedWatchableValue((map, ignoreNullSegmentFilter) => {
+    for (const state of map.values()) {
+      if (state.showMatches.value) {
+        if (!ignoreNullSegmentFilter) return false;
+        const segmentationState = state.segmentationState.value;
+        if (segmentationState != null) {
+          if (segmentationState.visibleSegments.size > 0) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }, this.relationshipStates, this.ignoreNullSegmentFilter);
   hoverState = new AnnotationHoverState(undefined);
   pointRadius = trackableFiniteFloat(6);
 }
@@ -56,6 +120,7 @@ export class AnnotationLayerState extends RefCounted {
   displayState: AnnotationDisplayState;
 
   readonly chunkTransform: WatchableValueInterface<ValueOrError<ChunkTransformParameters>>;
+
   constructor(options: {
     transform: WatchableValueInterface<RenderLayerTransformOrError>,
     localPosition: WatchableValueInterface<Float32Array>,

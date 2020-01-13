@@ -333,7 +333,7 @@ class AnnotationBase(JsonObjectWrapper):
     id = wrapped_property('id', optional(text_type))  # pylint: disable=invalid-name
     type = wrapped_property('type', text_type)
     description = wrapped_property('description', optional(text_type))
-    segments = wrapped_property('segments', optional(typed_list(np.uint64)))
+    segments = wrapped_property('segments', optional(typed_list(typed_list(np.uint64))))
 
 
 @export
@@ -671,6 +671,11 @@ class LinkedZoomFactor(make_linked_navigation_type(float, interpolate_zoom)):
 
 
 @export
+class LinkedDepthRange(make_linked_navigation_type(float, interpolate_zoom)):
+    __slots__ = ()
+
+
+@export
 class LinkedOrientationState(make_linked_navigation_type(array_wrapper(np.float32, 4), quaternion_slerp)):
     __slots__ = ()
 
@@ -828,9 +833,11 @@ class LayerGroupViewer(JsonObjectWrapper):
     cross_section_orientation = crossSectionOrientation = wrapped_property(
         'crossSectionOrientation', LinkedOrientationState)
     cross_section_scale = crossSectionScale = wrapped_property('crossSectionZoom', LinkedZoomFactor)
+    cross_section_depth = crossSectionDepth = wrapped_property('crossSectionDepth', LinkedDepthRange)
     projection_orientation = projectionOrientation = wrapped_property(
         'projectionOrientation', LinkedOrientationState)
     projection_scale = projectionScale = wrapped_property('projectionScale', LinkedZoomFactor)
+    projection_depth = projectionDepth = wrapped_property('projectionDepth', LinkedDepthRange)
 
     def __init__(self, *args, **kwargs):
         super(LayerGroupViewer, self).__init__(*args, **kwargs)
@@ -887,7 +894,9 @@ class ViewerState(JsonObjectWrapper):
     cross_section_orientation = crossSectionOrientation = wrapped_property(
         'crossSectionOrientation', optional(array_wrapper(np.float32, 4)))
     cross_section_scale = crossSectionScale = wrapped_property('crossSectionScale', optional(float))
+    cross_section_depth = crossSectionDepth = wrapped_property('crossSectionDepth', optional(float))
     projection_scale = projectionScale = wrapped_property('projectionScale', optional(float))
+    projection_depth = projectionDepth = wrapped_property('projectionDepth', optional(float))
     projection_orientation = projectionOrientation = perspectiveOrientation = perspective_orientation = wrapped_property(
         'projectionOrientation', optional(array_wrapper(np.float32, 4)))
     show_slices = showSlices = wrapped_property('showSlices', optional(bool, True))

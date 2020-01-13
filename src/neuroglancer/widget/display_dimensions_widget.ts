@@ -16,16 +16,18 @@
 
 import './display_dimensions_widget.css';
 
+import debounce from 'lodash/debounce';
 import {getDimensionNameValidity, validateDimensionNames} from 'neuroglancer/coordinate_transform';
-import {TrackableDisplayDimensions, TrackableZoomInterface} from 'neuroglancer/navigation_state';
+import {TrackableDepthRange, TrackableZoomInterface, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
+import {registerNested} from 'neuroglancer/trackable_value';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
 import {arraysEqual} from 'neuroglancer/util/array';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
-import {removeFromParent, updateInputFieldWidth} from 'neuroglancer/util/dom';
+import {removeChildren, removeFromParent, updateInputFieldWidth} from 'neuroglancer/util/dom';
 import {KeyboardEventBinder, registerActionListener} from 'neuroglancer/util/keyboard_bindings';
 import {EventActionMap, MouseEventBinder} from 'neuroglancer/util/mouse_bindings';
 import {numberToStringFixed} from 'neuroglancer/util/number_to_string';
-import {formatScaleWithUnitAsString} from 'neuroglancer/util/si_units';
+import {formatScaleWithUnitAsString, parseScale} from 'neuroglancer/util/si_units';
 
 const dimensionColors = ['#f00', '#0f0', '#00f'];
 
@@ -59,10 +61,18 @@ const widgetFieldGetters: ((dimElements: DimensionWidget) => HTMLInputElement)[]
   x => x.scaleFactor,
 ];
 
+/**
+ * Time in milliseconds to display widget after zoom or depth range changes.
+ */
+const postActivityDisplayPeriod = 2000;
+
 export class DisplayDimensionsWidget extends RefCounted {
   element = document.createElement('div');
+
+  dimensionGridContainer = document.createElement('div');
+  depthGridContainer = document.createElement('div');
+
   defaultCheckbox = document.createElement('input');
-  defaultCheckboxLabel = document.createElement('label');
 
   dimensionElements = Array.from(Array(3), (_, i): DimensionWidget => {
     const container = document.createElement('div');
@@ -109,7 +119,7 @@ export class DisplayDimensionsWidget extends RefCounted {
     scale.style.gridColumn = '3';
     scale.style.gridRow = `${i + 1}`;
     container.appendChild(scale);
-    this.element.appendChild(container);
+    this.dimensionGridContainer.appendChild(container);
 
     const dimWidget: DimensionWidget = {
       name,
@@ -170,9 +180,9 @@ export class DisplayDimensionsWidget extends RefCounted {
   private zoomDimension(i: number, sign: number) {
     this.updateScaleFactors();
     const {displayDimensions} = this;
-    const {relativeDisplayScales} = displayDimensions;
-    const {dimensionIndices} = displayDimensions.value;
-    const dim = dimensionIndices[i];
+    const {relativeDisplayScales} = this;
+    const {displayDimensionIndices} = displayDimensions.value;
+    const dim = displayDimensionIndices[i];
     if (dim === -1) return;
     const {factors} = relativeDisplayScales.value;
     const newFactors = new Float64Array(factors);
@@ -182,7 +192,7 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   private updateNameValidity() {
     const {dimensionElements} = this;
-    const {dimensionIndices} = this.displayDimensions.value;
+    const {displayDimensionIndices} = this.displayDimensions.value;
     const displayDimensionNames = dimensionElements.map(w => w.name.value);
     const isValid = getDimensionNameValidity(displayDimensionNames);
     const coordinateSpace = this.displayDimensions.coordinateSpace.value;
@@ -202,17 +212,46 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
       const dimElements = dimensionElements[i];
       dimElements.name.dataset.isValid = valid.toString();
-      dimElements.container.dataset.isModified = (newIndex !== dimensionIndices[i]).toString();
+      dimElements.container.dataset.isModified =
+          (newIndex !== displayDimensionIndices[i]).toString();
     }
   }
 
   private scheduleUpdateView = animationFrameDebounce(() => this.updateView());
+
+  get displayDimensions() {
+    return this.displayDimensionRenderInfo.displayDimensions;
+  }
+
+  get relativeDisplayScales() {
+    return this.displayDimensionRenderInfo.relativeDisplayScales;
+  }
+
   constructor(
-      public displayDimensions: Owned<TrackableDisplayDimensions>,
-      public zoom: TrackableZoomInterface, public displayUnit = 'px') {
+      public displayDimensionRenderInfo: Owned<WatchableDisplayDimensionRenderInfo>,
+      public zoom: TrackableZoomInterface, public depthRange: Owned<TrackableDepthRange>,
+      public displayUnit = 'px') {
     super();
-    const {element, defaultCheckbox, defaultCheckboxLabel} = this;
+    const {element, dimensionGridContainer, defaultCheckbox} = this;
+    const defaultCheckboxLabel = document.createElement('label');
+
+    const hideWidgetDetails = this.registerCancellable(debounce(() => {
+      element.dataset.active = 'false';
+    }, postActivityDisplayPeriod));
+
+    const handleActivity = () => {
+      element.dataset.active = 'true';
+      hideWidgetDetails();
+    };
+
+    this.registerDisposer(zoom.changed.add(handleActivity));
+    this.registerDisposer(
+        displayDimensionRenderInfo.relativeDisplayScales.changed.add(handleActivity));
+    this.registerDisposer(depthRange.changed.add(handleActivity));
+
     element.classList.add('neuroglancer-display-dimensions-widget');
+    element.appendChild(dimensionGridContainer);
+    dimensionGridContainer.classList.add('neuroglancer-display-dimensions-widget-dimension-grid');
     element.addEventListener('pointerleave', () => {
       const focused = document.activeElement;
       if (focused instanceof HTMLElement && element.contains(focused)) {
@@ -227,14 +266,15 @@ export class DisplayDimensionsWidget extends RefCounted {
     defaultCheckbox.addEventListener('change', () => {
       this.updateDefault();
     });
-    element.appendChild(defaultCheckboxLabel);
-    this.registerDisposer(displayDimensions);
+    dimensionGridContainer.appendChild(defaultCheckboxLabel);
+    this.registerDisposer(displayDimensionRenderInfo);
+    this.registerDisposer(depthRange);
     this.registerDisposer(zoom.changed.add(this.scheduleUpdateView));
-    this.registerDisposer(displayDimensions.changed.add(this.scheduleUpdateView));
+    this.registerDisposer(displayDimensionRenderInfo.changed.add(this.scheduleUpdateView));
     const keyboardHandler = this.registerDisposer(new KeyboardEventBinder(element, inputEventMap));
     keyboardHandler.allShortcutsAreGlobal = true;
     this.registerDisposer(new MouseEventBinder(element, inputEventMap));
-    registerActionListener(element, 'cancel', () => {
+    registerActionListener(dimensionGridContainer, 'cancel', () => {
       this.updateView();
       const focused = document.activeElement;
       if (focused instanceof HTMLElement && element.contains(focused)) {
@@ -242,13 +282,158 @@ export class DisplayDimensionsWidget extends RefCounted {
       }
     });
 
+    const {depthGridContainer} = this;
+    depthGridContainer.classList.add('neuroglancer-depth-range-widget-grid');
+    element.appendChild(depthGridContainer);
+
+    const relativeCheckboxLabel = document.createElement('label');
+    const relativeCheckbox = document.createElement('input');
+    relativeCheckbox.type = 'checkbox';
+    relativeCheckboxLabel.classList.add('neuroglancer-depth-range-relative-checkbox-label');
+    relativeCheckbox.classList.add('neuroglancer-depth-range-relative-checkbox');
+    relativeCheckboxLabel.appendChild(relativeCheckbox);
+    relativeCheckboxLabel.appendChild(document.createTextNode('Zoom-relative'));
+    relativeCheckbox.addEventListener('change', () => {
+      const relative = relativeCheckbox.checked;
+      let value = this.depthRange.value;
+      if (relative === (value < 0)) return;
+      if (relative) {
+        value = -value / this.zoom.value;
+      } else {
+        value = -value * this.zoom.value;
+      }
+      this.depthRange.value = value;
+    });
+    relativeCheckboxLabel.title = 'Depth range is multiplied by scale';
+    element.appendChild(relativeCheckboxLabel);
+    registerActionListener<WheelEvent>(depthGridContainer, 'adjust-via-wheel', actionEvent => {
+      const event = actionEvent.detail;
+      const {deltaY} = event;
+      if (deltaY === 0) {
+        return;
+      }
+      const value = this.depthRange.value;
+      this.depthRange.value = value * 2 ** Math.sign(deltaY);
+    });
+
+    this.registerDisposer(registerNested((context, displayDimensionRenderInfoValue, {factors}) => {
+      removeChildren(depthGridContainer);
+      interface DepthWidget {
+        unit: string;
+        factor: number;
+        scale: number;
+        dimensionNames: string[];
+        input: HTMLInputElement;
+        label: HTMLSpanElement;
+      }
+      const {
+        displayRank,
+        globalDimensionNames,
+        displayDimensionIndices,
+        displayDimensionUnits,
+        canonicalVoxelFactors,
+        canonicalVoxelPhysicalSize,
+      } = displayDimensionRenderInfoValue;
+      const widgets: DepthWidget[] = [];
+
+      const updateView = () => {
+        relativeCheckbox.checked = this.depthRange.value < 0;
+        let rangeValue = this.depthRange.value;
+        if (rangeValue < 0) {
+          rangeValue *= -this.zoom.value;
+        }
+        for (const widget of widgets) {
+          const {input} = widget;
+          input.value = formatScaleWithUnitAsString(
+              rangeValue * widget.scale, widget.unit, {precision: 2, elide1: false});
+          updateInputFieldWidth(input);
+        }
+      };
+      const updateModel = (widget: DepthWidget) => {
+        const result = parseScale(widget.input.value);
+        if (result === undefined || result.unit !== widget.unit) return false;
+        let value = result.scale / widget.scale;
+        if (this.depthRange.value < 0) {
+          value = -value / this.zoom.value;
+        }
+        this.depthRange.value = value;
+        return true;
+      };
+
+      for (let i = 0; i < displayRank; ++i) {
+        const dim = displayDimensionIndices[i];
+        const name = globalDimensionNames[dim];
+        const unit = displayDimensionUnits[i];
+        const factor = factors[dim];
+        let widget = widgets.find(w => w.unit === unit && w.factor === factor);
+        if (widget === undefined) {
+          const container = document.createElement('div');
+          container.title = 'Visible depth range';
+          container.style.display = 'contents';
+          depthGridContainer.appendChild(container);
+          const plusMinus = document.createElement('span');
+          plusMinus.textContent = '±';
+          container.appendChild(plusMinus);
+          const input = document.createElement('input');
+          input.spellcheck = false;
+          input.autocomplete = 'off';
+          input.addEventListener('focus', () => {
+            input.select();
+          });
+          registerActionListener(input, 'commit', () => {
+            updateModel(widget!);
+          });
+          input.addEventListener('change', () => {
+            if (!updateModel(widget!)) {
+              updateView();
+            }
+          });
+          input.addEventListener('input', () => {
+            updateInputFieldWidth(input);
+          });
+          container.appendChild(input);
+          const label = document.createElement('span');
+          label.classList.add('neuroglancer-depth-range-widget-dimension-names');
+          container.appendChild(label);
+          widget = {
+            unit,
+            factor,
+            dimensionNames: [],
+            input,
+            label,
+            scale: canonicalVoxelPhysicalSize * canonicalVoxelFactors[i],
+          };
+          widgets.push(widget);
+        }
+        widget.dimensionNames.push(name);
+      }
+      for (const widget of widgets) {
+        if (widget.dimensionNames.length !== displayRank) {
+          widget.label.textContent = widget.dimensionNames.join(' ');
+        }
+      }
+
+      context.registerDisposer(registerActionListener(depthGridContainer, 'cancel', () => {
+        updateView();
+        const focused = document.activeElement;
+        if (focused instanceof HTMLElement && depthGridContainer.contains(focused)) {
+          focused.blur();
+        }
+      }));
+      const debouncedUpdateView = context.registerCancellable(animationFrameDebounce(updateView));
+      context.registerDisposer(this.depthRange.changed.add(debouncedUpdateView));
+      context.registerDisposer(this.zoom.changed.add(debouncedUpdateView));
+      updateView();
+    }, displayDimensionRenderInfo, this.relativeDisplayScales));
+
     this.updateView();
   }
 
   private updateNames(): boolean {
-    const displayDimensionNames = this.dimensionElements.map(x => x.name.value).filter(x => x.length > 0);
+    const displayDimensionNames =
+        this.dimensionElements.map(x => x.name.value).filter(x => x.length > 0);
     if (!validateDimensionNames(displayDimensionNames)) return false;
-    const {displayDimensions} = this;
+    const {displayDimensions} = this.displayDimensionRenderInfo;
     if (displayDimensionNames.length === 0) {
       displayDimensions.reset();
       return true;
@@ -263,7 +448,7 @@ export class DisplayDimensionsWidget extends RefCounted {
       if (index === -1) return false;
       dimensionIndices[i] = index;
     }
-    if (arraysEqual(dimensionIndices, displayDimensions.value.dimensionIndices)) {
+    if (arraysEqual(dimensionIndices, displayDimensions.value.displayDimensionIndices)) {
       return true;
     }
     displayDimensions.setDimensionIndices(rank, dimensionIndices);
@@ -276,16 +461,16 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   private updateScaleFactors(): boolean {
     const {displayDimensions} = this;
-    const {relativeDisplayScales} = displayDimensions;
-    const {dimensionIndices, rank} = displayDimensions.value;
+    const {relativeDisplayScales} = this;
+    const {displayDimensionIndices, displayRank} = displayDimensions.value;
     const {factors} = relativeDisplayScales.value;
     const {dimensionElements} = this;
     const newFactors = new Float64Array(factors);
-    for (let i = 0; i < rank; ++i) {
+    for (let i = 0; i < displayRank; ++i) {
       const dimElements = dimensionElements[i];
       if (!dimElements.scaleFactorModified) continue;
       const factor = Number(dimElements.scaleFactor.value);
-      const dim = dimensionIndices[i];
+      const dim = displayDimensionIndices[i];
       if (!Number.isFinite(factor) || factor <= 0) continue;
       newFactors[dim] = factor;
     }
@@ -296,17 +481,34 @@ export class DisplayDimensionsWidget extends RefCounted {
   }
 
   private updateView() {
-    const {dimensionElements, displayDimensions: {value: displayDimensions, default: isDefault}} =
-        this;
+    const {dimensionElements, displayDimensions: {default: isDefault}} = this;
     const {
-      dimensionIndices,
+      displayDimensionIndices,
       canonicalVoxelFactors,
-      relativeDisplayScales: {factors, coordinateSpace: {names, units, scales}}
-    } = displayDimensions;
+      displayDimensionUnits,
+      displayDimensionScales,
+      globalDimensionNames,
+    } = this.displayDimensionRenderInfo.value;
+    const {factors} = this.relativeDisplayScales.value;
     this.defaultCheckbox.checked = isDefault;
     const zoom = this.zoom.value;
+    // Check if all units and factors are the same.
+    const firstDim = displayDimensionIndices[0];
+    let singleScale = true;
+    if (firstDim !== -1) {
+      const unit = displayDimensionUnits[0];
+      const factor = factors[firstDim];
+      for (let i = 1; i < 3; ++i) {
+        const dim = displayDimensionIndices[i];
+        if (dim === -1) continue;
+        if (displayDimensionUnits[i] !== unit || factors[dim] !== factor) {
+          singleScale = false;
+          break;
+        }
+      }
+    }
     for (let i = 0; i < 3; ++i) {
-      const dim = dimensionIndices[i];
+      const dim = displayDimensionIndices[i];
       const dimElements = dimensionElements[i];
       delete dimElements.name.dataset.isValid;
       dimElements.container.dataset.isModified = (dim === -1).toString();
@@ -315,10 +517,15 @@ export class DisplayDimensionsWidget extends RefCounted {
         dimElements.scale.textContent = '';
         dimElements.scaleFactor.value = '';
       } else {
-        dimElements.name.value = names[dim];
-        const totalScale = scales[dim] * zoom / canonicalVoxelFactors[i];
-        const formattedScale = formatScaleWithUnitAsString(totalScale, units[dim], {precision: 2, elide1: false});
-        dimElements.scale.textContent = `${formattedScale}/${this.displayUnit}`;
+        dimElements.name.value = globalDimensionNames[dim];
+        const totalScale = displayDimensionScales[i] * zoom / canonicalVoxelFactors[i];
+        if (i === 0 || !singleScale) {
+          const formattedScale = formatScaleWithUnitAsString(
+              totalScale, displayDimensionUnits[i], {precision: 2, elide1: false});
+          dimElements.scale.textContent = `${formattedScale}/${this.displayUnit}`;
+        } else {
+          dimElements.scale.textContent = '';
+        }
         dimElements.scaleFactor.value = formatScaleFactor(factors[dim]);
       }
       updateInputFieldWidth(dimElements.name);
@@ -328,6 +535,6 @@ export class DisplayDimensionsWidget extends RefCounted {
 
   disposed() {
     removeFromParent(this.element);
-    this.dispose();
+    super.disposed();
   }
 }

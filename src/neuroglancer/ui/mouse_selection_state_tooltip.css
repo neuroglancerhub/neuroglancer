@@ -30,3 +30,6 @@
 .neuroglancer-mouse-selection-tooltip-description {
 }
 
+.neuroglancer-annotation-tooltip-property-label, .neuroglancer-annotation-tooltip-relationship-label {
+  margin-right: 5px;
+}

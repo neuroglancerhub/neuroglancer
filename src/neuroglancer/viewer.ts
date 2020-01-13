@@ -25,7 +25,7 @@ import {DisplayContext} from 'neuroglancer/display_context';
 import {InputEventBindingHelpDialog} from 'neuroglancer/help/input_event_bindings';
 import {addNewLayer, LayerManager, LayerSelectedValues, MouseSelectionState, SelectedLayerState, TopLevelLayerListSpecification} from 'neuroglancer/layer';
 import {RootLayoutContainer} from 'neuroglancer/layer_groups_layout';
-import {NavigationState, OrientationState, DisplayPose, Position, TrackableCrossSectionZoom, TrackableProjectionZoom, TrackableDisplayDimensions, TrackableRelativeDisplayScales} from 'neuroglancer/navigation_state';
+import {DisplayPose, NavigationState, OrientationState, Position, TrackableCrossSectionZoom, TrackableDepthRange, TrackableDisplayDimensions, TrackableProjectionZoom, TrackableRelativeDisplayScales, WatchableDisplayDimensionRenderInfo} from 'neuroglancer/navigation_state';
 import {overlaysOpen} from 'neuroglancer/overlay';
 import {allRenderLayerRoles, RenderLayerRole} from 'neuroglancer/renderlayer';
 import {StatusMessage} from 'neuroglancer/status';
@@ -141,7 +141,7 @@ interface ViewerUIOptions {
   showEditStateButton: boolean;
   showLayerPanel: boolean;
   showLocation: boolean;
-  showLayerHoverValues:boolean;
+  showLayerHoverValues: boolean;
   showPanelBorders: boolean;
   showAnnotationToolStatus: boolean;
 }
@@ -190,6 +190,7 @@ function makeViewerContextMenu(viewer: Viewer) {
   addCheckbox('Show cross sections in 3-d', viewer.showPerspectiveSliceViews);
   addCheckbox('Show default annotations', viewer.showDefaultAnnotations);
   addCheckbox('Show chunk statistics', viewer.statisticsDisplayState.visible);
+  addCheckbox('Wire frame rendering', viewer.wireFrame);
   return menu;
 }
 
@@ -202,10 +203,13 @@ class TrackableViewerState extends CompoundTrackable {
     this.add('position', viewer.position);
     this.add('crossSectionOrientation', viewer.crossSectionOrientation);
     this.add('crossSectionScale', viewer.crossSectionScale);
+    this.add('crossSectionDepth', viewer.crossSectionDepthRange);
     this.add('projectionOrientation', viewer.projectionOrientation);
     this.add('projectionScale', viewer.projectionScale);
+    this.add('projectionDepth', viewer.projectionDepthRange);
     this.add('layers', viewer.layerSpecification);
     this.add('showAxisLines', viewer.showAxisLines);
+    this.add('wireFrame', viewer.wireFrame);
     this.add('showScaleBar', viewer.showScaleBar);
     this.add('showDefaultAnnotations', viewer.showDefaultAnnotations);
 
@@ -264,27 +268,36 @@ class TrackableViewerState extends CompoundTrackable {
 export class Viewer extends RefCounted implements ViewerState {
   coordinateSpace = new TrackableCoordinateSpace();
   position = this.registerDisposer(new Position(this.coordinateSpace));
-  relativeDisplayScales = this.registerDisposer(new TrackableRelativeDisplayScales(this.coordinateSpace));
-  displayDimensions =
-      this.registerDisposer(new TrackableDisplayDimensions(this.relativeDisplayScales.addRef()));
+  relativeDisplayScales =
+      this.registerDisposer(new TrackableRelativeDisplayScales(this.coordinateSpace));
+  displayDimensions = this.registerDisposer(new TrackableDisplayDimensions(this.coordinateSpace));
+  displayDimensionRenderInfo = this.registerDisposer(new WatchableDisplayDimensionRenderInfo(
+      this.relativeDisplayScales.addRef(), this.displayDimensions.addRef()));
   crossSectionOrientation = this.registerDisposer(new OrientationState());
-  crossSectionScale = this.registerDisposer(new TrackableCrossSectionZoom(this.displayDimensions));
+  crossSectionScale = this.registerDisposer(
+      new TrackableCrossSectionZoom(this.displayDimensionRenderInfo.addRef()));
   projectionOrientation = this.registerDisposer(new OrientationState());
-  projectionScale = this.registerDisposer(new TrackableProjectionZoom(this.displayDimensions));
+  crossSectionDepthRange =
+      this.registerDisposer(new TrackableDepthRange(-10, this.displayDimensionRenderInfo));
+  projectionDepthRange =
+      this.registerDisposer(new TrackableDepthRange(-50, this.displayDimensionRenderInfo));
+  projectionScale =
+      this.registerDisposer(new TrackableProjectionZoom(this.displayDimensionRenderInfo.addRef()));
   navigationState = this.registerDisposer(new NavigationState(
       new DisplayPose(
-          this.position.addRef(), this.displayDimensions.addRef(),
+          this.position.addRef(), this.displayDimensionRenderInfo.addRef(),
           this.crossSectionOrientation.addRef()),
-      this.crossSectionScale.addRef()));
+      this.crossSectionScale.addRef(), this.crossSectionDepthRange.addRef()));
   perspectiveNavigationState = this.registerDisposer(new NavigationState(
       new DisplayPose(
-          this.position.addRef(), this.displayDimensions.addRef(),
+          this.position.addRef(), this.displayDimensionRenderInfo.addRef(),
           this.projectionOrientation.addRef()),
-      this.projectionScale.addRef()));
+      this.projectionScale.addRef(), this.projectionDepthRange.addRef()));
   mouseState = new MouseSelectionState();
   layerManager = this.registerDisposer(new LayerManager());
   selectedLayer = this.registerDisposer(new SelectedLayerState(this.layerManager.addRef()));
   showAxisLines = new TrackableBoolean(true, true);
+  wireFrame = new TrackableBoolean(false, false);
   showScaleBar = new TrackableBoolean(true, true);
   showPerspectiveSliceViews = new TrackableBoolean(true, true);
   visibleLayerRoles = allRenderLayerRoles();
@@ -645,8 +658,8 @@ export class Viewer extends RefCounted implements ViewerState {
     const {inputEventBindings} = this;
     new InputEventBindingHelpDialog([
       ['Global', inputEventBindings.global],
-      ['Slice View', inputEventBindings.sliceView],
-      ['Perspective View', inputEventBindings.perspectiveView],
+      ['Cross section view', inputEventBindings.sliceView],
+      ['3-D projection view', inputEventBindings.perspectiveView],
     ]);
   }
 

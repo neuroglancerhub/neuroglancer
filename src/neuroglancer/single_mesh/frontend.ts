@@ -17,6 +17,7 @@
 import {ChunkState} from 'neuroglancer/chunk_manager/base';
 import {Chunk, ChunkManager, ChunkSource, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {VisibleLayerInfo} from 'neuroglancer/layer';
+import {PerspectivePanel} from 'neuroglancer/perspective_view/panel';
 import {PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
 import {WatchableRenderLayerTransform} from 'neuroglancer/render_coordinate_transform';
 import {ThreeDimensionalRenderLayerAttachmentState, update3dRenderLayerAttachment} from 'neuroglancer/renderlayer';
@@ -34,7 +35,7 @@ import {CountingBuffer, countingBufferShaderModule, disableCountingBuffer, getCo
 import {ShaderBuilder, ShaderModule, ShaderProgram, ShaderSamplerType} from 'neuroglancer/webgl/shader';
 import {getShaderType} from 'neuroglancer/webgl/shader_lib';
 import {addControlsToBuilder, parseShaderUiControls, setControlsInShader, ShaderControlsParseResult, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
-import {compute1dTextureLayout, computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
+import {computeTextureFormat, getSamplerPrefixForDataType, OneDimensionalTextureAccessHelper, setOneDimensionalTextureData, TextureFormat} from 'neuroglancer/webgl/texture_access';
 import {SharedObject} from 'neuroglancer/worker_rpc';
 
 const DEFAULT_FRAGMENT_MAIN = `void main() {
@@ -170,9 +171,10 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
 `);
   }
 
-  beginLayer(
-      gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext) {
-    let {viewProjectionMat, lightDirection, ambientLighting, directionalLighting} = renderContext;
+  beginLayer(gl: GL, shader: ShaderProgram, renderContext: PerspectiveViewRenderContext) {
+    const {lightDirection, ambientLighting, directionalLighting, projectionParameters} =
+        renderContext;
+    const {viewProjectionMat} = projectionParameters;
     gl.uniformMatrix4fv(shader.uniform('uProjection'), false, viewProjectionMat);
     let lightVec = <vec3>this.tempLightVec;
     vec3.scale(lightVec, lightDirection, directionalLighting);
@@ -189,7 +191,6 @@ vLightingFactor = abs(dot(normal, uLightDirection.xyz)) + uLightDirection.w;
   }
 
   bindVertexData(gl: GL, shader: ShaderProgram, data: VertexChunkData) {
-    this.textureAccessHelper.setupTextureLayout(gl, shader, data);
     let index = 0;
     const bindTexture = (texture: WebGLTexture|null) => {
       const textureUnit = WebGL2RenderingContext.TEXTURE0 +
@@ -248,18 +249,11 @@ export class VertexChunkData {
   vertexAttributes: Float32Array[];
   vertexAttributeTextures: (WebGLTexture|null)[];
 
-  // Emulation of buffer as texture.
-  textureXBits: number;
-  textureWidth: number;
-  textureHeight: number;
-
   copyToGPU(gl: GL, attributeFormats: TextureFormat[]) {
-    let numVertices = this.vertexPositions.length / 3;
-    compute1dTextureLayout(this, gl, /*texelsPerElement=*/ 1, numVertices);
     const getBufferTexture = (data: Float32Array, format: TextureFormat) => {
       let texture = gl.createTexture();
       gl.bindTexture(WebGL2RenderingContext.TEXTURE_2D, texture);
-      setOneDimensionalTextureData(gl, this, format, data);
+      setOneDimensionalTextureData(gl, format, data);
       return texture;
     };
     this.vertexTexture = getBufferTexture(this.vertexPositions, vertexPositionTextureFormat);
@@ -400,13 +394,14 @@ export class SingleMeshLayer extends
 
   draw(
       renderContext: PerspectiveViewRenderContext,
-      attachment: VisibleLayerInfo<ThreeDimensionalRenderLayerAttachmentState>) {
+      attachment: VisibleLayerInfo<PerspectivePanel, ThreeDimensionalRenderLayerAttachmentState>) {
     if (!renderContext.emitColor && renderContext.alreadyEmittedPickID) {
       // No need for a separate pick ID pass.
       return;
     }
     const modelMatrix = update3dRenderLayerAttachment(
-        this.transform.value, renderContext.displayDimensions, attachment);
+        this.transform.value, renderContext.projectionParameters.displayDimensionRenderInfo,
+        attachment);
     if (modelMatrix === undefined) return;
     let chunk = <SingleMeshChunk|undefined>this.source.chunks.get(SINGLE_MESH_CHUNK_KEY);
     if (chunk === undefined || chunk.state !== ChunkState.GPU_MEMORY) {

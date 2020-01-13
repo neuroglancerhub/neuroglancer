@@ -29,14 +29,14 @@
  * understand.
  */
 
+import {DisplayDimensionRenderInfo, RelativeDisplayScales} from 'neuroglancer/navigation_state';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {verifyFloat, verifyObjectProperty, verifyString} from 'neuroglancer/util/json';
 import {pickSiPrefix} from 'neuroglancer/util/si_units';
 import {GL} from 'neuroglancer/webgl/context';
+import {OffscreenCopyHelper} from 'neuroglancer/webgl/offscreen';
 import {setTextureFromCanvas} from 'neuroglancer/webgl/texture';
-import {DisplayDimensions} from '../navigation_state';
-import {OffscreenCopyHelper} from '../webgl/offscreen';
 
 /**
  * Default set of allowed significand values.  1 is implicitly part of the set.
@@ -144,6 +144,7 @@ export class ScaleBarDimensions {
     }
     this.prevPhysicalSizePerPixel = physicalSizePerPixel;
     this.prevTargetLengthInPixels = targetLengthInPixels;
+    this.prevPhysicalUnit = this.physicalUnit;
     const targetPhysicalSize = targetLengthInPixels * physicalSizePerPixel;
     const exponent = Math.floor(Math.log10(targetPhysicalSize));
     const tenToThePowerExponent = 10 ** exponent;
@@ -251,24 +252,29 @@ export class MultipleScaleBarTextures extends RefCounted {
   }
 
   draw(
-      viewportWidth: number, displayDimensions: DisplayDimensions, effectiveZoom: number,
+      viewportWidth: number, displayDimensionRenderInfo: DisplayDimensionRenderInfo,
+      relativeDisplayScales: RelativeDisplayScales, effectiveZoom: number,
       options: ScaleBarOptions) {
     const {scaleBars} = this;
     const {
-      rank,
-      dimensionIndices,
-      relativeDisplayScales: {factors, coordinateSpace: {names, scales, units}},
-      canonicalVoxelFactors
-    } = displayDimensions;
+      displayRank,
+      displayDimensionIndices,
+      canonicalVoxelFactors,
+      globalDimensionNames,
+      displayDimensionUnits,
+      displayDimensionScales,
+    } = displayDimensionRenderInfo;
+
+    const {factors} = relativeDisplayScales;
 
     const targetLengthInPixels = Math.min(
         options.maxWidthFraction * viewportWidth, options.maxWidthInPixels * options.scaleFactor);
 
     let numScaleBars = 0;
 
-    for (let i = 0; i < rank; ++i) {
-      const dim = dimensionIndices[i];
-      const unit = units[dim];
+    for (let i = 0; i < displayRank; ++i) {
+      const dim = displayDimensionIndices[i];
+      const unit = displayDimensionUnits[i];
       const factor = factors[dim];
       let barIndex;
       let scaleBar: ScaleBarTexture;
@@ -289,9 +295,9 @@ export class MultipleScaleBarTextures extends RefCounted {
         scaleBarDimensions.physicalBaseUnit = unit;
         scaleBarDimensions.targetLengthInPixels = targetLengthInPixels;
         scaleBarDimensions.physicalSizePerPixel =
-            scales[dim] * effectiveZoom / canonicalVoxelFactors[i];
+            displayDimensionScales[i] * effectiveZoom / canonicalVoxelFactors[i];
       }
-      scaleBar!.label += `${names[dim]} `;
+      scaleBar!.label += `${globalDimensionNames[dim]} `;
     }
 
     const {gl, scaleBarCopyHelper} = this;

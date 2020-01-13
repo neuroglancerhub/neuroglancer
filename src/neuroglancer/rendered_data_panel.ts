@@ -23,9 +23,10 @@ import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handl
 import {DisplayContext, RenderedPanel} from 'neuroglancer/display_context';
 import {NavigationState} from 'neuroglancer/navigation_state';
 import {PickIDManager} from 'neuroglancer/object_picking';
-import {layerToDisplayCoordinates, displayToLayerCoordinates} from 'neuroglancer/render_coordinate_transform';
+import {displayToLayerCoordinates, layerToDisplayCoordinates} from 'neuroglancer/render_coordinate_transform';
 import {UserLayerWithAnnotations} from 'neuroglancer/ui/annotations';
 import {AutomaticallyFocusedElement} from 'neuroglancer/util/automatic_focus';
+import {Borrowed} from 'neuroglancer/util/disposable';
 import {ActionEvent, EventActionMap, registerActionListener} from 'neuroglancer/util/event_action_map';
 import {AXES_NAMES, kAxes, mat4, vec2, vec3} from 'neuroglancer/util/geom';
 import {KeyboardEventBinder} from 'neuroglancer/util/keyboard_bindings';
@@ -60,7 +61,7 @@ export class PickRequest {
 
 const pickRequestInterval = 30;
 
-export const pickRadius = 12;
+export const pickRadius = 5;
 export const pickDiameter = 1 + pickRadius * 2;
 
 /**
@@ -401,7 +402,8 @@ export abstract class RenderedDataPanel extends RenderedPanel {
   }
 
   constructor(
-      context: DisplayContext, element: HTMLElement, public viewer: RenderedDataViewerState) {
+      context: Borrowed<DisplayContext>, element: HTMLElement,
+      public viewer: RenderedDataViewerState) {
     super(context, element, viewer.visibility);
     this.inputEventMap = viewer.inputEventMap;
 
@@ -416,7 +418,12 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     this.registerEventListener(element, 'mousemove', this.onMousemove.bind(this));
     this.registerEventListener(element, 'touchstart', this.onTouchstart.bind(this));
-    this.registerEventListener(element, 'mouseleave', this.onMouseout.bind(this));
+    this.registerEventListener(element, 'mouseleave', () => this.onMouseout());
+    this.registerEventListener(element, 'mouseover', event => {
+      if (event.target !== element) {
+        this.onMouseout();
+      }
+    }, /*capture=*/ true);
 
     registerActionListener(element, 'snap', () => {
       this.navigationState.pose.snap();
@@ -428,6 +435,14 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     registerActionListener(element, 'zoom-out', () => {
       this.navigationState.zoomBy(2.0);
+    });
+
+    registerActionListener(element, 'depth-range-decrease', () => {
+      this.navigationState.depthRange.value *= 0.5;
+    });
+
+    registerActionListener(element, 'depth-range-increase', () => {
+      this.navigationState.depthRange.value *= 2;
     });
 
     registerActionListener(element, 'highlight', () => {
@@ -456,9 +471,15 @@ export abstract class RenderedDataPanel extends RenderedPanel {
 
     registerActionListener(element, 'zoom-via-wheel', (event: ActionEvent<WheelEvent>) => {
       const e = event.detail;
-      this.onMousemove(e);
+      this.onMousemove(e, false);
       this.zoomByMouse(getWheelZoomAmount(e));
     });
+
+    registerActionListener(
+        element, 'adjust-depth-range-via-wheel', (event: ActionEvent<WheelEvent>) => {
+          const e = event.detail;
+          this.navigationState.depthRange.value *= getWheelZoomAmount(e);
+        });
 
     registerActionListener(element, 'translate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
@@ -553,14 +574,14 @@ export abstract class RenderedDataPanel extends RenderedPanel {
                       layerPoint, chunkTransform.chunkToLayerTransform, layerRank + 1, repPoint,
                       layerRank);
                   const renderPt = tempVec3;
-                  const {dimensionIndices: renderDimensionIndices} =
-                    this.navigationState.pose.displayDimensions.value;
+                  const {displayDimensionIndices} =
+                      this.navigationState.pose.displayDimensions.value;
                   layerToDisplayCoordinates(
-                      renderPt, layerPoint, chunkTransform.modelTransform, renderDimensionIndices);
+                      renderPt, layerPoint, chunkTransform.modelTransform, displayDimensionIndices);
                   this.translateDataPointByViewportPixels(
                       renderPt, renderPt, totDeltaVec[0], totDeltaVec[1]);
                   displayToLayerCoordinates(
-                      layerPoint, renderPt, chunkTransform.modelTransform, renderDimensionIndices);
+                      layerPoint, renderPt, chunkTransform.modelTransform, displayDimensionIndices);
                   const newPoint = new Float32Array(layerRank);
                   matrix.transformPoint(
                       newPoint, chunkTransform.layerToChunkTransform, layerRank + 1, layerPoint,
@@ -602,7 +623,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     });
   }
 
-  onMouseout(_event: MouseEvent) {
+  onMouseout() {
     this.updateMousePosition(-1, -1);
     this.viewer.mouseState.setForcer(undefined);
   }
@@ -621,9 +642,9 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     this.updateMousePosition(mouseX, mouseY);
   }
 
-  onMousemove(event: MouseEvent) {
-    let {element} = this;
-    if (event.target !== element) {
+  onMousemove(event: MouseEvent, atOnly = true) {
+    const {element} = this;
+    if (atOnly && event.target !== element) {
       return;
     }
     this.handleMouseMove(event.clientX, event.clientY);

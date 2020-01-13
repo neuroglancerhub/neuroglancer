@@ -14,17 +14,19 @@
  * limitations under the License.
  */
 
+import 'neuroglancer/render_layer_backend';
+
 import {Chunk, ChunkConstructor, ChunkSource, withChunkManager} from 'neuroglancer/chunk_manager/backend';
 import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
-import {SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SLICEVIEW_UPDATE_VIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
+import {filterVisibleSources, forEachPlaneIntersectingVolumetricChunk, SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, SLICEVIEW_RENDERLAYER_RPC_ID, SLICEVIEW_RPC_ID, SliceViewBase, SliceViewChunkSource as SliceViewChunkSourceInterface, SliceViewChunkSpecification, SliceViewRenderLayer as SliceViewRenderLayerInterface, TransformedSource} from 'neuroglancer/sliceview/base';
 import {ChunkLayout} from 'neuroglancer/sliceview/chunk_layout';
 import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {vec3, vec3Key} from 'neuroglancer/util/geom';
 import {getBasePriority, getPriorityTier, withSharedVisibility} from 'neuroglancer/visibility_priority/backend';
 import {registerRPC, registerSharedObject, RPC, SharedObjectCounterpart} from 'neuroglancer/worker_rpc';
 
-const BASE_PRIORITY = -1e12;
-const SCALE_PRIORITY_MULTIPLIER = 1e9;
+export const BASE_PRIORITY = -1e12;
+export const SCALE_PRIORITY_MULTIPLIER = 1e9;
 
 // Temporary values used by SliceView.updateVisibleChunk
 const tempChunkPosition = vec3.create();
@@ -34,7 +36,7 @@ const tempChunkSize = vec3.create();
 class SliceViewCounterpartBase extends
     SliceViewBase<SliceViewChunkSourceBackend, SliceViewRenderLayerBackend> {
   constructor(rpc: RPC, options: any) {
-    super();
+    super(rpc.get(options.projectionParameters));
     this.initializeSharedObject(rpc, options['id']);
   }
 }
@@ -58,21 +60,24 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
     }));
   }
 
+  invalidateVisibleChunks() {
+    super.invalidateVisibleChunks();
+    this.chunkManager.scheduleUpdateChunkPriorities();
+  }
+
   handleLayerChanged = (() => {
-    if (this.valid) {
-      this.chunkManager.scheduleUpdateChunkPriorities();
-    }
+    this.chunkManager.scheduleUpdateChunkPriorities();
   });
 
   updateVisibleChunks() {
-    if (!this.valid) return;
-    const globalCenter = this.centerDataPosition;
+    const projectionParameters = this.projectionParameters.value;
     let chunkManager = this.chunkManager;
     const visibility = this.visibility.value;
     if (visibility === Number.NEGATIVE_INFINITY) {
       return;
     }
-
+    this.updateVisibleSources();
+    const {centerDataPosition} = projectionParameters;
     const priorityTier = getPriorityTier(visibility);
     let basePriority = getBasePriority(visibility);
     basePriority += BASE_PRIORITY;
@@ -81,37 +86,30 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
 
     const chunkSize = tempChunkSize;
 
-    let getLayoutObject = (chunkLayout: ChunkLayout) => {
-      chunkLayout.globalToLocalSpatial(localCenter, globalCenter);
-      const {size, finiteRank} = chunkLayout;
-      vec3.copy(chunkSize, size);
-      for (let i = finiteRank; i < 3; ++i) {
-        chunkSize[i] = 0;
-        localCenter[i] = 0;
-      }
-      return this.visibleChunkLayouts.get(chunkLayout);
-    };
-
-    function addChunk(
-        chunkLayout: ChunkLayout,
-        sources:
-            Map<TransformedSource<SliceViewRenderLayerBackend, SliceViewChunkSourceBackend>,
-                number>,
-        positionInChunks: vec3,
-        visibleSources:
-            TransformedSource<SliceViewRenderLayerBackend, SliceViewChunkSourceBackend>[]) {
-      chunkLayout;
-      vec3.multiply(tempChunkPosition, positionInChunks, chunkSize);
-      let priority = -vec3.distance(localCenter, tempChunkPosition);
-      for (const tsource of visibleSources) {
-        let priorityIndex = sources.get(tsource)!;
-        let chunk = tsource.source.getChunk(tsource.curPositionInChunks);
-        chunkManager.requestChunk(
-            chunk, priorityTier,
-            basePriority + priority + SCALE_PRIORITY_MULTIPLIER * priorityIndex);
+    for (const visibleLayerSources of this.visibleLayers.values()) {
+      const {visibleSources} = visibleLayerSources;
+      for (let i = 0, numVisibleSources = visibleSources.length; i < numVisibleSources; ++i) {
+        const tsource = visibleSources[i];
+        const {chunkLayout} = tsource;
+        chunkLayout.globalToLocalSpatial(localCenter, centerDataPosition);
+        const {size, finiteRank} = chunkLayout;
+        vec3.copy(chunkSize, size);
+        for (let i = finiteRank; i < 3; ++i) {
+          chunkSize[i] = 0;
+          localCenter[i] = 0;
+        }
+        const priorityIndex = i;
+        const sourceBasePriority = basePriority + SCALE_PRIORITY_MULTIPLIER * priorityIndex;
+        forEachPlaneIntersectingVolumetricChunk(
+            projectionParameters, tsource.renderLayer.localPosition.value, tsource,
+            positionInChunks => {
+              vec3.multiply(tempChunkPosition, positionInChunks, chunkSize);
+              let priority = -vec3.distance(localCenter, tempChunkPosition);
+              let chunk = tsource.source.getChunk(tsource.curPositionInChunks);
+              chunkManager.requestChunk(chunk, priorityTier, sourceBasePriority + priority);
+            });
       }
     }
-    this.computeVisibleChunks(/*initialize=*/ () => {}, getLayoutObject, addChunk);
   }
 
   removeVisibleLayer(layer: SliceViewRenderLayerBackend) {
@@ -127,17 +125,22 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
   addVisibleLayer(
       layer: SliceViewRenderLayerBackend,
       allSources: TransformedSource<SliceViewRenderLayerBackend, SliceViewChunkSourceBackend>[][]) {
+    const {displayDimensionRenderInfo} = this.projectionParameters.value;
     let layerInfo = this.visibleLayers.get(layer);
     if (layerInfo === undefined) {
-      layerInfo = {allSources, visibleSources: [], globalTransform: this.globalTransform!};
+      layerInfo = {
+        allSources,
+        visibleSources: [],
+        displayDimensionRenderInfo: displayDimensionRenderInfo,
+      };
       this.visibleLayers.set(layer, layerInfo);
-      layer.renderScaleTarget.changed.add(this.invalidateVisibleSources);
+      layer.renderScaleTarget.changed.add(() => this.invalidateVisibleSources());
       layer.localPosition.changed.add(this.handleLayerChanged);
     } else {
       disposeTransformedSources(layerInfo.allSources);
       layerInfo.allSources = allSources;
       layerInfo.visibleSources.length = 0;
-      layerInfo.globalTransform = this.globalTransform!;
+      layerInfo.displayDimensionRenderInfo = displayDimensionRenderInfo;
     }
     this.invalidateVisibleSources();
   }
@@ -149,56 +152,45 @@ export class SliceViewBackend extends SliceViewIntermediateBase {
     super.disposed();
   }
 
-  private invalidateVisibleSources = (() => {
-    this.visibleSourcesStale = true;
-    if (this.valid) {
-      this.chunkManager.scheduleUpdateChunkPriorities();
-    }
-  });
+  invalidateVisibleSources() {
+    super.invalidateVisibleSources();
+    this.chunkManager.scheduleUpdateChunkPriorities();
+  }
 }
 
-registerRPC(SLICEVIEW_UPDATE_VIEW_RPC_ID, function(x) {
-  let obj = this.get(x.id) as SliceViewBackend;
-  if (Object.prototype.hasOwnProperty.call(x, 'globalTransform')) {
-    obj.globalTransform = x.globalTransform;
-  }
-  if (Object.prototype.hasOwnProperty.call(x, 'width')) {
-    obj.setViewportSize(x.width, x.height);
-  }
-  if (Object.prototype.hasOwnProperty.call(x, 'viewportToData')) {
-    obj.setViewportToDataMatrix(x.viewportToData, x.globalPosition);
-  }
-  obj.chunkManager.scheduleUpdateChunkPriorities();
-});
+export function deserializeTransformedSources<
+    Source extends SliceViewChunkSourceBackend, RLayer extends SliceViewRenderLayerBackend>(
+    rpc: RPC, serializedSources: any[][], layer: any) {
+  const sources = serializedSources.map(
+      scales => scales.map((serializedSource): TransformedSource<RLayer, Source> => {
+        const source = rpc.getRef<Source>(serializedSource.source);
+        const chunkLayout = serializedSource.chunkLayout;
+        const {rank} = source.spec;
+        const tsource: TransformedSource<RLayer, Source> = {
+          renderLayer: layer,
+          source,
+          chunkLayout: ChunkLayout.fromObject(chunkLayout),
+          layerRank: serializedSource.layerRank,
+          nonDisplayLowerClipBound: serializedSource.nonDisplayLowerClipBound,
+          nonDisplayUpperClipBound: serializedSource.nonDisplayUpperClipBound,
+          lowerClipDisplayBound: serializedSource.lowerClipDisplayBound,
+          upperClipDisplayBound: serializedSource.upperClipDisplayBound,
+          lowerChunkDisplayBound: serializedSource.lowerChunkDisplayBound,
+          upperChunkDisplayBound: serializedSource.upperChunkDisplayBound,
+          effectiveVoxelSize: serializedSource.effectiveVoxelSize,
+          chunkDisplayDimensionIndices: serializedSource.chunkDisplayDimensionIndices,
+          fixedLayerToChunkTransform: serializedSource.fixedLayerToChunkTransform,
+          curPositionInChunks: new Float32Array(rank),
+          fixedPositionWithinChunk: new Uint32Array(rank),
+        };
+        return tsource;
+      }));
+  return sources;
+}
 registerRPC(SLICEVIEW_ADD_VISIBLE_LAYER_RPC_ID, function(x) {
   const obj = <SliceViewBackend>this.get(x['id']);
   const layer = <SliceViewRenderLayerBackend>this.get(x['layerId']);
-  const serializedSources = x.sources as any[][];
-  const sources = serializedSources.map(
-      scales => scales.map(
-          (serializedSource):
-              TransformedSource<SliceViewRenderLayerBackend, SliceViewChunkSourceBackend> => {
-                const source = this.getRef<SliceViewChunkSourceBackend>(serializedSource.source);
-                const chunkLayout = serializedSource.chunkLayout;
-                const {rank} = source.spec;
-                const tsource:
-                    TransformedSource<SliceViewRenderLayerBackend, SliceViewChunkSourceBackend> = {
-                      renderLayer: layer,
-                      source,
-                      chunkLayout: ChunkLayout.fromObject(chunkLayout),
-                      layerRank: serializedSource.layerRank,
-                      nonDisplayLowerClipBound: serializedSource.nonDisplayLowerClipBound,
-                      nonDisplayUpperClipBound: serializedSource.nonDisplayUpperClipBound,
-                      lowerChunkDisplayBound: serializedSource.lowerChunkDisplayBound,
-                      upperChunkDisplayBound: serializedSource.upperChunkDisplayBound,
-                      effectiveVoxelSize: serializedSource.effectiveVoxelSize,
-                      chunkDisplayDimensionIndices: serializedSource.chunkDisplayDimensionIndices,
-                      fixedLayerToChunkTransform: serializedSource.fixedLayerToChunkTransform,
-                      curPositionInChunks: new Float32Array(rank),
-                      fixedPositionWithinChunk: new Uint32Array(rank),
-                    };
-                return tsource;
-              }));
+  const sources = deserializeTransformedSources(this, x.sources, layer);
   obj.addVisibleLayer(layer, sources);
 });
 registerRPC(SLICEVIEW_REMOVE_VISIBLE_LAYER_RPC_ID, function(x) {
@@ -279,6 +271,11 @@ export class SliceViewRenderLayerBackend extends SharedObjectCounterpart impleme
   constructor(rpc: RPC, options: any) {
     super(rpc, options);
     this.renderScaleTarget = rpc.get(options.renderScaleTarget);
-    this.localPosition = rpc.get(options.nonGlobalPosition);
+    this.localPosition = rpc.get(options.localPosition);
+  }
+
+  filterVisibleSources(sliceView: SliceViewBase, sources: readonly TransformedSource[]):
+      Iterable<TransformedSource> {
+    return filterVisibleSources(sliceView, this, sources);
   }
 }

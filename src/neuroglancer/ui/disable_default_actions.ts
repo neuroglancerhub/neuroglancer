@@ -31,5 +31,5 @@ export function disableWheel(target: HTMLElement | Document = document) {
     if (e.ctrlKey) {
       e.preventDefault();
     }
-  });
+  }, {passive: false});
 }

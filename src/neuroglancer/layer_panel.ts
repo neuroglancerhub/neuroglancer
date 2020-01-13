@@ -22,16 +22,16 @@ import {DisplayContext} from 'neuroglancer/display_context';
 import {addNewLayer, LayerListSpecification, ManagedUserLayer, SelectedLayerState,} from 'neuroglancer/layer';
 import {LinkedViewerNavigationState} from 'neuroglancer/layer_group_viewer';
 import {NavigationLinkType} from 'neuroglancer/navigation_state';
+import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {DropLayers, endLayerDrag, getDropLayers, getLayerDropEffect, startLayerDrag} from 'neuroglancer/ui/layer_drag_and_drop';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
-import {RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
+import {Owned, RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
 import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {makeCloseButton, makeRefreshButton} from 'neuroglancer/widget/close_button';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';
-import {WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {DataSource, GetDataSourceOptionsBase} from 'neuroglancer/datasource';
 
 function destroyDropLayers(dropLayers: DropLayers, targetLayer?: ManagedUserLayer) {
@@ -162,6 +162,8 @@ class LayerWidget extends RefCounted {
   layerNumberElement: HTMLSpanElement;
   labelElement: HTMLSpanElement;
   valueElement: HTMLSpanElement;
+  maxLength: number = 0;
+  prevValueText: string = '';
 
   private allowingRefresh(layer: ManagedUserLayer): boolean {
     return (layer.initialSpecification.type === 'annotation');
@@ -291,9 +293,9 @@ export class LayerPanel extends RefCounted {
   constructor(
       public display: DisplayContext, public manager: LayerListSpecification,
       public viewerNavigationState: LinkedViewerNavigationState,
-      public selectedLayer: SelectedLayerState, public getLayoutSpecForDrag: () => any,
+      public selectedLayer: Owned<SelectedLayerState>, public getLayoutSpecForDrag: () => any,
       public showLayerHoverValues: WatchableValueInterface<boolean>) {
-    super(); 
+    super();
     this.registerDisposer(selectedLayer);
     const {element} = this;
     element.className = 'neuroglancer-layer-panel';
@@ -309,7 +311,7 @@ export class LayerPanel extends RefCounted {
     this.registerDisposer(showLayerHoverValues.changed.add(() => {
       this.handleLayerItemValueChanged();
     }));
-    this.element.dataset.showHoverValues = this.showLayerHoverValues.value.toString()
+    this.element.dataset.showHoverValues = this.showLayerHoverValues.value.toString();
     this.layerWidgetInsertionPoint.style.display = 'none';
     this.element.appendChild(this.layerWidgetInsertionPoint);
 
@@ -389,7 +391,7 @@ export class LayerPanel extends RefCounted {
     }
   }
 
-  handleLayerItemValueChanged(){
+  handleLayerItemValueChanged() {
     this.element.dataset.showHoverValues = this.showLayerHoverValues.value.toString()
   }
 
@@ -398,8 +400,9 @@ export class LayerPanel extends RefCounted {
   private update() {
     this.valueUpdateNeeded = false;
     this.updateLayers();
-    if (this.showLayerHoverValues.value === false){
-      return}
+    if (this.showLayerHoverValues.value === false) {
+      return
+    }
     let values = this.manager.layerSelectedValues;
     for (let [layer, widget] of this.layerWidgets) {
       let userLayer = layer.layer;
@@ -407,19 +410,14 @@ export class LayerPanel extends RefCounted {
       if (userLayer !== null) {
         let value = values.get(userLayer);
         if (value !== undefined) {
-          value = Array().concat(value);
-          value = value.map((x: any) => {
-            if (x === null) {
-              return 'null';
-            } else if (Math.fround(x) === x) {
-              // FIXME: Verify actual layer data type
-              return float32ToString(x);
-            } else {
-              return x;
-            }
-          });
-          text += value.join(', ');
+          text = value.toString();
         }
+      }
+      if (text === widget.prevValueText) continue;
+      widget.prevValueText = text;
+      if (text.length > widget.maxLength) {
+        const length = widget.maxLength = text.length;
+        widget.valueElement.style.width = `${length}ch`;
       }
       widget.valueElement.textContent = text;
     }
@@ -460,4 +458,3 @@ export class LayerPanel extends RefCounted {
     addNewLayer(this.manager, this.selectedLayer);
   }
 }
-

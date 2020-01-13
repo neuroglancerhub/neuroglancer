@@ -17,15 +17,14 @@
 import 'neuroglancer/noselect.css';
 import './panel.css';
 
-import throttle from 'lodash/throttle';
 import {AxesLineHelper} from 'neuroglancer/axes_lines';
 import {DisplayContext} from 'neuroglancer/display_context';
 import {makeRenderedPanelVisibleLayerTracker, VisibleRenderLayerTracker} from 'neuroglancer/layer';
-import {DisplayDimensions} from 'neuroglancer/navigation_state';
-import {PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID, PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID, PERSPECTIVE_VIEW_RPC_ID, PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID} from 'neuroglancer/perspective_view/base';
+import {PERSPECTIVE_VIEW_RPC_ID} from 'neuroglancer/perspective_view/base';
 import {PerspectiveViewReadyRenderContext, PerspectiveViewRenderContext, PerspectiveViewRenderLayer} from 'neuroglancer/perspective_view/render_layer';
+import {ProjectionParameters, updateProjectionParametersFromInverseViewAndProjection} from 'neuroglancer/projection_parameters';
 import {clearOutOfBoundsPickData, FramePickingData, pickDiameter, pickOffsetSequence, pickRadius, RenderedDataPanel, RenderedDataViewerState} from 'neuroglancer/rendered_data_panel';
-import {SharedWatchableValue} from 'neuroglancer/shared_watchable_value';
+import {DerivedProjectionParameters, SharedProjectionParameters} from 'neuroglancer/renderlayer';
 import {SliceView, SliceViewRenderHelper} from 'neuroglancer/sliceview/frontend';
 import {TrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
 import {TrackableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
@@ -43,6 +42,7 @@ import {MultipleScaleBarTextures, ScaleBarOptions} from 'neuroglancer/widget/sca
 import {RPC, SharedObject} from 'neuroglancer/worker_rpc';
 
 export interface PerspectiveViewerState extends RenderedDataViewerState {
+  wireFrame: WatchableValueInterface<boolean>;
   orthographicProjection: TrackableBoolean;
   showSliceViews: TrackableBoolean;
   showScaleBar: TrackableBoolean;
@@ -63,8 +63,10 @@ export enum OffscreenTextures {
 export const glsl_perspectivePanelEmit = `
 void emit(vec4 color, highp uint pickId) {
   out_color = color;
-  out_z = 1.0 - gl_FragCoord.z;
-  out_pickId = float(pickId);
+  float zValue = 1.0 - gl_FragCoord.z;
+  out_z = vec4(zValue, zValue, zValue, 1.0);
+  float pickIdFloat = float(pickId);
+  out_pickId = vec4(pickIdFloat, pickIdFloat, pickIdFloat, 1.0);
 }
 `;
 
@@ -94,8 +96,8 @@ void emit(vec4 color, highp uint pickId) {
 
 export function perspectivePanelEmit(builder: ShaderBuilder) {
   builder.addOutputBuffer('vec4', `out_color`, OffscreenTextures.COLOR);
-  builder.addOutputBuffer('highp float', `out_z`, OffscreenTextures.Z);
-  builder.addOutputBuffer('highp float', `out_pickId`, OffscreenTextures.PICK);
+  builder.addOutputBuffer('highp vec4', `out_z`, OffscreenTextures.Z);
+  builder.addOutputBuffer('highp vec4', `out_pickId`, OffscreenTextures.PICK);
   builder.addFragmentCode(glsl_perspectivePanelEmit);
 }
 
@@ -123,14 +125,15 @@ v4f_fragColor = vec4(accum.rgb / accum.a, revealage);
 
 const PerspectiveViewStateBase = withSharedVisibility(SharedObject);
 class PerspectiveViewState extends PerspectiveViewStateBase {
-  constructor(public displayDimensions: WatchableValueInterface<DisplayDimensions>) {
+  sharedProjectionParameters: SharedProjectionParameters;
+  constructor(public panel: PerspectivePanel) {
     super();
   }
 
   initializeCounterpart(rpc: RPC, options: any) {
-    options.displayDimensions =
-        this.registerDisposer(SharedWatchableValue.makeFromExisting(rpc, this.displayDimensions))
-            .rpcId;
+    this.sharedProjectionParameters =
+        this.registerDisposer(new SharedProjectionParameters(rpc, this.panel.projectionParameters));
+    options.projectionParameters = this.sharedProjectionParameters.rpcId;
     super.initializeCounterpart(rpc, options);
   }
 }
@@ -138,63 +141,30 @@ class PerspectiveViewState extends PerspectiveViewStateBase {
 export class PerspectivePanel extends RenderedDataPanel {
   viewer: PerspectiveViewerState;
 
-  protected visibleLayerTracker: Owned<VisibleRenderLayerTracker<PerspectiveViewRenderLayer>>;
+  projectionParameters: Owned<DerivedProjectionParameters>;
+
+  protected visibleLayerTracker:
+      Owned<VisibleRenderLayerTracker<PerspectivePanel, PerspectiveViewRenderLayer>>;
+
+  get rpc() {
+    return this.sharedObject.rpc!;
+  }
+  get rpcId() {
+    return this.sharedObject.rpcId!;
+  }
+  get displayDimensionRenderInfo() {
+    return this.navigationState.displayDimensionRenderInfo;
+  }
 
   /**
    * If boolean value is true, sliceView is shown unconditionally, regardless of the value of
    * this.viewer.showSliceViews.value.
    */
-  sliceViews = (() => {
-    const sliceViewDisposers = new Map<SliceView, () => void>();
-    return this.registerDisposer(new WatchableMap<SliceView, boolean>(
-        (_unconditional, sliceView) => {
-          const disposer = sliceView.visibility.add(this.visibility);
-          sliceViewDisposers.set(sliceView, disposer);
-          this.scheduleRedraw();
-        },
-        (_unconditional, sliceView) => {
-          const disposer = sliceViewDisposers.get(sliceView)!;
-          sliceViewDisposers.delete(sliceView);
-          disposer();
-          sliceView.dispose();
-          this.scheduleRedraw();
-        }));
-  })();
-
-  /**
-   * Transform from camera space to OpenGL clip space.
-   */
-  projectionMat = mat4.create();
-
-  /**
-   * Transform from world space to camera space.
-   */
-  viewMat = mat4.create();
-
-  /**
-   * Inverse of `viewMat`.
-   */
-  viewMatInverse = mat4.create();
-
-  /**
-   * Transform from world space to OpenGL clip space.  Equal to `projectionMat * viewMat`.
-   */
-  viewProjectionMat = mat4.create();
-
-  /**
-   * Inverse of `viewProjectionMat`.
-   */
-  viewProjectionMatInverse = mat4.create();
-
-  /**
-   * Width of panel viewport in pixels.
-   */
-  width = 0;
-
-  /**
-   * Height of panel viewport in pixels.
-   */
-  height = 0;
+  sliceViews = this.registerDisposer(
+      new WatchableMap<SliceView, boolean>((context, _unconditional, sliceView) => {
+        context.registerDisposer(sliceView);
+        context.registerDisposer(sliceView.visibility.add(this.visibility));
+      }));
 
   private axesLineHelper = this.registerDisposer(AxesLineHelper.get(this.gl));
   sliceViewRenderHelper =
@@ -225,33 +195,50 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   private scaleBars = this.registerDisposer(new MultipleScaleBarTextures(this.gl));
 
+  flushBackendProjectionParameters() {
+    this.sharedObject.sharedProjectionParameters.flush();
+  }
+
   constructor(context: DisplayContext, element: HTMLElement, viewer: PerspectiveViewerState) {
     super(context, element, viewer);
-    this.registerDisposer(this.navigationState.changed.add(() => {
-      this.throttledSendViewportUpdate();
-      this.context.scheduleRedraw();
+    this.projectionParameters = this.registerDisposer(new DerivedProjectionParameters({
+      navigationState: this.navigationState,
+      update: (out: ProjectionParameters, navigationState) => {
+        const {invViewMatrix, projectionMat, width, height} = out;
+        const widthOverHeight = width / height;
+        const fovy = Math.PI / 4.0;
+        let {relativeDepthRange} = navigationState;
+        const baseZoomFactor = navigationState.zoomFactor.value;
+        let zoomFactor = baseZoomFactor / 2;
+        if (this.viewer.orthographicProjection.value) {
+          // Pick orthographic projection to match perspective projection at plane parallel to image
+          // plane containing the center position.
+          const nearBound = Math.max(0.1, 1 - relativeDepthRange);
+          const farBound = 1 + relativeDepthRange;
+          mat4.ortho(projectionMat, -widthOverHeight, widthOverHeight, -1, 1, nearBound, farBound);
+        } else {
+          const f = 1.0 / Math.tan(fovy / 2);
+          relativeDepthRange /= f;
+          const nearBound = Math.max(0.1, 1 - relativeDepthRange);
+          const farBound = 1 + relativeDepthRange;
+          zoomFactor *= f;
+          mat4.perspective(projectionMat, fovy, widthOverHeight, nearBound, farBound);
+        }
+        navigationState.pose.toMat4(invViewMatrix, zoomFactor);
+        mat4.scale(invViewMatrix, invViewMatrix, vec3.set(tempVec3, 1, -1, -1));
+        mat4.translate(invViewMatrix, invViewMatrix, kAxes[2]);
+        updateProjectionParametersFromInverseViewAndProjection(out);
+      },
     }));
+    this.projectionParameters.changed.add(() => this.context.scheduleRedraw());
 
-    const sharedObject = this.sharedObject =
-        this.registerDisposer(new PerspectiveViewState(this.navigationState.pose.displayDimensions));
+    const sharedObject = this.sharedObject = this.registerDisposer(new PerspectiveViewState(this));
     sharedObject.RPC_TYPE_ID = PERSPECTIVE_VIEW_RPC_ID;
     sharedObject.initializeCounterpart(viewer.rpc, {});
     sharedObject.visibility.add(this.visibility);
 
     this.visibleLayerTracker = makeRenderedPanelVisibleLayerTracker(
-        this.viewer.layerManager, PerspectiveViewRenderLayer, this.viewer.visibleLayerRoles, this,
-        (layer, info) => {
-          const {backend} = layer;
-          if (backend) {
-            backend.rpc!.invoke(
-                PERSPECTIVE_VIEW_ADD_LAYER_RPC_ID,
-                {layer: backend.rpcId, view: this.sharedObject.rpcId});
-            info.registerDisposer(
-                () => backend.rpc!.invoke(
-                    PERSPECTIVE_VIEW_REMOVE_LAYER_RPC_ID,
-                    {layer: backend.rpcId, view: this.sharedObject.rpcId}));
-          }
-        });
+        this.viewer.layerManager, PerspectiveViewRenderLayer, this.viewer.visibleLayerRoles, this);
 
     registerActionListener(element, 'rotate-via-mouse-drag', (e: ActionEvent<MouseEvent>) => {
       startRelativeMouseDrag(e.detail, (_event, deltaX, deltaY) => {
@@ -285,7 +272,10 @@ export class PerspectivePanel extends RenderedDataPanel {
       showSliceViewsLabel.appendChild(showSliceViewsCheckbox.element);
       this.element.appendChild(showSliceViewsLabel);
     }
-    this.registerDisposer(viewer.orthographicProjection.changed.add(() => this.scheduleRedraw()));
+    this.registerDisposer(viewer.orthographicProjection.changed.add(() => {
+      this.projectionParameters.update();
+      this.scheduleRedraw();
+    }));
     this.registerDisposer(viewer.showScaleBar.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(viewer.scaleBarOptions.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(viewer.showSliceViews.changed.add(() => this.scheduleRedraw()));
@@ -294,20 +284,20 @@ export class PerspectivePanel extends RenderedDataPanel {
         viewer.crossSectionBackgroundColor.changed.add(() => this.scheduleRedraw()));
     this.registerDisposer(
         viewer.perspectiveViewBackgroundColor.changed.add(() => this.scheduleRedraw()));
-    this.throttledSendViewportUpdate();
-    this.throttledSendViewportUpdate.flush();
+    this.registerDisposer(viewer.wireFrame.changed.add(() => this.scheduleRedraw()));
+    this.sliceViews.changed.add(() => this.scheduleRedraw());
   }
 
   translateByViewportPixels(deltaX: number, deltaY: number): void {
     const temp = tempVec3;
-    const {viewProjectionMat} = this;
-    const {width, height} = this;
+    const {viewProjectionMat, invViewProjectionMat, width, height} =
+        this.projectionParameters.value;
     const {pose} = this.viewer.navigationState;
     pose.updateDisplayPosition(pos => {
       vec3.transformMat4(temp, pos, viewProjectionMat);
       temp[0] = -2 * deltaX / width;
       temp[1] = 2 * deltaY / height;
-      vec3.transformMat4(pos, temp, this.viewProjectionMatInverse);
+      vec3.transformMat4(pos, temp, invViewProjectionMat);
     });
   }
 
@@ -331,20 +321,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     if (width === 0 || height === 0) {
       return true;
     }
-    const {viewProjectionMat} = this;
-    this.updateProjectionMatrix();
-
-    const {
-      navigationState:
-          {pose: {displayDimensions: {value: displayDimensions}, position: {value: globalPosition}}}
-    } = this;
-
+    const projectionParameters = this.projectionParameters.value;
     const renderContext: PerspectiveViewReadyRenderContext = {
-      viewportWidth: width,
-      viewportHeight: height,
-      viewProjectionMat: viewProjectionMat,
-      globalPosition,
-      displayDimensions,
+      projectionParameters,
     };
 
     const {visibleLayers} = this.visibleLayerTracker;
@@ -356,58 +335,11 @@ export class PerspectivePanel extends RenderedDataPanel {
     return true;
   }
 
-  updateProjectionMatrix() {
-    const {projectionMat, viewProjectionMat} = this;
-    const widthOverHeight = this.width / this.height;
-    const fovy = Math.PI / 4.0;
-    const nearBound = 0.1, farBound = 50;
-    const {navigationState} = this;
-    const baseZoomFactor = navigationState.zoomFactor.value;
-    let zoomFactor = baseZoomFactor / 2;
-    if (this.viewer.orthographicProjection.value) {
-      // Pick orthographic projection to match perspective projection at plane parallel to image
-      // plane containing the center position.
-      mat4.ortho(projectionMat, -widthOverHeight, widthOverHeight, -1, 1, nearBound, farBound);
-    } else {
-      const f = 1.0 / Math.tan(fovy / 2);
-      mat4.perspective(projectionMat, fovy, widthOverHeight, nearBound, farBound);
-      zoomFactor *= f;
-    }
-    const {viewMatInverse, viewMat} = this;
-    navigationState.pose.toMat4(viewMatInverse, zoomFactor);
-    mat4.scale(viewMatInverse, viewMatInverse, vec3.set(tempVec3, 1, -1, -1));
-    mat4.translate(viewMatInverse, viewMatInverse, kAxes[2]);
-    mat4.invert(viewMat, viewMatInverse);
-    mat4.multiply(viewProjectionMat, projectionMat, viewMat);
-    mat4.invert(this.viewProjectionMatInverse, viewProjectionMat);
-  }
-
-  private throttledSendViewportUpdate = this.registerCancellable(throttle(() => {
-    const {sharedObject} = this;
-    const {valid} = this.navigationState;
-    if (valid) {
-      this.updateProjectionMatrix();
-    }
-    sharedObject.rpc!.invoke(PERSPECTIVE_VIEW_UPDATE_VIEWPORT_RPC_ID, {
-      view: sharedObject.rpcId,
-      viewport: {
-        width: valid ? this.width : 0,
-        height: valid ? this.height : 0,
-        viewMat: this.viewMat,
-        projectionMat: this.projectionMat,
-        viewProjectionMat: this.viewProjectionMat,
-      },
-    });
-  }, 10));
-
   panelSizeChanged() {
-    this.throttledSendViewportUpdate();
+    this.projectionParameters.setViewportShape(this.width, this.height);
   }
 
   disposed() {
-    for (let sliceView of this.sliceViews.keys()) {
-      sliceView.dispose();
-    }
     this.sliceViews.clear();
     super.disposed();
   }
@@ -448,9 +380,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       }
       mousePosition.set(voxelCoordinates);
       const displayDimensions = this.navigationState.pose.displayDimensions.value;
-      const {dimensionIndices} = displayDimensions;
-      for (let i = 0, spatialRank = dimensionIndices.length; i < spatialRank; ++i) {
-        mousePosition[dimensionIndices[i]] = tempVec3[i];
+      const {displayDimensionIndices} = displayDimensions;
+      for (let i = 0, spatialRank = displayDimensionIndices.length; i < spatialRank; ++i) {
+        mousePosition[displayDimensionIndices[i]] = tempVec3[i];
       }
       const pickValue = data[4 * pickDiameter * pickDiameter + 4 * offset];
       pickingData.pickIDs.setMouseState(mouseState, pickValue);
@@ -463,12 +395,12 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   translateDataPointByViewportPixels(out: vec3, orig: vec3, deltaX: number, deltaY: number): vec3 {
     const temp = tempVec3;
-    const {viewProjectionMat} = this;
-    const {width, height} = this;
+    const {viewProjectionMat, invViewProjectionMat, width, height} =
+        this.projectionParameters.value;
     vec3.transformMat4(temp, orig, viewProjectionMat);
     temp[0] += 2 * deltaX / width;
     temp[1] += -2 * deltaY / height;
-    return vec3.transformMat4(out, temp, this.viewProjectionMatInverse);
+    return vec3.transformMat4(out, temp, invViewProjectionMat);
   }
 
   private get transparentConfiguration() {
@@ -506,8 +438,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     gl.enable(gl.DEPTH_TEST);
-    let {viewProjectionMat} = this;
-    this.updateProjectionMatrix();
+    const projectionParameters = this.projectionParameters.value;
 
     // FIXME; avoid temporaries
     let lightingDirection = vec3.create();
@@ -518,13 +449,9 @@ export class PerspectivePanel extends RenderedDataPanel {
     let ambient = 0.2;
     let directional = 1 - ambient;
 
-    const {
-      navigationState:
-          {pose: {displayDimensions: {value: displayDimensions}, position: {value: globalPosition}}}
-    } = this;
-
     const renderContext: PerspectiveViewRenderContext = {
-      viewProjectionMat: viewProjectionMat,
+      wireFrame: this.viewer.wireFrame.value,
+      projectionParameters,
       lightDirection: lightingDirection,
       ambientLighting: ambient,
       directionalLighting: directional,
@@ -533,13 +460,9 @@ export class PerspectivePanel extends RenderedDataPanel {
       emitColor: true,
       emitPickID: true,
       alreadyEmittedPickID: false,
-      viewportWidth: width,
-      viewportHeight: height,
-      displayDimensions,
-      globalPosition,
     };
 
-    mat4.copy(pickingData.invTransform, this.viewProjectionMatInverse);
+    mat4.copy(pickingData.invTransform, projectionParameters.invViewProjectionMat);
 
     const {visibleLayers} = this.visibleLayerTracker;
 
@@ -567,13 +490,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       gl.blendFunc(WebGL2RenderingContext.SRC_ALPHA, WebGL2RenderingContext.ONE_MINUS_SRC_ALPHA);
       // Render only to the color buffer, but not the pick or z buffer.  With blending enabled, the
       // z and color values would be corrupted.
-      gl.drawBuffers([
-        gl.COLOR_ATTACHMENT0,
-        gl.NONE,
-        gl.NONE,
-      ]);
-      renderContext.emitPickID = false;
-
       for (const [renderLayer, attachment] of visibleLayers) {
         if (renderLayer.isAnnotation) {
           renderLayer.draw(renderContext, attachment);
@@ -581,12 +497,6 @@ export class PerspectivePanel extends RenderedDataPanel {
       }
       gl.depthFunc(WebGL2RenderingContext.LESS);
       gl.disable(WebGL2RenderingContext.BLEND);
-      gl.drawBuffers([
-        gl.COLOR_ATTACHMENT0,
-        gl.COLOR_ATTACHMENT1,
-        gl.COLOR_ATTACHMENT2,
-      ]);
-      renderContext.emitPickID = true;
     }
 
     if (this.viewer.showAxisLines.value) {
@@ -641,7 +551,8 @@ export class PerspectivePanel extends RenderedDataPanel {
     gl.enable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-1, -1);
     for (const [renderLayer, attachment] of visibleLayers) {
-      renderContext.alreadyEmittedPickID = !renderLayer.isTransparent && !renderLayer.isAnnotation;
+      if (!renderLayer.isTransparent) continue;
+      renderContext.alreadyEmittedPickID = true;
       renderLayer.draw(renderContext, attachment);
     }
     gl.disable(WebGL2RenderingContext.POLYGON_OFFSET_FILL);
@@ -658,7 +569,8 @@ export class PerspectivePanel extends RenderedDataPanel {
       const {scaleBars} = this;
       const options = this.viewer.scaleBarOptions.value;
       scaleBars.draw(
-          width, this.navigationState.pose.displayDimensions.value,
+          width, this.navigationState.displayDimensionRenderInfo.value,
+          this.navigationState.relativeDisplayScales.value,
           this.navigationState.zoomFactor.value / this.height, options);
       gl.disable(WebGL2RenderingContext.BLEND);
     }
@@ -673,25 +585,35 @@ export class PerspectivePanel extends RenderedDataPanel {
 
   protected drawSliceViews(renderContext: PerspectiveViewRenderContext) {
     let {sliceViewRenderHelper} = this;
-    let {lightDirection, ambientLighting, directionalLighting, viewProjectionMat} = renderContext;
+    let {
+      lightDirection,
+      ambientLighting,
+      directionalLighting,
+      projectionParameters: {viewProjectionMat}
+    } = renderContext;
 
     const showSliceViews = this.viewer.showSliceViews.value;
     for (const [sliceView, unconditional] of this.sliceViews) {
       if (!unconditional && !showSliceViews) {
         continue;
       }
-      if (sliceView.width === 0 || sliceView.height === 0 || !sliceView.valid) {
+      const {
+        width: sliceViewWidth,
+        height: sliceViewHeight,
+        invViewMatrix: sliceViewInvViewMatrix,
+        viewportNormalInCanonicalCoordinates,
+      } = sliceView.projectionParameters.value;
+      if (sliceViewWidth === 0 || sliceViewHeight === 0 || !sliceView.valid) {
         continue;
       }
-      let scalar =
-          Math.abs(vec3.dot(lightDirection, sliceView.viewportNormalInCanonicalCoordinates));
+      let scalar = Math.abs(vec3.dot(lightDirection, viewportNormalInCanonicalCoordinates));
       let factor = ambientLighting + scalar * directionalLighting;
       let mat = tempMat4;
       // Need a matrix that maps (+1, +1, 0) to projectionMat * (width, height, 0)
       mat4.identity(mat);
-      mat[0] = sliceView.width / 2.0;
-      mat[5] = -sliceView.height / 2.0;
-      mat4.multiply(mat, sliceView.invViewMatrix, mat);
+      mat[0] = sliceViewWidth / 2.0;
+      mat[5] = -sliceViewHeight / 2.0;
+      mat4.multiply(mat, sliceViewInvViewMatrix, mat);
       mat4.multiply(mat, viewProjectionMat, mat);
       const backgroundColor = tempVec4;
       const crossSectionBackgroundColor = this.viewer.crossSectionBackgroundColor.value;
@@ -709,7 +631,7 @@ export class PerspectivePanel extends RenderedDataPanel {
     const {
       position: {value: position},
       zoomFactor: {value: zoom},
-      displayDimensions: {value: {canonicalVoxelFactors, dimensionIndices: displayDimensionIndices}}
+      displayDimensionRenderInfo: {value: {canonicalVoxelFactors, displayDimensionIndices}}
     } = this.viewer.navigationState;
     const axisRatio = Math.min(this.width, this.height) / this.height / 4;
     const axisLength = zoom * axisRatio;
@@ -722,7 +644,7 @@ export class PerspectivePanel extends RenderedDataPanel {
       mat[12 + i] = globalDim === -1 ? 0 : position[globalDim];
       mat[5 * i] = axisLength / canonicalVoxelFactors[i];
     }
-    mat4.multiply(mat, this.viewProjectionMat, mat);
+    mat4.multiply(mat, this.projectionParameters.value.viewProjectionMat, mat);
     const {gl} = this;
     gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
     this.axesLineHelper.draw(mat, false);

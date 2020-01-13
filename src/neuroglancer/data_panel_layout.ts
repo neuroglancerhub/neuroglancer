@@ -28,7 +28,7 @@ import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {SliceView} from 'neuroglancer/sliceview/frontend';
 import {SliceViewerState, SliceViewPanel} from 'neuroglancer/sliceview/panel';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
-import {TrackableValue, WatchableSet} from 'neuroglancer/trackable_value';
+import {TrackableValue, WatchableSet, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Borrowed, Owned, RefCounted} from 'neuroglancer/util/disposable';
 import {removeChildren, removeFromParent} from 'neuroglancer/util/dom';
@@ -46,6 +46,7 @@ export interface SliceViewViewerState {
   chunkManager: ChunkManager;
   navigationState: NavigationState;
   layerManager: LayerManager;
+  wireFrame: WatchableValueInterface<boolean>;
 }
 
 export class InputEventBindings {
@@ -59,6 +60,7 @@ export interface ViewerUIState extends SliceViewViewerState, VisibilityPriorityS
   perspectiveNavigationState: NavigationState;
   showPerspectiveSliceViews: TrackableBoolean;
   showAxisLines: TrackableBoolean;
+  wireFrame: TrackableBoolean;
   showScaleBar: TrackableBoolean;
   scaleBarOptions: TrackableValue<ScaleBarOptions>;
   visibleLayerRoles: WatchableSet<RenderLayerRole>;
@@ -91,17 +93,19 @@ const LAYOUT_SYMBOLS = new Map<string, string>([
 export function makeSliceView(viewerState: SliceViewViewerState, baseToSelf?: quat) {
   let navigationState: NavigationState;
   if (baseToSelf === undefined) {
-    navigationState = viewerState.navigationState;
+    navigationState = viewerState.navigationState.addRef();
   } else {
     navigationState = new NavigationState(
         new DisplayPose(
             viewerState.navigationState.pose.position.addRef(),
-            viewerState.navigationState.pose.displayDimensions.addRef(),
+            viewerState.navigationState.pose.displayDimensionRenderInfo.addRef(),
             OrientationState.makeRelative(
                 viewerState.navigationState.pose.orientation, baseToSelf)),
-        viewerState.navigationState.zoomFactor);
+        viewerState.navigationState.zoomFactor.addRef(),
+        viewerState.navigationState.depthRange.addRef());
   }
-  return new SliceView(viewerState.chunkManager, viewerState.layerManager, navigationState);
+  return new SliceView(
+      viewerState.chunkManager, viewerState.layerManager, navigationState, viewerState.wireFrame);
 }
 
 export function makeNamedSliceView(viewerState: SliceViewViewerState, axes: NamedAxes) {
@@ -123,6 +127,7 @@ export function getCommonViewerState(viewer: ViewerUIState) {
     mouseState: viewer.mouseState,
     layerManager: viewer.layerManager,
     showAxisLines: viewer.showAxisLines,
+    wireFrame: viewer.wireFrame,
     visibleLayerRoles: viewer.visibleLayerRoles,
     selectedLayer: viewer.selectedLayer,
     visibility: viewer.visibility,
@@ -151,11 +156,12 @@ function getCommonSliceViewerState(viewer: ViewerUIState) {
 }
 
 function addDisplayDimensionsWidget(layout: DataDisplayLayout, panel: RenderedDataPanel) {
+  const {navigationState} = panel;
   panel.element.appendChild(
       layout
           .registerDisposer(new DisplayDimensionsWidget(
-              panel.navigationState.pose.displayDimensions.addRef(),
-              panel.navigationState.zoomFactor, (panel instanceof SliceViewPanel) ? 'px' : 'vh'))
+              navigationState.pose.displayDimensionRenderInfo.addRef(), navigationState.zoomFactor,
+              navigationState.depthRange.addRef(), (panel instanceof SliceViewPanel) ? 'px' : 'vh'))
           .element);
 }
 
@@ -189,9 +195,11 @@ function registerRelatedLayouts(
 function makeSliceViewFromSpecification(
     viewer: SliceViewViewerState, specification: Borrowed<CrossSectionSpecification>) {
   const sliceView = new SliceView(
-      viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef());
+      viewer.chunkManager, viewer.layerManager, specification.navigationState.addRef(),
+      viewer.wireFrame);
   const updateViewportSize = () => {
-    sliceView.setViewportSizeDebounced(specification.width.value, specification.height.value);
+    sliceView.projectionParameters.setViewportShape(
+        specification.width.value, specification.height.value);
   };
   sliceView.registerDisposer(specification.width.changed.add(updateViewportSize));
   sliceView.registerDisposer(specification.height.changed.add(updateViewportSize));
@@ -463,12 +471,13 @@ export class CrossSectionSpecification extends RefCounted implements Trackable {
     this.width.changed.add(this.changed.dispatch);
     this.height.changed.add(this.changed.dispatch);
     this.scale = new LinkedZoomState(
-        parent.zoomFactor.addRef(), parent.zoomFactor.displayDimensions.addRef());
+        parent.zoomFactor.addRef(), parent.zoomFactor.displayDimensionRenderInfo.addRef());
     this.scale.changed.add(this.changed.dispatch);
     this.navigationState = this.registerDisposer(new NavigationState(
         new DisplayPose(
-            this.position.value, parent.pose.displayDimensions.addRef(), this.orientation.value),
-        this.scale.value));
+            this.position.value, parent.pose.displayDimensionRenderInfo.addRef(),
+            this.orientation.value),
+        this.scale.value, parent.depthRange.addRef()));
   }
 
   restoreState(obj: any) {
@@ -503,11 +512,9 @@ export class CrossSectionSpecification extends RefCounted implements Trackable {
 export class CrossSectionSpecificationMap extends WatchableMap<string, CrossSectionSpecification> {
   constructor(private parentNavigationState: Owned<NavigationState>) {
     super(
-        v => this.registerDisposer(this.registerDisposer(v).changed.add(this.changed.dispatch)),
-        v => {
-          v.changed.remove(this.changed.dispatch);
-          v.dispose();
-        });
+        (context, spec) => context.registerDisposer(
+            context.registerDisposer(spec).changed.add(this.changed.dispatch)),
+    );
     this.registerDisposer(parentNavigationState);
   }
 
