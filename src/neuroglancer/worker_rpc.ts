@@ -126,6 +126,9 @@ export class RPC {
   }
   getRef<T extends SharedObject>(x: {'id': RpcId, 'gen': number}) {
     let rpcId = x['id'];
+    if (rpcId === null) {
+      console.log('debug here');
+    }
     let obj = <T>this.get(rpcId);
     obj.referencedGeneration = x['gen'];
     obj.addRef();
@@ -136,6 +139,9 @@ export class RPC {
     x.functionName = name;
     if (DEBUG_MESSAGES) {
       console.trace('Sending message', x);
+    }
+    if (x.sources && x.sources[0][0] && x.sources[0][0].source.id === null) {
+      console.log('debug message here');
     }
     this.target.postMessage(x, transfers);
   }
@@ -314,6 +320,9 @@ registerRPC('SharedObject.new', function(x) {
   let rpc = <RPC>this;
   let typeName = <string>x['type'];
   let constructorFunction = sharedObjectConstructors.get(typeName)!;
+  if (!constructorFunction) {
+    console.log('typeName', typeName);
+  }
   let obj = new constructorFunction(rpc, x);
   // Counterpart objects start with a reference count of zero.
   --obj.refCount;

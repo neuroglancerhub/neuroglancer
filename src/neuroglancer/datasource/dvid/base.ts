@@ -46,6 +46,17 @@ export class MeshSourceParameters extends DVIDSourceParameters {
   static RPC_ID = 'dvid/MeshSource';
 }
 
+export class AnnotationChunkSourceParameters extends DVIDSourceParameters {
+  static RPC_ID = 'dvid/AnnotationChunkSource';
+  chunkDataSize = annotationChunkDataSize;
+  syncedLabel?: string;
+  readonly?: boolean;
+  usertag?: boolean;
+  user?: string;
+  tags?: any;
+  schema?: any;
+}
+
 export class AnnotationSourceParameters extends DVIDSourceParameters {
   static RPC_ID = 'dvid/Annotation';
   chunkDataSize = annotationChunkDataSize;

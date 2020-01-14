@@ -28,7 +28,7 @@ import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce
 import {Owned, RefCounted, registerEventListener} from 'neuroglancer/util/disposable';
 import {removeFromParent} from 'neuroglancer/util/dom';
 import {getDropEffect, preventDrag, setDropEffect} from 'neuroglancer/util/drag_and_drop';
-import {float32ToString} from 'neuroglancer/util/float32_to_string';
+// import {float32ToString} from 'neuroglancer/util/float32_to_string';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {makeCloseButton, makeRefreshButton} from 'neuroglancer/widget/close_button';
 import {PositionWidget} from 'neuroglancer/widget/position_widget';

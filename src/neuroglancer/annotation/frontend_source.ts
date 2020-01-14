@@ -515,12 +515,14 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       const segments = relatedSegments[i];
       if (segments === undefined) return;
       const source = segmentFilteredSources[i];
-      for (const segment of segments) {
-        const chunk = source.chunks.get(getObjectKey(segment));
-        if (chunk === undefined) {
-          continue;
+      if (source) {
+        for (const segment of segments) {
+          const chunk = source.chunks.get(getObjectKey(segment));
+          if (chunk === undefined) {
+            continue;
+          }
+          callback(chunk);
         }
-        callback(chunk);
       }
     }
   }
@@ -658,6 +660,7 @@ registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function(x) {
   }
 });
 
+/*
 export class DataFetchSliceViewRenderLayer extends
     SliceViewRenderLayer<AnnotationGeometryChunkSource> {
   constructor(multiscaleSource: MultiscaleAnnotationSource, options: SliceViewRenderLayerOptions) {
@@ -668,11 +671,12 @@ export class DataFetchSliceViewRenderLayer extends
   // Does nothing.
   draw() {}
 }
+*/
 
 registerRPC(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, function(x) {
-  const source = <MultiscaleAnnotationSource>this.get(x.id);
-  const newAnnotation: Annotation|null = deserializeAnnotation(x.newAnnotation);
+  const source = <AnnotationGeometryChunkSource>this.get(x.id);
+  const newAnnotation: Annotation|null = fixAnnotationAfterStructuredCloning(x.newAnnotation);
   if (newAnnotation) {
-    source.childAdded.dispatch(newAnnotation);
+    source.parent.childAdded.dispatch(newAnnotation);
   }
 });
