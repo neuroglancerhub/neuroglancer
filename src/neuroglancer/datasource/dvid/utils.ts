@@ -61,7 +61,19 @@ export class DVIDPointAnnotationFacade {
   }
 
   get checked() {
-    return this.prop && this.prop.checked === '1' ? true : false;
+    return (this.prop && this.prop.checked === '1') ? true : false;
+  }
+
+  getBooleanProperty(s: boolean) {
+    return s ? '1' : '0';
+  }
+
+  setChecked(c: string|boolean) {
+    if (typeof c === 'string') {
+      this.prop.checked = c;
+    } else {
+      this.prop.checked = c ? '1' : '0';
+    }
   }
 
   get bookmarkType() {
@@ -69,17 +81,29 @@ export class DVIDPointAnnotationFacade {
   }
 
   get custom() {
-    return this.prop && this.prop.custom;
+    return (this.prop && this.prop.custom === '1') ? true : false;
   }
 
+  setCustom(c: string|boolean) {
+    if (typeof c === 'string') {
+      this.prop.custom = c;
+    } else {
+      this.prop.custom = c ? '1' : '0';
+    }
+  }
+  /*
   set custom(c) {
     if (this.prop === undefined) {
       this.prop = {};
     }
     this.prop.custom = c;
   }
+  */
 
   get prop(): {[key: string]: string} {
+    if (this.annotation.prop === undefined) {
+      this.annotation.prop = {};
+    }
     return this.annotation.prop;
   }
 

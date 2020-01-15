@@ -267,6 +267,17 @@ function parseAnnotations(
   chunk.data = Object.assign(new AnnotationGeometryData(), serializer.serialize());
 }
 
+function removeEmptyField(obj: {[key:string]: string})
+{
+  for (let key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      if (obj[key] === '') {
+        delete obj[key];
+      }
+    }
+  }
+}
+
 function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefined): any {
   const objectLabels =
     annotation.relatedSegments && annotation.relatedSegments[0] && annotation.relatedSegments[0].map(x => x.toString());
@@ -277,24 +288,35 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
     Prop: {}
   };
 
-  let annotationRef = new DVIDPointAnnotationFacade(annotation);
+  let annotFac = new DVIDPointAnnotationFacade(annotation);
 
-  if (annotationRef.comment) {
-    obj['Prop']['comment'] = annotationRef.comment;
+  obj.Prop =  {...annotFac.prop};
+  if (annotFac.bookmarkType) {
+    obj.Prop['type'] = annotationToDVIDType(annotFac.bookmarkType);
   }
-  if (annotationRef.custom) {
-    obj['Prop']['custom'] = annotationRef.custom;
+  removeEmptyField(obj.Prop);
+
+  /*
+  if (annotFac.comment) {
+    obj.Prop['comment'] = annotFac.comment;
   }
-  if (annotationRef.bookmarkType) {
-    obj['Prop']['type'] = annotationToDVIDType(annotationRef.bookmarkType);
+  if (annotFac.custom) {
+    obj.Prop['custom'] = "1";
   }
+  if (annotFac.bookmarkType) {
+    obj.Prop['type'] = annotationToDVIDType(annotFac.bookmarkType);
+  }
+  if (annotFac.checked) {
+    obj.Prop['checked'] = "1";
+  }
+  */
 
   if (objectLabels && objectLabels.length > 0) {
-    obj['Prop']['body ID'] = objectLabels[0];
+    obj.Prop['body ID'] = objectLabels[0];
   }
   if (user) {
     obj['Tags'] = ['user:' + user];
-    obj['Prop']['user'] = user;
+    obj.Prop['user'] = user;
   }
 
   return obj;

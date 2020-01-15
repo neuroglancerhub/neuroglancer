@@ -1131,8 +1131,14 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         getObjectFromWidget(schema, '', result, 'annotation');
         // alert(JSON.stringify(result));
         const x = result['Prop'];
+        
         let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
         let annotFac = new DVIDPointAnnotationFacade(newAnnotation);
+        if (x.checked) {
+          x.checked = annotFac.getBooleanProperty(x.checked);
+        } else {
+          delete x['checked'];
+        }
         annotFac.prop = {...newAnnotation.prop, ...x};
         
         newAnnotation.description = getAnnotationDescription(newAnnotation);
@@ -1198,10 +1204,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       
       // (<DVIDPointAnnotation>annotation).kind = 'Note';
       annotation.point = annotation.point.map(x => Math.round(x));
-
-      if (annotationRef.custom === undefined) {
-        annotationRef.custom = '1';
-      }
+      annotationRef.setCustom(true);
     }
     return super.add(annotation, commit);
   }
