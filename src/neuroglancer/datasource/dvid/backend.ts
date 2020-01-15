@@ -29,7 +29,7 @@ import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {DVIDInstance, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
-import {DVIDPointAnnotation, getAnnotationDescription, DvidPointAnnotationProperty} from 'neuroglancer/datasource/dvid/utils';
+import {DVIDPointAnnotation, DVIDPointAnnotationReference, getAnnotationDescription} from 'neuroglancer/datasource/dvid/utils';
 import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, AnnotationPropertySpec} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk, AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
@@ -175,7 +175,7 @@ function parseAnnotation(entry: any): DVIDPointAnnotation|null {
   if (entry) {
     const kind = verifyObjectProperty(entry, 'Kind', verifyString);
     if (kind !== 'Unknown') {
-      let prop = new DvidPointAnnotationProperty();
+      let prop:{[key:string]: string} = {};
 
       const propertiesObj = verifyObjectProperty(entry, 'Prop', verifyObject);
       const corner = verifyObjectProperty(entry, 'Pos', x => parseIntVec(vec3.create(), x));
@@ -189,13 +189,18 @@ function parseAnnotation(entry: any): DVIDPointAnnotation|null {
         relatedSegments[0] = verifyObjectProperty(propertiesObj, 'body ID', x => parseUint64ToArray(Array<Uint64>(), x));
       }
 
-      let annotation: DVIDPointAnnotation = new DVIDPointAnnotation();
-      annotation.kind = kind;
-      annotation.id = `${corner[0]}_${corner[1]}_${corner[2]}`;
-      annotation.relatedSegments = relatedSegments;
-      annotation.point = corner;
-      annotation.prop = prop;
-      annotation.properties = [annotation.renderingAttribute];
+      let annotation: DVIDPointAnnotation = {
+        point: corner,
+        type: AnnotationType.POINT,
+        properties: [],
+        kind,
+        id: `${corner[0]}_${corner[1]}_${corner[2]}`,
+        relatedSegments,
+        prop: {}
+      };
+
+      let annotationRef = new DVIDPointAnnotationReference(annotation);
+      annotationRef.prop = prop;
 
       let description = getAnnotationDescription(annotation);
       if (description) {
@@ -272,14 +277,16 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
     Prop: {}
   };
 
-  if (annotation.comment) {
-    obj['Prop']['comment'] = annotation.comment;
+  let annotationRef = new DVIDPointAnnotationReference(annotation);
+
+  if (annotationRef.comment) {
+    obj['Prop']['comment'] = annotationRef.comment;
   }
-  if (annotation.custom) {
-    obj['Prop']['custom'] = annotation.custom;
+  if (annotationRef.custom) {
+    obj['Prop']['custom'] = annotationRef.custom;
   }
-  if (annotation.type) {
-    obj['Prop']['type'] = annotationToDVIDType(annotation.type);
+  if (annotationRef.bookmarkType) {
+    obj['Prop']['type'] = annotationToDVIDType(annotationRef.bookmarkType);
   }
 
   if (objectLabels && objectLabels.length > 0) {

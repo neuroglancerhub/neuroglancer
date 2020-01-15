@@ -39,13 +39,12 @@ import {DVIDToken, credentialsKey, makeRequestWithCredentials} from 'neuroglance
 import {MultiscaleAnnotationSource, AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal, NullarySignal} from 'neuroglancer/util/signal';
-import {Env, getUserFromToken, DVIDPointAnnotation, getAnnotationDescription, DvidPointAnnotationProperty, DvidPointAnnotationPropertyToJson} from 'neuroglancer/datasource/dvid/utils';
+import {Env, getUserFromToken, DVIDPointAnnotation, getAnnotationDescription, DVIDPointAnnotationReference} from 'neuroglancer/datasource/dvid/utils';
 import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider'
 import { makeSliceViewChunkSpecification } from 'neuroglancer/sliceview/base';
 import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/datasource/dvid/widgets';
-import { JsonObject } from 'neuroglancer/datasource/dvid/jsonschema';
 import {defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
 // import { DVIDAnnotationGeometryChunkSource } from './backend';
 
@@ -941,11 +940,13 @@ function getAnnotationChunkDataSize(parameters: AnnotationSourceParameters, uppe
 }
 
 function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVolumeInfo, parameters: AnnotationSourceParameters) {
+  const rank = 3;
+
   let makeSpec = (scale: VolumeInfo) => {
     const upperVoxelBound = scale.upperVoxelBound;
     const chunkDataSize = getAnnotationChunkDataSize(parameters, upperVoxelBound);
     let spec = makeSliceViewChunkSpecification({
-      rank: 3,
+      rank,
       chunkDataSize: Uint32Array.from(chunkDataSize),
       upperVoxelBound: scale.upperVoxelBound
     });
@@ -1042,6 +1043,7 @@ const MultiscaleAnnotationSourceBase = WithParameters(
 
 export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   key: any;
+  readonly = false;
   private multiscaleVolumeInfo: MultiscaleVolumeInfo;
   // sources: SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][];
   private updateAnnotationHandlers() {
@@ -1117,10 +1119,9 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.makeEditWidget = (reference: AnnotationReference) => {
       let schema = this.parameters.schema || defaultJsonSchema;
       const annotation = reference.value!;
-      const prop:DvidPointAnnotationProperty = (<DVIDPointAnnotation>(annotation)).prop as DvidPointAnnotationProperty;
-      const properties: JsonObject = DvidPointAnnotationPropertyToJson(prop);
+      const prop = (<DVIDPointAnnotation>(annotation)).prop;
 
-      let widget = createAnnotationWidget(schema, { 'Prop': properties }, this.readonly);
+      let widget = createAnnotationWidget(schema, { 'Prop': prop }, this.readonly);
       // console.log(annotation);
       // setWidgetFromObject(widget, annotation.property, 'annotation\\Prop');
       let button = document.createElement('button');
@@ -1131,11 +1132,9 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         // alert(JSON.stringify(result));
         const x = result['Prop'];
         let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
-        if (newAnnotation.properties) {
-          newAnnotation.properties = { ...newAnnotation.properties, ...x };
-        } else {
-          newAnnotation.properties = x;
-        }
+        let annotationRef = new DVIDPointAnnotationReference(newAnnotation);
+        annotationRef.prop = {...newAnnotation.prop, ...x};
+        
         newAnnotation.description = getAnnotationDescription(newAnnotation);
         this.update(reference, newAnnotation);
         this.commit(reference);
@@ -1155,11 +1154,12 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       alternatives =>
         alternatives.map(({ spec, chunkToMultiscaleTransform }) => ({
           chunkSource: this.chunkManager.getChunkSource(DVIDAnnotationChunkSource, {
-            spec: { limit: 1e9, ...spec },
+            spec: { limit: 0, chunkToMultiscaleTransform, ...spec },
             parent: this,
             credentialsProvider: this.credentialsProvider,
             parameters: this.parameters
-          }), chunkToMultiscaleTransform
+          }), 
+          chunkToMultiscaleTransform
         })));
 
     // const { sources } = this;
@@ -1193,11 +1193,14 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         throw Error(errorMessage);
       }
 
-      (<DVIDPointAnnotation>annotation).kind = 'Note';
+      let annotationRef = new DVIDPointAnnotationReference(<DVIDPointAnnotation>annotation);
+      annotationRef.kind = 'Note';
+      
+      // (<DVIDPointAnnotation>annotation).kind = 'Note';
       annotation.point = annotation.point.map(x => Math.round(x));
 
-      if ((<DVIDPointAnnotation>annotation).custom === undefined) {
-        (<DVIDPointAnnotation>annotation).custom = '1';
+      if (annotationRef.custom === undefined) {
+        annotationRef.custom = '1';
       }
     }
     return super.add(annotation, commit);

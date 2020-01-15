@@ -22,11 +22,10 @@
 import {AnnotationType, getAnnotationTypeHandler} from 'neuroglancer/annotation';
 // import {CircleShader} from 'neuroglancer/webgl/circles';
 // import {parameterizedEmitterDependentShaderGetter, ShaderBuilder} from 'neuroglancer/webgl/shader';
-import {Point, AnnotationId} from 'neuroglancer/annotation/index';
+import {Point} from 'neuroglancer/annotation/index';
 import {StringMemoize} from 'neuroglancer/util/memoize';
 // import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
-import {Uint64} from 'neuroglancer/util/uint64';
-import { JsonObject } from './jsonschema';
+// import {Uint64} from 'neuroglancer/util/uint64';
 
 let EnvMemoize = new StringMemoize();
 
@@ -37,7 +36,8 @@ export let Env = {
     }
 };
 
-export function DvidPointAnnotationPropertyToJson(prop: DvidPointAnnotationProperty|undefined)
+/*
+export function DvidPointAnnotationPropertyToJson(prop: JsonObject|undefined)
 {
   let props:JsonObject = {};
 
@@ -66,12 +66,17 @@ export function DvidPointAnnotationPropertyToJson(prop: DvidPointAnnotationPrope
   return props;
 }
 
+
 export class DvidPointAnnotationProperty {
   comment?: string;
   annotation?: string;
   type?: string;
   checked?: string;
   custom?: string;
+
+  appendJson(obj: JsonObject) {
+    Object.assign(this, {...this, ...obj});
+  }
 
   toJson() {
     let props:JsonObject = {};
@@ -99,23 +104,32 @@ export class DvidPointAnnotationProperty {
     return props;
   }
 }
+*/
 
-export class DVIDPointAnnotation implements Point {
-  description?: string|undefined|null;
-
-  id: AnnotationId;
-
-  relatedSegments?: Uint64[][];
-  properties: any[];
-
+export interface DVIDPointAnnotation extends Point {
   kind?: string;
-  point: Float32Array;
-  type: AnnotationType.POINT;
+  prop: {[key: string]: string};
+}
 
-  prop: DvidPointAnnotationProperty;
+export class DVIDPointAnnotationReference {
+  constructor(public annotation: DVIDPointAnnotation) {
+    this.updateProperties();
+  }
 
-  constructor() {
-    this.type = AnnotationType.POINT;
+  updateProperties() {
+    this.annotation.properties = [this.renderingAttribute];
+  }
+
+  get kind(): string|undefined {
+    return this.annotation.kind;
+  }
+
+  set kind(kind: string|undefined) {
+    this.annotation.kind = kind;
+  }
+
+  set point(point: Float32Array) {
+    this.annotation.point = point;
   }
 
   get comment() {
@@ -130,15 +144,24 @@ export class DVIDPointAnnotation implements Point {
     return this.prop && this.prop.type;
   }
 
-  get custom(): string|undefined {
-    return this.prop.custom;
+  get custom() {
+    return this.prop && this.prop.custom;
   }
 
-  set custom(c: string|undefined) {
-    if (!this.prop) {
-      this.prop = new DvidPointAnnotationProperty;
+  set custom(c) {
+    if (this.prop === undefined) {
+      this.prop = {};
     }
     this.prop.custom = c;
+  }
+
+  get prop(): {[key: string]: string} {
+    return this.annotation.prop;
+  }
+
+  set prop(prop: {[key: string]: string}) {
+    this.annotation.prop = prop;
+    this.updateProperties();
   }
 
   get renderingAttribute() {

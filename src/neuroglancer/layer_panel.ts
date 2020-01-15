@@ -165,12 +165,14 @@ class LayerWidget extends RefCounted {
   maxLength: number = 0;
   prevValueText: string = '';
 
-  private allowingRefresh(layer: ManagedUserLayer): boolean {
-    return (layer.initialSpecification.type === 'annotation');
+  private allowingRefresh(_layer: ManagedUserLayer): boolean {
+    return false;
+    // return (layer.initialSpecification.type === 'annotation');
   }
 
-  private allowingClose(layer: ManagedUserLayer): boolean {
-    return (layer.initialSpecification.type !== 'annotation');
+  private allowingClose(_layer: ManagedUserLayer): boolean {
+    return true;
+    // return (layer.initialSpecification.type !== 'annotation');
   }
 
   constructor(public layer: ManagedUserLayer, public panel: LayerPanel) {

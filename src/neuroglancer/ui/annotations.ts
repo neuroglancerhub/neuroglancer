@@ -20,7 +20,7 @@
 
 import './annotations.css';
 
-import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line} from 'neuroglancer/annotation';
+import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line, annotationToJson} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -88,11 +88,15 @@ export class AnnotationSegmentListWidget extends RefCounted {
         if (annotation == null) {
           return;
         }
-        const {relatedSegments} = annotation;
-        const segments = relatedSegments === undefined ?
-            [...values] :
-            [...relatedSegments[this.relationshipIndex], ...values];
-        const newAnnotation = {...annotation, segments};
+        let {relatedSegments} = annotation;
+        if (relatedSegments === undefined) {
+          relatedSegments = this.annotationLayer.source.relationships.map(() => []);
+        } else {
+          relatedSegments = relatedSegments.slice();
+        }
+        const existingSegments = relatedSegments[this.relationshipIndex];
+        relatedSegments[this.relationshipIndex] = [...existingSegments, ...values];
+        const newAnnotation = {...annotation, relatedSegments};
         this.annotationLayer.source.update(this.reference, newAnnotation);
         this.annotationLayer.source.commit(this.reference);
       }));
@@ -162,10 +166,16 @@ export class AnnotationSegmentListWidget extends RefCounted {
         if (!event.ctrlKey) {
           return;
         }
-        const {relatedSegments} = annotation;
-        const existingSegments = (relatedSegments && relatedSegments[this.relationshipIndex]) || [];
+        let {relatedSegments} = annotation;
+        if (relatedSegments === undefined) {
+          relatedSegments = this.annotationLayer.source.relationships.map(() => []);
+        } else {
+          relatedSegments = relatedSegments.slice();
+        }
+        const existingSegments = relatedSegments[this.relationshipIndex];
         const newSegments = existingSegments.filter(x => !Uint64.equal(segment, x));
-        const newAnnotation = {...annotation, segments: newSegments ? newSegments : undefined};
+        relatedSegments[this.relationshipIndex] = newSegments;
+        const newAnnotation = {...annotation, relatedSegments};
         this.annotationLayer.source.update(this.reference, newAnnotation);
         this.annotationLayer.source.commit(this.reference);
       });
@@ -525,6 +535,11 @@ export class AnnotationLayerView extends Tab {
       sublistContainer.classList.add('neuroglancer-annotation-sublist');
       newAttachedAnnotationStates.set(
           state, {refCounted, listElements: new Map(), sublistContainer});
+      if (source instanceof MultiscaleAnnotationSource) {
+        if (source.invalidateCache) {
+          source.invalidateCache();
+        }
+      }
     }
     this.attachedAnnotationStates = newAttachedAnnotationStates;
     attachedAnnotationStates.clear();
@@ -1180,43 +1195,6 @@ export class AnnotationDetailsTab extends Tab {
       element.appendChild(label);
     }
 
-    for (let i = 0, count = properties.length; i < count; ++i) {
-      const property = properties[i];
-      const label = document.createElement('label');
-      const idElement = document.createElement('span');
-      idElement.classList.add('neuroglancer-annotation-property-label');
-      idElement.textContent = property.identifier;
-      label.appendChild(idElement);
-      const {description} = property;
-      if (description !== undefined) {
-        label.title = description;
-      }
-      const value = annotation.properties[i];
-      const valueElement = document.createElement('span');
-      valueElement.classList.add('neuroglancer-annotation-property-value');
-      valueElement.textContent = value.toString();
-      label.appendChild(valueElement);
-      element.appendChild(label);
-    }
-
-    if (!annotationLayer.source.readonly || annotation.description) {
-      const description = document.createElement('textarea');
-      description.value = annotation.description || '';
-      description.rows = 3;
-      description.className = 'neuroglancer-annotation-details-description';
-      description.placeholder = 'Description';
-      if (annotationLayer.source.readonly) {
-        description.readOnly = true;
-      } else {
-        description.addEventListener('change', () => {
-          const x = description.value;
-          annotationLayer.source.update(reference, {...annotation, description: x ? x : undefined});
-          annotationLayer.source.commit(reference);
-        });
-      }
-      element.appendChild(description);
-    }
-
     let widget = null;
 
     if (annotation.type === AnnotationType.POINT) {
@@ -1227,6 +1205,48 @@ export class AnnotationDetailsTab extends Tab {
       }
     }
 
+    if (widget) {
+      element.appendChild(widget);
+    } else {
+      for (let i = 0, count = properties.length; i < count; ++i) {
+        const property = properties[i];
+        const label = document.createElement('label');
+        const idElement = document.createElement('span');
+        idElement.classList.add('neuroglancer-annotation-property-label');
+        idElement.textContent = property.identifier;
+        label.appendChild(idElement);
+        const {description} = property;
+        if (description !== undefined) {
+          label.title = description;
+        }
+        const value = annotation.properties[i];
+        const valueElement = document.createElement('span');
+        valueElement.classList.add('neuroglancer-annotation-property-value');
+        valueElement.textContent = value.toString();
+        label.appendChild(valueElement);
+        element.appendChild(label);
+      }
+
+      if (!annotationLayer.source.readonly || annotation.description) {
+        const description = document.createElement('textarea');
+        description.value = annotation.description || '';
+        description.rows = 3;
+        description.className = 'neuroglancer-annotation-details-description';
+        description.placeholder = 'Description';
+        if (annotationLayer.source.readonly) {
+          description.readOnly = true;
+        } else {
+          description.addEventListener('change', () => {
+            const x = description.value;
+            annotationLayer.source.update(reference, { ...annotation, description: x ? x : undefined });
+            annotationLayer.source.commit(reference);
+          });
+        }
+        element.appendChild(description);
+      }
+    }
+
+    /*
     if (widget) {
       element.appendChild(widget);
     } else {
@@ -1246,6 +1266,7 @@ export class AnnotationDetailsTab extends Tab {
       }
       element.appendChild(description);
     }
+    */
   }
 }
 
@@ -1390,7 +1411,11 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
         const state = this.inProgressAnnotation!;
         const reference = state.reference;
         const newAnnotation =
-            this.getUpdatedAnnotation(reference.value!, mouseState, annotationLayer);
+          this.getUpdatedAnnotation(reference.value!, mouseState, annotationLayer);
+        if (JSON.stringify(annotationToJson(newAnnotation, annotationLayer.source)) ===
+            JSON.stringify(annotationToJson(reference.value!, annotationLayer.source))) {
+          return;
+        }
         state.annotationLayer.source.update(reference, newAnnotation);
         this.layer.selectedAnnotation.value = {
           id: reference.id,
