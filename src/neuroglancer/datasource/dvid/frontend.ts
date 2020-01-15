@@ -39,7 +39,7 @@ import {DVIDToken, credentialsKey, makeRequestWithCredentials} from 'neuroglance
 import {MultiscaleAnnotationSource, AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal, NullarySignal} from 'neuroglancer/util/signal';
-import {Env, getUserFromToken, DVIDPointAnnotation, getAnnotationDescription, DVIDPointAnnotationReference} from 'neuroglancer/datasource/dvid/utils';
+import {Env, getUserFromToken, DVIDPointAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade} from 'neuroglancer/datasource/dvid/utils';
 import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider'
@@ -1132,8 +1132,8 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         // alert(JSON.stringify(result));
         const x = result['Prop'];
         let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
-        let annotationRef = new DVIDPointAnnotationReference(newAnnotation);
-        annotationRef.prop = {...newAnnotation.prop, ...x};
+        let annotFac = new DVIDPointAnnotationFacade(newAnnotation);
+        annotFac.prop = {...newAnnotation.prop, ...x};
         
         newAnnotation.description = getAnnotationDescription(newAnnotation);
         this.update(reference, newAnnotation);
@@ -1193,7 +1193,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         throw Error(errorMessage);
       }
 
-      let annotationRef = new DVIDPointAnnotationReference(<DVIDPointAnnotation>annotation);
+      let annotationRef = new DVIDPointAnnotationFacade(<DVIDPointAnnotation>annotation);
       annotationRef.kind = 'Note';
       
       // (<DVIDPointAnnotation>annotation).kind = 'Note';

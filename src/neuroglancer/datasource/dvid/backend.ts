@@ -29,7 +29,7 @@ import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {DVIDInstance, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
-import {DVIDPointAnnotation, DVIDPointAnnotationReference, getAnnotationDescription} from 'neuroglancer/datasource/dvid/utils';
+import {DVIDPointAnnotation, DVIDPointAnnotationFacade, getAnnotationDescription} from 'neuroglancer/datasource/dvid/utils';
 import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, AnnotationPropertySpec} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk, AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
@@ -199,7 +199,7 @@ function parseAnnotation(entry: any): DVIDPointAnnotation|null {
         prop: {}
       };
 
-      let annotationRef = new DVIDPointAnnotationReference(annotation);
+      let annotationRef = new DVIDPointAnnotationFacade(annotation);
       annotationRef.prop = prop;
 
       let description = getAnnotationDescription(annotation);
@@ -277,7 +277,7 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
     Prop: {}
   };
 
-  let annotationRef = new DVIDPointAnnotationReference(annotation);
+  let annotationRef = new DVIDPointAnnotationFacade(annotation);
 
   if (annotationRef.comment) {
     obj['Prop']['comment'] = annotationRef.comment;
@@ -376,52 +376,6 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
   private getPathByAnnotationId(annotationId: string) {
     return `${this.getElementsPath()}/1_1_1/${annotationId}`;
   }
-
-  /*
-  downloadGeometry(chunk: AnnotationGeometryChunk, cancellationToken: CancellationToken) {
-    const {parameters} = this;
-
-    if (parameters.usertag) {
-      if (parameters.user) {
-        let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey)
-        return makeRequestWithCredentials(
-          this.credentialsProvider,
-          {
-            method: 'GET',
-            url: dataInstance.getNodeApiUrl(this.getPathByUserTag(parameters.user)),
-            payload: undefined,
-            responseType: 'json',
-          },
-          cancellationToken)
-          .then(values => {
-            parseAnnotations(this, chunk, values);
-          });
-      } else {
-        throw Error('Expecting a valid user name.')
-      }
-    } else {
-      if (chunk.source.spec.upperChunkBound[0] <= chunk.source.spec.lowerChunkBound[0]) {
-        return Promise.resolve(parseAnnotations(this, chunk, []));
-      }
-      const chunkDataSize = this.parameters.chunkDataSize;
-      const chunkPosition = chunk.chunkGridPosition.map((x, index) => x * chunkDataSize[index]);
-      // const chunkPosition = vec3.multiply(vec3.create(), chunk.chunkGridPosition, chunkDataSize);
-      let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-      return makeRequestWithCredentials(
-        this.credentialsProvider,
-        {
-          method: 'GET',
-          url: dataInstance.getNodeApiUrl(this.getPath(chunkPosition, chunkDataSize)),
-          payload: undefined,
-          responseType: 'json',
-        },
-        cancellationToken)
-        .then(values => {
-          parseAnnotations(this, chunk, values);
-        });
-    }
-  }
-  */
 
   downloadSegmentFilteredGeometry(
     chunk: AnnotationSubsetGeometryChunk, _relationshipIndex: number, cancellationToken: CancellationToken) {
