@@ -236,7 +236,7 @@ function updateAnnotation(
   } else {
     offset = serializedAnnotations.typeToOffset[type] + numBytes * index;
   }
-  const dv = new DataView(serializedAnnotations.data);
+  const dv = new DataView(serializedAnnotations.data.buffer, serializedAnnotations.data.byteOffset, serializedAnnotations.data.byteLength);
   let bufferOffset = serializedAnnotations.typeToOffset[type] + index * numBytes;
   const isLittleEndian = ENDIANNESS === Endianness.LITTLE;
   handler.serialize(dv, bufferOffset, isLittleEndian, rank, annotation);
@@ -505,6 +505,18 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       annotation: Annotation,
       callback: (chunk: AnnotationGeometryChunk|AnnotationSubsetGeometryChunk) => void) {
     // FIXME: also handle spatially-indexed chunks
+    let sources = this.getSources({
+      multiscaleToViewTransform: new Float32Array(),
+      displayRank: 1,
+      modelChannelDimensionIndices: [],
+    });
+    const source = sources[0][0].chunkSource;
+    if (source.chunks.size === 1) {
+      for (const chunk of source.chunks.values()) {
+        callback(chunk);
+      }
+    }
+
     annotation;
     const {relatedSegments} = annotation;
     if (relatedSegments === undefined) return;

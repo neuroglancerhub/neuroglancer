@@ -37,16 +37,17 @@ export let Env = {
     }
 };
 
-export function DvidPointAnnotationPropertyToJson(prop: DvidPointAnnotationProperty)
+export function DvidPointAnnotationPropertyToJson(prop: DvidPointAnnotationProperty|undefined)
 {
   let props:JsonObject = {};
 
+  if (prop) {
     if (prop.comment !== undefined) {
       props['comment'] = prop.comment;
     }
 
     if (prop.annotation !== undefined) {
-      props['annotatoin'] = prop.annotation;
+      props['annotation'] = prop.annotation;
     }
 
     if (prop.type !== undefined) {
@@ -60,8 +61,9 @@ export function DvidPointAnnotationPropertyToJson(prop: DvidPointAnnotationPrope
     if (prop.custom !== undefined) {
       props['custom'] = prop.custom;
     }
+  }
 
-    return props;
+  return props;
 }
 
 export class DvidPointAnnotationProperty {

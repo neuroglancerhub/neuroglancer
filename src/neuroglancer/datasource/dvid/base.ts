@@ -15,6 +15,7 @@
  */
 
 import {vec3} from 'neuroglancer/util/geom';
+import { AnnotationPropertySpec } from 'src/neuroglancer/annotation';
 
 const annotationChunkDataSize = vec3.fromValues(64, 64, 64);
 
@@ -46,9 +47,9 @@ export class MeshSourceParameters extends DVIDSourceParameters {
   static RPC_ID = 'dvid/MeshSource';
 }
 
-export class AnnotationChunkSourceParameters extends DVIDSourceParameters {
-  static RPC_ID = 'dvid/AnnotationChunkSource';
+class AnnotationSourceParametersBase extends DVIDSourceParameters {
   chunkDataSize = annotationChunkDataSize;
+  properties: AnnotationPropertySpec[];
   syncedLabel?: string;
   readonly?: boolean;
   usertag?: boolean;
@@ -57,13 +58,10 @@ export class AnnotationChunkSourceParameters extends DVIDSourceParameters {
   schema?: any;
 }
 
-export class AnnotationSourceParameters extends DVIDSourceParameters {
+export class AnnotationSourceParameters extends AnnotationSourceParametersBase {
   static RPC_ID = 'dvid/Annotation';
-  chunkDataSize = annotationChunkDataSize;
-  syncedLabel?: string;
-  readonly?: boolean;
-  usertag?: boolean;
-  user?: string;
-  tags?: any;
-  schema?: any;
+}
+
+export class AnnotationChunkSourceParameters extends AnnotationSourceParametersBase {
+  static RPC_ID = 'dvid/AnnotationChunkSource';
 }

@@ -806,6 +806,15 @@ export function getDataSource(options: GetDataSourceOptions, getCredentialsProvi
           sourceParameters.usertag = userTagged(sourceParameters);
           sourceParameters.user = getUser(sourceParameters, credentials.credentials);
           sourceParameters.schema = getSchema(sourceParameters);
+          sourceParameters.properties =[{
+            identifier: 'rendering_attribute',
+            description: 'rendering attribute',
+            type: 'int32',
+            default: 0,
+            min: 0,
+            max: 5,
+            step: 1 
+          }];
 
           // let annotationDataInstanceInfo = await getAnnotationDataInstanceDetails(options.chunkManager, sourceParameters, dataInstanceInfo, credentialsProvider);
           
@@ -1049,7 +1058,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     super(chunkManager, {
       rank: 3,
       relationships: options.parameters.syncedLabel ? [options.parameters.syncedLabel] : [],
-      properties: [],
+      properties: options.parameters.properties,
       ...options
     });
 
@@ -1137,7 +1146,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     }
   }
 
-  getSources():
+  getSources(_options: VolumeSourceOptions):
     SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
 
     let sourceSpecifications = makeAnnotationGeometrySourceSpecifications(this.multiscaleVolumeInfo, this.parameters);
@@ -1160,7 +1169,11 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
 
   invalidateCache() {
     this.metadataChunkSource.invalidateCache();
-    for (let sources1 of this.getSources()) {
+    for (let sources1 of this.getSources({
+      multiscaleToViewTransform: new Float32Array(),
+      displayRank: 1,
+      modelChannelDimensionIndices: [],
+    })) {
       for (let source of sources1) {
         source.chunkSource.invalidateCache();
       }

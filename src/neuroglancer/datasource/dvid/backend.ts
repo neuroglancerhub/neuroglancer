@@ -30,7 +30,7 @@ import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {DVIDInstance, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
 import {DVIDPointAnnotation, getAnnotationDescription, DvidPointAnnotationProperty} from 'neuroglancer/datasource/dvid/utils';
-import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, AnnotationPropertySpec} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk, AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
@@ -195,6 +195,7 @@ function parseAnnotation(entry: any): DVIDPointAnnotation|null {
       annotation.relatedSegments = relatedSegments;
       annotation.point = corner;
       annotation.prop = prop;
+      annotation.properties = [annotation.renderingAttribute];
 
       let description = getAnnotationDescription(annotation);
       if (description) {
@@ -229,11 +230,14 @@ function DVIDToAnnotationType(typestr: string): string {
   }
 }
 
-const annotationPropertySerializer = new AnnotationPropertySerializer(3, []);
+// const annotationPropertySerializer = new AnnotationPropertySerializer(3, []);
 
 function parseAnnotations(
   source: DVIDAnnotationSource|DVIDAnnotationGeometryChunkSource,
-  chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any[]) {
+  chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any[],
+  propSpec: AnnotationPropertySpec[]) {
+
+  const annotationPropertySerializer = new AnnotationPropertySerializer(3, propSpec);
   const serializer = new AnnotationSerializer(annotationPropertySerializer);
   if (responses) {
     responses.forEach((response) => {
@@ -319,14 +323,14 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
           },
           cancellationToken)
           .then(values => {
-            parseAnnotations(this, chunk, values);
+            parseAnnotations(this, chunk, values, parameters.properties);
           });
       } else {
         throw Error('Expecting a valid user name.')
       }
     } else {
       if (chunk.source.spec.upperChunkBound[0] <= chunk.source.spec.lowerChunkBound[0]) {
-        return Promise.resolve(parseAnnotations(this, chunk, []));
+        return Promise.resolve(parseAnnotations(this, chunk, [], parameters.properties));
       }
       const chunkDataSize = this.parameters.chunkDataSize;
       const chunkPosition = chunk.chunkGridPosition.map((x, index) => x * chunkDataSize[index]);
@@ -342,7 +346,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         },
         cancellationToken)
         .then(values => {
-          parseAnnotations(this, chunk, values);
+          parseAnnotations(this, chunk, values, parameters.properties);
         });
     }
   }
@@ -426,7 +430,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
       },
       cancellationToken)
       .then(values => {
-        parseAnnotations(this, chunk, values);
+        parseAnnotations(this, chunk, values, parameters.properties);
       });
   }
 
