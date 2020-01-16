@@ -240,7 +240,7 @@ function DVIDToAnnotationType(typestr: string): string {
 function parseAnnotations(
   source: DVIDAnnotationSource|DVIDAnnotationGeometryChunkSource,
   chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any[],
-  propSpec: AnnotationPropertySpec[]) {
+  propSpec: AnnotationPropertySpec[], emittingAddSignal: boolean) {
 
   const annotationPropertySerializer = new AnnotationPropertySerializer(3, propSpec);
   const serializer = new AnnotationSerializer(annotationPropertySerializer);
@@ -251,11 +251,13 @@ function parseAnnotations(
           let annotation = parseAnnotation(response);
           if (annotation) {
             serializer.add(annotation);
-            if (annotation.kind === 'Note') {
-              source.rpc!.invoke(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, {
-                id: source.rpcId,
-                newAnnotation: {...annotation, description: getAnnotationDescription(annotation)}
-              });
+            if (emittingAddSignal) {
+              if (annotation.kind === 'Note') {
+                source.rpc!.invoke(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, {
+                  id: source.rpcId,
+                  newAnnotation: {...annotation, description: getAnnotationDescription(annotation)}
+                });
+              }
             }
           }
         } catch (e) {
@@ -352,14 +354,14 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
           },
           cancellationToken)
           .then(values => {
-            parseAnnotations(this, chunk, values, parameters.properties);
+            parseAnnotations(this, chunk, values, parameters.properties, true);
           });
       } else {
         throw Error('Expecting a valid user name.')
       }
     } else {
       if (chunk.source.spec.upperChunkBound[0] <= chunk.source.spec.lowerChunkBound[0]) {
-        return Promise.resolve(parseAnnotations(this, chunk, [], parameters.properties));
+        return Promise.resolve(parseAnnotations(this, chunk, [], parameters.properties, true));
       }
       const chunkDataSize = this.parameters.chunkDataSize;
       const chunkPosition = chunk.chunkGridPosition.map((x, index) => x * chunkDataSize[index]);
@@ -375,7 +377,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         },
         cancellationToken)
         .then(values => {
-          parseAnnotations(this, chunk, values, parameters.properties);
+          parseAnnotations(this, chunk, values, parameters.properties, false);
         });
     }
   }
@@ -414,7 +416,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         },
         cancellationToken)
         .then(values => {
-          parseAnnotations(this, chunk, values, parameters.properties);
+          parseAnnotations(this, chunk, values, parameters.properties, false);
         });
     } else {
       throw Error('Synced label missing');
