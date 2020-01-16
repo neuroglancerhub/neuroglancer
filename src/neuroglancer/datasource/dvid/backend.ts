@@ -408,7 +408,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         this.credentialsProvider,
         {
           method: 'GET',
-          url: dataInstance.getNodeApiUrl(this.getPathByBodyId(parameters.syncedLabel, chunk.objectId)),
+          url: dataInstance.getNodeApiUrl(this.getPathByBodyId(parameters.dataInstanceKey, chunk.objectId)),
           payload: undefined,
           responseType: 'json',
         },
