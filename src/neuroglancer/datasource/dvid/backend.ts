@@ -391,8 +391,8 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
     return `/${this.parameters.dataInstanceKey}/elements`;
   }
 
-  private getPathByBodyId(bodyId: Uint64) {
-    return `/${this.parameters.dataInstanceKey}/label/${bodyId}`;
+  private getPathByBodyId(segmentation: string, bodyId: Uint64) {
+    return `/${segmentation}/label/${bodyId}`;
   }
 
   private getPathByAnnotationId(annotationId: string) {
@@ -402,19 +402,23 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
   downloadSegmentFilteredGeometry(
     chunk: AnnotationSubsetGeometryChunk, _relationshipIndex: number, cancellationToken: CancellationToken) {
     const { parameters } = this;
-    let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-    return makeRequestWithCredentials(
-      this.credentialsProvider,
-      {
-        method: 'GET',
-        url: dataInstance.getNodeApiUrl(this.getPathByBodyId(chunk.objectId)),
-        payload: undefined,
-        responseType: 'json',
-      },
-      cancellationToken)
-      .then(values => {
-        parseAnnotations(this, chunk, values, parameters.properties);
-      });
+    if (parameters.syncedLabel) {
+      let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+      return makeRequestWithCredentials(
+        this.credentialsProvider,
+        {
+          method: 'GET',
+          url: dataInstance.getNodeApiUrl(this.getPathByBodyId(parameters.syncedLabel, chunk.objectId)),
+          payload: undefined,
+          responseType: 'json',
+        },
+        cancellationToken)
+        .then(values => {
+          parseAnnotations(this, chunk, values, parameters.properties);
+        });
+    } else {
+      throw Error('Synced label missing');
+    }
   }
 
   downloadMetadata(chunk: AnnotationMetadataChunk, cancellationToken: CancellationToken) {

@@ -55,20 +55,25 @@ serverDataTypes.set('uint64', DataType.UINT64);
 
 export class DataInstanceBaseInfo {
   get typeName(): string {
-    return this.obj['TypeName'];
+    return verifyObjectProperty(this.obj, 'TypeName', verifyString);
   }
 
   get compressionName(): string {
-    return this.obj['Compression'];
+    return verifyObjectProperty(this.obj, 'Compression', verifyString);
   }
 
   constructor(public obj: any) {
     verifyObject(obj);
-    verifyObjectProperty(obj, 'TypeName', verifyString);
   }
 }
 
 export class DataInstanceInfo {
+  lowerVoxelBound: vec3;
+  upperVoxelBoundInclusive: vec3;
+  voxelSize: vec3;
+  blockSize: vec3;
+  numLevels: number;
+
   constructor(public obj: any, public name: string, public base: DataInstanceBaseInfo) {}
 }
 
@@ -85,11 +90,7 @@ class DVIDAnnotationChunkSource extends
 (WithParameters(WithCredentialsProvider<DVIDToken>()(AnnotationGeometryChunkSource), AnnotationChunkSourceParameters)) {}
 
 export class AnnotationDataInstanceInfo extends DataInstanceInfo {
-  lowerVoxelBound: vec3;
-  upperVoxelBoundInclusive: vec3;
-  voxelSize: vec3;
-  blockSize: vec3;
-  numLevels: number;
+  
 
   get extended() {
     return verifyObjectProperty(this.obj, 'Extended', verifyObject);
@@ -132,10 +133,6 @@ export class AnnotationDataInstanceInfo extends DataInstanceInfo {
 
 export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
-  lowerVoxelBound: vec3;
-  upperVoxelBoundInclusive: vec3;
-  voxelSize: vec3;
-  numLevels: number;
   meshSrc: string;
   skeletonSrc: string;
 
@@ -183,6 +180,9 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     this.voxelSize = verifyObjectProperty(
         extended, 'VoxelSize',
         x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
+    this.blockSize = verifyObjectProperty(
+      extended, 'BlockSize',
+      x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));    
     this.lowerVoxelBound =
         verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
     this.upperVoxelBoundInclusive =
@@ -597,7 +597,7 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 // const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)(\?.*)?$/;
 const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/;
 
-function parseVolumeKey(url: string): AnnotationSourceParameters {
+function parseSourceUrl(url: string): AnnotationSourceParameters {
   let match = url.match(urlPattern);
   if (match === null) {
     throw new Error(`Invalid DVID URL: ${JSON.stringify(url)}.`);
@@ -623,11 +623,13 @@ function parseVolumeKey(url: string): AnnotationSourceParameters {
   }
 
   let auth = parameters.auth;
+  /*
   if (!auth) {
     if (sourceParameters.baseUrl.startsWith('https')) {
       auth = `${sourceParameters.baseUrl}/api/server/token`;
     }
   }
+  */
 
   if (auth) {
     sourceParameters.authServer = auth;
@@ -769,7 +771,7 @@ export function getDataSource(options: GetDataSourceOptions, getCredentialsProvi
   //   throw new Error(`Invalid DVID URL: ${JSON.stringify(options.providerUrl)}.`);
   // }
 
-  let sourceParameters = parseVolumeKey(options.providerUrl);
+  let sourceParameters = parseSourceUrl(options.providerUrl);
 
   const baseUrl = sourceParameters.baseUrl;
   const nodeKey = sourceParameters.nodeKey;
@@ -805,6 +807,7 @@ export function getDataSource(options: GetDataSourceOptions, getCredentialsProvi
           sourceParameters.usertag = userTagged(sourceParameters);
           sourceParameters.user = getUser(sourceParameters, credentials.credentials);
           sourceParameters.schema = getSchema(sourceParameters);
+          sourceParameters.syncedLabel = getSyncedLabel({Base: dataInstanceInfo.base.obj});
           sourceParameters.properties =[{
             identifier: 'rendering_attribute',
             description: 'rendering attribute',
@@ -859,6 +862,9 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
 }
 
 export async function completeUrl(options: CompleteUrlOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<CompletionResult> {
+  let parameters = parseSourceUrl(options.providerUrl);
+
+  /*
   const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/(.*)$/;
   let match = options.providerUrl.match(curUrlPattern);
   if (match === null) {
@@ -871,8 +877,9 @@ export async function completeUrl(options: CompleteUrlOptions, getCredentialsPro
   if (baseUrl.startsWith('https')) {
     auth = `${baseUrl}/api/server/token`;
   }
-  const serverInfo = await getServerInfo(options.chunkManager, baseUrl, getCredentialsProvider(auth));
-  return applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path));
+  */
+  const serverInfo = await getServerInfo(options.chunkManager, parameters.baseUrl, getCredentialsProvider(parameters.authServer));
+  return applyCompletionOffset(parameters.baseUrl.length + 1, completeNodeAndInstance(serverInfo, `${parameters.nodeKey}/${parameters.dataInstanceKey}`));
 }
 
 export class VolumeInfo {
