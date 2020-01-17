@@ -958,17 +958,17 @@ function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVo
       upperVoxelBound: scale.upperVoxelBound
     });
 
-    return [{ spec, chunkToMultiscaleTransform: mat4.create()}];
+    return { spec, chunkToMultiscaleTransform: mat4.create()};
   };
 
   if (parameters.usertag) {
     if (parameters.user) {
-      return [makeSpec(multiscaleInfo.scales[0])];
+      return [[makeSpec(multiscaleInfo.scales[0])]];
     } else {
       throw("Expecting a valid user");
     }
   } else {
-    return multiscaleInfo.scales.map(scale => makeSpec(scale));
+    return [multiscaleInfo.scales.map(scale => makeSpec(scale))];
   }
 }
 
