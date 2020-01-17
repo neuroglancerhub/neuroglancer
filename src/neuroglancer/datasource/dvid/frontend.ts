@@ -1163,11 +1163,16 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
 
     let sourceSpecifications = makeAnnotationGeometrySourceSpecifications(this.multiscaleVolumeInfo, this.parameters);
 
+    let limit = 0;
+    if (sourceSpecifications[0].length > 1) {
+      limit = 1e5;
+    }
+
     return sourceSpecifications.map(
       alternatives =>
         alternatives.map(({ spec, chunkToMultiscaleTransform }) => ({
           chunkSource: this.chunkManager.getChunkSource(DVIDAnnotationChunkSource, {
-            spec: { limit: 0, chunkToMultiscaleTransform, ...spec },
+            spec: { limit, chunkToMultiscaleTransform, ...spec },
             parent: this,
             credentialsProvider: this.credentialsProvider,
             parameters: this.parameters
