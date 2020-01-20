@@ -1,4 +1,4 @@
-import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
+// import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeMinimalViewer} from 'neuroglancer/ui/minimal_viewer';
 import {registerLayerType, registerVolumeLayerType} from 'neuroglancer/layer';
