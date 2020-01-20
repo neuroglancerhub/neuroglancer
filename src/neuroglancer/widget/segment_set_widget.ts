@@ -104,7 +104,7 @@ export class SegmentSetWidget extends RefCounted {
     let itemElement = document.createElement('button');
     itemElement.className = 'segment-button';
     itemElement.textContent = s;
-    itemElement.title = `Click to remove segment ID ${s}, control+click/right click/⌘+click to copy ID`;
+    itemElement.title = `Click to remove segment ID ${s}, control+click/right click to copy ID`;
     let widget = this;
     itemElement.addEventListener('click', function(this: ItemElement) {
       temp.tryParseString(this.textContent!);
