@@ -113,7 +113,7 @@ export class SegmentSetWidget extends RefCounted {
     itemElement.addEventListener('contextmenu', function(this: ItemElement) {
       const result = setClipboard(this.textContent!);
       StatusMessage.showTemporaryMessage(
-        result ? `Segmentation ${this.textContent} copied to clipboard` : `Failed to copy segmentation to clipboard`);
+        result ? `Segment ID ${this.textContent} copied to clipboard` : `Failed to copy segment ID to clipboard`);
     });
     itemElement.addEventListener('mouseenter', function(this: ItemElement) {
       temp.tryParseString(this.textContent!);
