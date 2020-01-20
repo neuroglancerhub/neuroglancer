@@ -82,8 +82,8 @@ export function setupDefaultViewer(options: {
   }));
   hashBinding.updateFromUrlHash(); */
 
-  bindDefaultCopyHandler(viewer);
-  bindDefaultPasteHandler(viewer);
+  // bindDefaultCopyHandler(viewer);
+  // bindDefaultPasteHandler(viewer);
 
   return viewer;
 }

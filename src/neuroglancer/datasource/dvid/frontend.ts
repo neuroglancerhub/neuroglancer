@@ -1165,7 +1165,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
 
     let limit = 0;
     if (sourceSpecifications[0].length > 1) {
-      limit = 1e5;
+      limit = 10;
     }
 
     return sourceSpecifications.map(
