@@ -17,6 +17,8 @@
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {setClipboard} from 'neuroglancer/util/clipboard';
+import {StatusMessage} from 'neuroglancer/status';
 
 import 'neuroglancer/noselect.css';
 import './segment_set_widget.css';
@@ -102,11 +104,16 @@ export class SegmentSetWidget extends RefCounted {
     let itemElement = document.createElement('button');
     itemElement.className = 'segment-button';
     itemElement.textContent = s;
-    itemElement.title = `Remove segment ID ${s}`;
+    itemElement.title = `Click to remove segment ID ${s}, control+click/right click/⌘+click to copy ID`;
     let widget = this;
     itemElement.addEventListener('click', function(this: ItemElement) {
       temp.tryParseString(this.textContent!);
       widget.visibleSegments.delete(temp);
+    });
+    itemElement.addEventListener('contextmenu', function(this: ItemElement) {
+      const result = setClipboard(this.textContent!);
+      StatusMessage.showTemporaryMessage(
+        result ? `Segmentation ${this.textContent} copied to clipboard` : `Failed to copy segmentation to clipboard`);
     });
     itemElement.addEventListener('mouseenter', function(this: ItemElement) {
       temp.tryParseString(this.textContent!);
