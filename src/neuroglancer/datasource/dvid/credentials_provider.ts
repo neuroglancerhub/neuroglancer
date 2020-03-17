@@ -71,7 +71,8 @@ export class DVIDCredentialsProvider extends CredentialsProvider<DVIDToken> {
         button.textContent = linkMessage;
         status.element.appendChild(button);
         button.addEventListener('click', () => {
-          login();
+          window.alert('Please log into https://neuprint.janelia.org/ and then refresh the neurogalncer page to try again');
+          // login();
         });
         status.setVisible(true);
       }
