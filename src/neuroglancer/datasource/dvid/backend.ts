@@ -182,6 +182,7 @@ function parseAnnotation(entry: any): DVIDPointAnnotation|null {
       // let segments: Array<Uint64> = new Array<Uint64>();
       let relatedSegments : Uint64[][] = [[]];
 
+      prop = propertiesObj;
       if (kind === 'Note') {
         if (propertiesObj.type) {
           prop.type = DVIDToAnnotationType(propertiesObj.type);
