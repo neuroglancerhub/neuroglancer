@@ -74,36 +74,6 @@ export function makeRequest(
       return cancellableFetchOk(requestInfo, init, responseJson, cancellationToken);
     }
 }
-/*
-export function makeRequestWithCredentials(
-  instance: DVIDInstance,
-  credentialsProvider: CredentialsProvider<DVIDToken>,
-  httpCall: HttpCall & { responseType: 'arraybuffer' },
-  cancellationToken?: CancellationToken): Promise<ArrayBuffer>;
-
-export function makeRequestWithCredentials(
-  instance: DVIDInstance,
-  credentialsProvider: CredentialsProvider<DVIDToken>,
-  httpCall: HttpCall & { responseType: 'json' }, cancellationToken?: CancellationToken): Promise<any>;
-
-export function makeRequestWithCredentials(
-  instance: DVIDInstance,
-  credentialsProvider: CredentialsProvider<DVIDToken>,
-  httpCall: HttpCall & { responseType: '' }, cancellationToken?: CancellationToken): Promise<any>;
-
-export function makeRequestWithCredentials(
-  instance: DVIDInstance, credentialsProvider: CredentialsProvider<DVIDToken>,
-  httpCall: HttpCall & { responseType: XMLHttpRequestResponseType },
-  cancellationToken: CancellationToken = uncancelableToken): Promise<any> {
-    return fetchWithDVIDCredentials(
-      credentialsProvider, 
-      `${instance.getNodeApiUrl()}${httpCall.path}`, 
-      { method: httpCall.method, body: httpCall.payload }, 
-      httpCall.responseType === '' ? responseText : (httpCall.responseType === 'json' ? responseJson : responseArrayBuffer),
-      cancellationToken
-    );
-}
-*/
 
 export function makeRequestWithCredentials(
   credentialsProvider: CredentialsProvider<DVIDToken>,

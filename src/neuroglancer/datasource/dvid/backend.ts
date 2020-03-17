@@ -16,7 +16,7 @@
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
 import {AnnotationSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, AnnotationChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
-import {assignMeshFragmentData, decodeTriangleVertexPositionsAndIndices, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
+import {assignMeshFragmentData, decodeTriangleVertexPositionsAndIndices, decodeTriangleVertexPositionsAndIndicesM, FragmentChunk, ManifestChunk, MeshSource} from 'neuroglancer/mesh/backend';
 import {SkeletonChunk, SkeletonSource} from 'neuroglancer/skeleton/backend';
 import {decodeSwcSkeletonChunk} from 'neuroglancer/skeleton/decode_swc_skeleton';
 import {decodeCompressedSegmentationChunk} from 'neuroglancer/sliceview/backend_chunk_decoders/compressed_segmentation';
@@ -69,6 +69,20 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
           response, Endianness.LITTLE, /*vertexByteOffset=*/ 4, numVertices));
 }
 
+export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<ArrayBuffer>) {
+  let numVerticesArray = new Array<number>();
+  for (let response of responses) {
+    let dv = new DataView(response);
+    let numVertices = dv.getUint32(0, true);
+    numVerticesArray.push(numVertices);
+  }
+  
+  assignMeshFragmentData(
+      chunk,
+      decodeTriangleVertexPositionsAndIndicesM(
+          responses, Endianness.LITTLE, /*vertexByteOffset=*/ 4, numVerticesArray));
+}
+
 @registerSharedObject() export class DVIDMeshSource extends
 (DVIDSource(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk) {
@@ -79,13 +93,38 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
     return Promise.resolve(undefined);
   }
 
+  async downloadMergeFragment(keyBaseUrl: string, keys: any, cancellationToken: CancellationToken) : Promise<Array<ArrayBuffer>>
+  {
+    let data = new Array<ArrayBuffer>();
+    for (let key of keys) {
+      const url = `${keyBaseUrl}/${key}`;
+      if (!key.endsWith('.ngmesh')) {
+        key += '.ngmesh';
+      }
+      data.push(await makeRequestWithCredentials(this.credentialsProvider, {
+        method: 'GET', url: url, responseType: 'arraybuffer'
+      }, cancellationToken))
+    }
+    return Promise.resolve(data);
+  }
+
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-    const url = `${parameters.baseUrl}/api/node/${parameters['nodeKey']}/${
-        parameters['dataInstanceKey']}/key/${chunk.fragmentId}.ngmesh`;
+
+    const keyBaseUrl = `${parameters.baseUrl}/api/node/${parameters['nodeKey']}/${
+      parameters['dataInstanceKey']}/key`;
+
+    const mergeUrl = `${keyBaseUrl}/${chunk.fragmentId}.merge`;
+
     return makeRequestWithCredentials(this.credentialsProvider, {
+      method: 'GET', url: mergeUrl, responseType: 'json'
+    }, cancellationToken).then(response => this.downloadMergeFragment(keyBaseUrl, response, cancellationToken).then(data => decodeFragmentChunkM(chunk, data))).catch(() => {
+      const url = `${keyBaseUrl}/${chunk.fragmentId}.ngmesh`;
+      return makeRequestWithCredentials(this.credentialsProvider, {
           method: 'GET', url: url, responseType: 'arraybuffer'
         }, cancellationToken).then(response => decodeFragmentChunk(chunk, response));
+    });
+
         /*
     return cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken)
         .then(response => decodeFragmentChunk(chunk, response));
@@ -182,6 +221,7 @@ function parseAnnotation(entry: any): DVIDPointAnnotation|null {
       // let segments: Array<Uint64> = new Array<Uint64>();
       let relatedSegments : Uint64[][] = [[]];
 
+      prop = propertiesObj;
       if (kind === 'Note') {
         if (propertiesObj.type) {
           prop.type = DVIDToAnnotationType(propertiesObj.type);
@@ -490,7 +530,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         this.credentialsProvider,
         {
           method: 'POST',
-          url: dataInstance.getNodeApiUrl(this.getElementsPath()),
+          url: dataInstance.getNodeApiUrl(this.getElementsPath()) + `?app=Neuroglancer` + (parameters.user ? `&u=${parameters.user}` : ''),
           payload: JSON.stringify([dvidAnnotation]),
           responseType: '',
         });

@@ -119,6 +119,10 @@ export class UserLayer extends RefCounted {
     subsources;
   }
 
+  invalidateCache() {
+    // this.manager.chunkManager.
+  }
+
   updateDataSubsourceActivations() {
     function* getDataSubsources(this: UserLayer): Iterable<LoadedDataSubsource> {
       for (const dataSource of this.dataSources) {

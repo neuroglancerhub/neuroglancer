@@ -294,6 +294,38 @@ export function decodeTriangleVertexPositionsAndIndices(
       numTriangles);
 }
 
+function NumberArrayConcat<T extends Float32Array | Int32Array | Uint32Array | Uint16Array>(first: T, second: T, type: (new (len: number) => T))
+{
+  let firstLength = first.length,
+  result = new type(firstLength + second.length);
+
+  result.set(first);
+  result.set(second, firstLength);
+
+  return result;
+}
+
+export function decodeTriangleVertexPositionsAndIndicesM(
+  data: Array<ArrayBuffer>, endianness: Endianness, vertexByteOffset: number, numVertices: Array<number>,
+  indexByteOffset?: number, numTriangles?: number): RawMeshData {
+  let finalMesh = decodeVertexPositionsAndIndices(
+    /*verticesPerPrimitive=*/ 3, data[0], endianness, vertexByteOffset, numVertices[0], indexByteOffset, numTriangles);
+  let currentNumVertices = numVertices[0];
+  for (let i = 1; i < data.length; i++) {
+    let mesh = decodeVertexPositionsAndIndices(
+        /*verticesPerPrimitive=*/ 3, data[i], endianness, vertexByteOffset, numVertices[i], indexByteOffset,
+      numTriangles);
+    mesh.indices.forEach((_: number, index: number) => {
+      mesh.indices[index] += currentNumVertices;
+    });
+    currentNumVertices += numVertices[i];
+    finalMesh.vertexPositions = NumberArrayConcat(finalMesh.vertexPositions, mesh.vertexPositions, Float32Array);
+    finalMesh.indices = NumberArrayConcat(finalMesh.indices, mesh.indices, Uint32Array);
+  }
+
+  return finalMesh;
+}
+
 export interface MeshSource {
   // TODO(jbms): Move this declaration to class definition below and declare abstract once
   // TypeScript supports mixins with abstract classes.

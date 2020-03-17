@@ -35,7 +35,7 @@ import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglan
 import {mat4, vec3} from 'neuroglancer/util/geom';
 // import {fetchOk} from 'neuroglancer/util/http_request';
 import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, verifyStringArray, verifyFiniteNonNegativeFloat} from 'neuroglancer/util/json';
-import {DVIDToken, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
+import {DVIDInstance, DVIDToken, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
 import {MultiscaleAnnotationSource, AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal, NullarySignal} from 'neuroglancer/util/signal';
@@ -46,6 +46,8 @@ import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_
 import { makeSliceViewChunkSpecification } from 'neuroglancer/sliceview/base';
 import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/datasource/dvid/widgets';
 import {defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
+import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
+// import {Uint64} from 'neuroglancer/util/uint64';
 // import { DVIDAnnotationGeometryChunkSource } from './backend';
 
 let serverDataTypes = new Map<string, DataType>();
@@ -488,82 +490,6 @@ function userTagged(parameters: AnnotationSourceParameters) {
   return false;
 }
 
-/*
-function getAnnotationDataInstanceDetails(chunkManager: ChunkManager, parameters: AnnotationSourceParameters, info: DataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
-  let {baseUrl, nodeKey} = parameters;
-  return chunkManager.memoize.getUncounted(
-      {type: 'dvid:getInstanceDetails', baseUrl, nodeKey, name: info.name}, async () => {
-      let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-      let result = makeRequestWithCredentials(credentialsProvider, {
-        method: 'GET',
-        url: instance.getNodeApiUrl(`/${info.name}/info`),
-        responseType: 'json'
-      });
-      const description = `datainstance info for node ${nodeKey} and instance ${info.name} ` +
-        `on DVID server ${baseUrl}`;
-
-      StatusMessage.forPromise(result, {
-        initialMessage: `Retrieving ${description}.`,
-        delay: true,
-        errorPrefix: `Error retrieving ${description}: `,
-      });
-
-      let instanceDetails = await result;
-
-      let syncedLabel = getSyncedLabel(instanceDetails);
-      if (syncedLabel) {
-        instanceDetails = await makeRequestWithCredentials(credentialsProvider, {
-          method: 'GET',
-          url: instance.getNodeApiUrl(`/${syncedLabel}/info`),
-          responseType: 'json'
-        });
-      } else {        
-        instanceDetails = getVolumeInfoResponseFromTags(getInstanceTags(instanceDetails));
-      }
-
-      return new AnnotationDataInstanceInfo(instanceDetails, info.name, info.base);
-  });
-}
-*/
-
-/**
- * Get extra dataInstance info that isn't available on the server level.
- * this requires an extra api call
- */
-/*
-export function getDataInstanceDetails(
-    chunkManager: ChunkManager, parameters: DVIDSourceParameters, info: VolumeDataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
-  let {baseUrl, nodeKey} = parameters;
-  return chunkManager.memoize.getUncounted(
-      {type: 'dvid:getInstanceDetails', baseUrl, nodeKey, name: info.name}, async () => {
-        // let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-        let instanceDetails = info.obj;
-        let result = makeRequestWithCredentials(credentialsProvider, {
-          method: 'GET',
-          url: instance.getNodeApiUrl(`/${info.name}/info`),
-          responseType: 'json'
-        });
-        const description = `datainstance info for node ${nodeKey} and instance ${info.name} ` +
-            `on DVID server ${baseUrl}`;
-
-        StatusMessage.forPromise(result, {
-          initialMessage: `Retrieving ${description}.`,
-          delay: true,
-          errorPrefix: `Error retrieving ${description}: `,
-        });
-
-        let instanceDetails = await result;
-        
-        let extended = verifyObjectProperty(instanceDetails, 'Extended', verifyObject);
-        info.lowerVoxelBound =
-          verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
-        info.upperVoxelBoundInclusive =
-          verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x));
-        return info;
-      });
-}
-*/
-
 class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   get dataType() {
     return this.info.dataType;
@@ -763,6 +689,55 @@ function getSchema(parameters: AnnotationSourceParameters) {
       return JSON.parse(schemaJson);
     }
   }
+}
+
+function bodyArrayToJson(bodyArray: Array<string>)
+{
+  return `[${bodyArray.join()}]`; 
+}
+
+function getCredentialsProvider(authServer: AuthType) {
+  if (authServer) {
+    return defaultCredentialsManager.getCredentialsProvider<DVIDToken>(authServer, authServer);
+  } else {
+    return defaultCredentialsManager.getCredentialsProvider<DVIDToken>(credentialsKey, authServer);
+  }
+}
+
+export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
+{
+  let sourceParameters = parseSourceUrl(sourceUrl);
+  let { baseUrl, nodeKey, dataInstanceKey } = sourceParameters;
+  //Compose merge url
+  let dvidInstance = new DVIDInstance(baseUrl, nodeKey);
+  let mergeUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}/merge`);
+  //Post merge
+  let data = bodyArrayToJson(bodyArray);
+
+  let credentials = await getCredentialsProvider(sourceParameters.authServer).get();
+  const credentialsProvider = getCredentialsProvider('token:' + credentials.credentials);
+  const user = getUser(sourceParameters, credentials.credentials);
+
+  return makeRequestWithCredentials(
+    credentialsProvider,
+    {
+      url: mergeUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
+      method: 'POST',
+      responseType: 'json',
+      payload: data
+    }).then(response => {
+      let meshUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}_meshes/${bodyArray[0]}.merge`);
+      makeRequestWithCredentials(
+        credentialsProvider,
+        {
+          url: meshUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
+          method: 'POST',
+          responseType: 'json',
+          payload: data
+        }
+      );
+      return response;
+    });
 }
 
 export function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<DataSource> {

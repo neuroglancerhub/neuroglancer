@@ -43,7 +43,11 @@ export class Uint64Set extends SharedObjectCounterpart implements
   }
 
   add_(x: Uint64) {
-    return this.hashTable.add(x);
+    if (x.toString() !== '0') {
+      return this.hashTable.add(x);
+    } else {
+      return false;
+    }
   }
 
   add(x: Uint64) {

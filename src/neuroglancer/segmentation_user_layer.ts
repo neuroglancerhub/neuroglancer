@@ -54,6 +54,10 @@ import {ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 
+//DVID TMP HACK
+import {mergeBodies} from 'neuroglancer/datasource/dvid/frontend';
+import {StatusMessage} from 'neuroglancer/status';
+
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
@@ -85,6 +89,7 @@ export class SegmentationUserLayer extends Base {
     notSelectedAlpha: trackableAlphaValue(0),
     objectAlpha: trackableAlphaValue(1.0),
     hideSegmentZero: new TrackableBoolean(true, true),
+    // groupedSegments: Uint64Map.makeWithCounterpart(this.manager.worker),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
@@ -93,9 +98,11 @@ export class SegmentationUserLayer extends Base {
     renderScaleHistogram: new RenderScaleHistogram(),
     renderScaleTarget: trackableRenderScaleTarget(1),
   };
+  specification = undefined;
 
   constructor(managedLayer: Borrowed<ManagedUserLayer>, specification: any) {
     super(managedLayer, specification);
+    this.specification = specification;
     this.displayState.visibleSegments.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentEquivalences.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentSelectionState.bindTo(this.manager.layerSelectedValues, this);
@@ -433,6 +440,60 @@ class DisplayOptionsTab extends Tab {
     addSegmentWidget.element.classList.add('add-segment');
     addSegmentWidget.element.title = 'Add one or more segment IDs';
     element.appendChild(this.registerDisposer(addSegmentWidget).element);
+
+    {
+      let mergeElement = document.createElement('div');
+      let fieldset = document.createElement('fieldset');
+      let legend = document.createElement('legend');
+      legend.textContent = 'Proofread';
+      fieldset.appendChild(legend);
+      mergeElement.appendChild(fieldset);
+
+      // const groupButton = document.createElement('button');
+      // groupButton.textContent = 'Group';
+      // fieldset.appendChild(groupButton);
+
+      // const decoration = document.createTextNode(" => ");
+      // fieldset.appendChild(decoration);
+
+      const uploadButton = document.createElement('button');
+      uploadButton.textContent = 'Merge';
+      uploadButton.addEventListener('click', () => {
+        if (this.layer.displayState.visibleSegments.size > 1) {
+          let merging = window.confirm('Do you want to merge the selected bodies now? It cannot be undone!');
+          if (merging) {
+            const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
+            let source = verifyObjectProperty(this.layer.specification, 'source', x => verifyObjectProperty(x, 'url', verifyString));
+            const m = source.match(protocolPattern);
+            if (m === null || m[1] === undefined) {
+              throw new Error(`Data source URL must have the form "<protocol>://<path>".`);
+            }
+            let mergingJson = this.layer.displayState.visibleSegments.toJSON();
+            this.layer.displayState.visibleSegments.clear();
+            StatusMessage.showTemporaryMessage('Merging bodies: ' + mergingJson);
+            mergeBodies(m[2], mergingJson).then(response => {
+              StatusMessage.showTemporaryMessage('Merged: ' + JSON.stringify(response));
+              // this.layer.updateDataSubsourceActivations();
+              // for (let source of this.layer.dataSources) {
+              //   source.invalidateCache();
+              // }
+              setTimeout(() => { window.location.reload() }, 500);
+            }
+            ).catch(e => {
+              throw e;
+            }
+            );
+          } 
+        }else {
+            StatusMessage.showTemporaryMessage('You need to select at least two bodies to merge.')
+          }
+      });
+
+      fieldset.appendChild(uploadButton);
+
+      element.appendChild(mergeElement);
+    }
+
     this.registerDisposer(addSegmentWidget.valuesEntered.add((values: Uint64[]) => {
       for (const value of values) {
         this.layer.displayState.visibleSegments.add(value);
