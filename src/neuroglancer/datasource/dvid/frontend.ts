@@ -704,38 +704,97 @@ function getCredentialsProvider(authServer: AuthType) {
   }
 }
 
+async function uploadMergedMesh(
+  meshUrl: string, bodyArray: Array<string>, user: string | null | undefined, credentialsProvider: CredentialsProvider<DVIDToken>) 
+{
+  return makeRequestWithCredentials(
+    credentialsProvider,
+    {
+      url: meshUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
+      method: 'POST',
+      responseType: 'json',
+      payload: bodyArrayToJson(bodyArray)
+    }
+  );
+}
+
+async function getBodySizes(dataInstanceUrl: string, bodyArray: Array<string>, credentialsProvider: CredentialsProvider<DVIDToken>)
+{
+  let promiseArray = new Array<Promise<number>>();
+  for (let body of bodyArray) {
+    promiseArray.push(
+      makeRequestWithCredentials(
+        credentialsProvider,
+        {
+          url: dataInstanceUrl + `/size/${body}`,
+          method: 'GET',
+          responseType: 'json'
+        }
+      ).then(response => verifyObjectProperty(response, 'voxels', verifyPositiveInt)).catch(e => {
+        throw new Error(`Failed to read body size for ${body}: ` + e);
+      })
+    )
+  }
+  return Promise.all(promiseArray);
+}
+
 export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
 {
   let sourceParameters = parseSourceUrl(sourceUrl);
   let { baseUrl, nodeKey, dataInstanceKey } = sourceParameters;
-  //Compose merge url
+
   let dvidInstance = new DVIDInstance(baseUrl, nodeKey);
-  let mergeUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}/merge`);
-  //Post merge
-  let data = bodyArrayToJson(bodyArray);
 
   let credentials = await getCredentialsProvider(sourceParameters.authServer).get();
   const credentialsProvider = getCredentialsProvider('token:' + credentials.credentials);
   const user = getUser(sourceParameters, credentials.credentials);
 
+  let dataInstanceUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}`);
+
+  let bodySizes = await getBodySizes(dataInstanceUrl, bodyArray, credentialsProvider);
+  let newBodyArray = [...bodyArray];
+  newBodyArray.sort((a: string, b: string) => {
+    let cmp = bodySizes[bodyArray.indexOf(a)] < bodySizes[bodyArray.indexOf(b)] ? 1 : -1;
+    return cmp;
+  })
+
+  let data = bodyArrayToJson(newBodyArray);
+  let mergeUrl = `${dataInstanceUrl}/merge`;
   return makeRequestWithCredentials(
     credentialsProvider,
     {
+      // url: dvidInstance.getNodeApiUrl(`/${dataInstanceKey}/info`),
+      // method: 'GET',
       url: mergeUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
       method: 'POST',
       responseType: 'json',
       payload: data
-    }).then(response => {
-      let meshUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}_meshes/${bodyArray[0]}.merge`);
-      makeRequestWithCredentials(
-        credentialsProvider,
-        {
-          url: meshUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
-          method: 'POST',
-          responseType: 'json',
-          payload: data
+    }).then(async response => {
+      let meshUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}_meshes/key/${newBodyArray[0]}.merge`);
+      await makeRequestWithCredentials(
+        credentialsProvider, {
+        method: 'GET', url: meshUrl, responseType: 'json'
+      }).then(
+        response => { 
+          newBodyArray = newBodyArray.concat(response.slice(1).map((e: any) => String(e)));
+          uploadMergedMesh(meshUrl, newBodyArray, user, credentialsProvider);
+        }
+      ).catch(
+        () => {
+          uploadMergedMesh(meshUrl, newBodyArray, user, credentialsProvider);
         }
       );
+      
+      // await makeRequestWithCredentials(
+      //   credentialsProvider,
+      //   {
+      //     url: meshUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
+      //     method: 'POST',
+      //     responseType: 'json',
+      //     payload: bodyArrayToJson(bodyArray)
+      //   }
+      // );
+      
       return response;
     });
 }

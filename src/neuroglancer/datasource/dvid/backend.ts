@@ -93,19 +93,42 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
     return Promise.resolve(undefined);
   }
 
-  async downloadMergeFragment(keyBaseUrl: string, keys: any, cancellationToken: CancellationToken) : Promise<Array<ArrayBuffer>>
+  async downloadMergeFragment(keyBaseUrl: string, keys: any, masterKey: any, cancellationToken: CancellationToken) : Promise<Array<ArrayBuffer>>
   {
     let data = new Array<ArrayBuffer>();
     for (let key of keys) {
-      const url = `${keyBaseUrl}/${key}`;
-      if (!key.endsWith('.ngmesh')) {
-        key += '.ngmesh';
+      let url = `${keyBaseUrl}/${key}`;
+      // if (!String(key).endsWith('.ngmesh')) {
+      //   url += '.ngmesh';
+      // }
+
+      if (masterKey === key) {
+        await makeRequestWithCredentials(this.credentialsProvider, {
+          method: 'GET', url: url + '.ngmesh', responseType: 'arraybuffer'
+        }, cancellationToken).then(
+          response => { data.push(response); }
+        ).catch(e => {
+          throw new Error(e);
+        });
+      } else {
+        await makeRequestWithCredentials(this.credentialsProvider, {
+          method: 'GET', url: url + '.merge', responseType: 'json'
+        }, cancellationToken).then(
+          response => this.downloadMergeFragment(
+          keyBaseUrl, response, key, cancellationToken
+        )).then(
+          result =>  { 
+            data.push(...result);
+            console.log(data.length);
+          }
+        ).catch(async () =>
+          data.push(await makeRequestWithCredentials(this.credentialsProvider, {
+            method: 'GET', url: url + '.ngmesh', responseType: 'arraybuffer'
+          }, cancellationToken))
+        );
       }
-      data.push(await makeRequestWithCredentials(this.credentialsProvider, {
-        method: 'GET', url: url, responseType: 'arraybuffer'
-      }, cancellationToken))
     }
-    return Promise.resolve(data);
+    return data;
   }
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
@@ -118,7 +141,11 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
 
     return makeRequestWithCredentials(this.credentialsProvider, {
       method: 'GET', url: mergeUrl, responseType: 'json'
-    }, cancellationToken).then(response => this.downloadMergeFragment(keyBaseUrl, response, cancellationToken).then(data => decodeFragmentChunkM(chunk, data))).catch(() => {
+    }, cancellationToken)
+    .then(
+      response => this.downloadMergeFragment(keyBaseUrl, response, chunk.fragmentId, cancellationToken)
+      .then(data => decodeFragmentChunkM(chunk, data)))
+    .catch(() => {
       const url = `${keyBaseUrl}/${chunk.fragmentId}.ngmesh`;
       return makeRequestWithCredentials(this.credentialsProvider, {
           method: 'GET', url: url, responseType: 'arraybuffer'

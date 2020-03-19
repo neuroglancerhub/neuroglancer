@@ -458,13 +458,14 @@ class DisplayOptionsTab extends Tab {
 
       const uploadButton = document.createElement('button');
       uploadButton.textContent = 'Merge';
+      const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
+      let source = verifyObjectProperty(this.layer.specification, 'source', x => verifyObjectProperty(x, 'url', verifyString));
+      const m = source.match(protocolPattern);
       uploadButton.addEventListener('click', () => {
         if (this.layer.displayState.visibleSegments.size > 1) {
           let merging = window.confirm('Do you want to merge the selected bodies now? It cannot be undone!');
           if (merging) {
-            const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
-            let source = verifyObjectProperty(this.layer.specification, 'source', x => verifyObjectProperty(x, 'url', verifyString));
-            const m = source.match(protocolPattern);
+            
             if (m === null || m[1] === undefined) {
               throw new Error(`Data source URL must have the form "<protocol>://<path>".`);
             }
@@ -488,10 +489,10 @@ class DisplayOptionsTab extends Tab {
             StatusMessage.showTemporaryMessage('You need to select at least two bodies to merge.')
           }
       });
-
       fieldset.appendChild(uploadButton);
-
-      element.appendChild(mergeElement);
+      if (m && (m[1] === 'dvid')) {
+        element.appendChild(mergeElement);
+      }
     }
 
     this.registerDisposer(addSegmentWidget.valuesEntered.add((values: Uint64[]) => {
