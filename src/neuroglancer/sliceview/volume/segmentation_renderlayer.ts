@@ -51,6 +51,7 @@ export interface SliceViewSegmentationDisplayState extends SegmentationDisplaySt
   selectedAlpha: TrackableAlphaValue;
   notSelectedAlpha: TrackableAlphaValue;
   hideSegmentZero: TrackableBoolean;
+  segmentHighlight: TrackableBoolean;
 }
 
 interface ShaderParameters {
@@ -199,8 +200,9 @@ uint64_t getMappedObjectId() {
     const {displayState} = this;
     const {segmentSelectionState, visibleSegments} = this.displayState;
     let selectedSegmentLow = 0, selectedSegmentHigh = 0;
-    if (segmentSelectionState.hasSelectedSegment) {
-      let seg = segmentSelectionState.selectedSegment;
+    let seg = segmentSelectionState.selectedSegment;
+    let segmentHighlight = segmentSelectionState.hasSelectedSegment && (displayState.segmentHighlight.value || (visibleSegments.hashTable.size == 0) || ( visibleSegments.has(seg)));
+    if (segmentHighlight) {  
       selectedSegmentLow = seg.low;
       selectedSegmentHigh = seg.high;
     }

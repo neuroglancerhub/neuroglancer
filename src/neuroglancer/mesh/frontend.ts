@@ -458,6 +458,10 @@ export class MeshSource extends ChunkSource {
   getChunk(x: any) {
     return new ManifestChunk(this, x);
   }
+  invalidateCache() {
+    super.invalidateCache();
+    this.fragmentSource.invalidateCache();
+  }
 }
 
 @registerSharedObjectOwner(FRAGMENT_SOURCE_RPC_ID)

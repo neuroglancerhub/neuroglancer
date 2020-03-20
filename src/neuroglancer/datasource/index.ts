@@ -139,6 +139,8 @@ export interface DataSubsourceEntry {
 
   subsource: DataSubsource;
 
+  invalidateVolumeSourceCache?(): void;
+
   /**
    * Homoegeneous transformation from the subsource to the model subspace corresponding to
    * `modelSubspceDimensionIndices`.  The rank is equal to the length of

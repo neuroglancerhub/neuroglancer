@@ -63,6 +63,7 @@ const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
 const SATURATION_JSON_KEY = 'saturation';
 const HIDE_SEGMENT_ZERO_JSON_KEY = 'hideSegmentZero';
+const SEGEMNT_HIGHLIGHT_JSON_KEY = 'showHoveredSegment';
 const MESH_JSON_KEY = 'mesh';
 const SKELETONS_JSON_KEY = 'skeletons';
 const SEGMENTS_JSON_KEY = 'segments';
@@ -88,6 +89,7 @@ export class SegmentationUserLayer extends Base {
     saturation: trackableAlphaValue(1.0),
     notSelectedAlpha: trackableAlphaValue(0),
     objectAlpha: trackableAlphaValue(1.0),
+    segmentHighlight: new TrackableBoolean(true, true),
     hideSegmentZero: new TrackableBoolean(true, true),
     // groupedSegments: Uint64Map.makeWithCounterpart(this.manager.worker),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
@@ -111,6 +113,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.objectAlpha.changed.add(this.specificationChanged.dispatch);
     this.displayState.hideSegmentZero.changed.add(this.specificationChanged.dispatch);
+    this.displayState.segmentHighlight.changed.add(this.specificationChanged.dispatch);
     this.displayState.skeletonRenderingOptions.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentColorHash.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentStatedColors.changed.add(this.specificationChanged.dispatch);
@@ -220,6 +223,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.notSelectedAlpha.restoreState(specification[NOT_SELECTED_ALPHA_JSON_KEY]);
     this.displayState.objectAlpha.restoreState(specification[OBJECT_ALPHA_JSON_KEY]);
     this.displayState.hideSegmentZero.restoreState(specification[HIDE_SEGMENT_ZERO_JSON_KEY]);
+    this.displayState.segmentHighlight.restoreState(specification[SEGEMNT_HIGHLIGHT_JSON_KEY]);
 
     const {skeletonRenderingOptions} = this.displayState;
     skeletonRenderingOptions.restoreState(specification[SKELETON_RENDERING_JSON_KEY]);
@@ -275,6 +279,7 @@ export class SegmentationUserLayer extends Base {
     x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
+    x[SEGEMNT_HIGHLIGHT_JSON_KEY] = this.displayState.segmentHighlight.toJSON();
     x[COLOR_SEED_JSON_KEY] = this.displayState.segmentColorHash.toJSON();
     let {segmentStatedColors} = this.displayState;
     if (segmentStatedColors.size > 0) {
@@ -442,6 +447,19 @@ class DisplayOptionsTab extends Tab {
     element.appendChild(this.registerDisposer(addSegmentWidget).element);
 
     {
+      const checkbox =
+          this.registerDisposer(new TrackableBooleanCheckbox(layer.displayState.segmentHighlight));
+      checkbox.element.className =
+          'neuroglancer-segmentation-dropdown-hide-segment-zero neuroglancer-noselect';
+      const label = document.createElement('label');
+      label.className =
+          'neuroglancer-segmentation-dropdown-hide-segment-zero neuroglancer-noselect';
+      label.appendChild(document.createTextNode('Show hovered segment'));
+      label.appendChild(checkbox.element);
+      element.appendChild(label);
+    }
+
+    {
       let mergeElement = document.createElement('div');
       let fieldset = document.createElement('fieldset');
       let legend = document.createElement('legend');
@@ -474,11 +492,24 @@ class DisplayOptionsTab extends Tab {
             StatusMessage.showTemporaryMessage('Merging bodies: ' + mergingJson);
             mergeBodies(m[2], mergingJson).then(response => {
               StatusMessage.showTemporaryMessage('Merged: ' + JSON.stringify(response));
+              for (let layer of this.layer.renderLayers) {
+                if (layer instanceof SegmentationRenderLayer) {
+                  for (let source of layer.visibleSourcesList) {
+                    source.source.invalidateCache();
+                  }
+                }else if (layer instanceof MeshLayer) {
+                  layer.source.invalidateCache();
+                } else if (layer instanceof SkeletonLayer) {
+                  layer.source.invalidateCache();
+                }
+              }
               // this.layer.updateDataSubsourceActivations();
               // for (let source of this.layer.dataSources) {
               //   source.invalidateCache();
               // }
-              setTimeout(() => { window.location.reload() }, 500);
+              // this.layer.displayState.visibleSegments.clear();
+              // this.layer.restoreState(this.layer.toJSON());
+              // setTimeout(() => { window.location.reload() }, 500);
             }
             ).catch(e => {
               throw e;

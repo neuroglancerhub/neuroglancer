@@ -37,6 +37,7 @@ import {FramebufferConfiguration, makeTextureBuffers, StencilBuffer} from 'neuro
 import {ShaderBuilder, ShaderModule, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
 import {registerSharedObjectOwner, RPC} from 'neuroglancer/worker_rpc';
+import {CHUNK_SOURCE_INVALIDATE_RPC_ID} from 'neuroglancer/chunk_manager/base';
 
 export type GenericChunkKey = string;
 
@@ -439,6 +440,10 @@ export abstract class SliceViewChunkSource<
   initializeCounterpart(rpc: RPC, options: any) {
     options['spec'] = this.spec;
     super.initializeCounterpart(rpc, options);
+  }
+
+  invalidateCache(): void {
+    this.rpc!.invoke(CHUNK_SOURCE_INVALIDATE_RPC_ID, {'id': this.rpcId});
   }
 }
 

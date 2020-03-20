@@ -121,10 +121,15 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
             data.push(...result);
             console.log(data.length);
           }
-        ).catch(async () =>
-          data.push(await makeRequestWithCredentials(this.credentialsProvider, {
-            method: 'GET', url: url + '.ngmesh', responseType: 'arraybuffer'
-          }, cancellationToken))
+        ).catch(async () => {
+          try {
+            data.push(await makeRequestWithCredentials(this.credentialsProvider, {
+              method: 'GET', url: url + '.ngmesh', responseType: 'arraybuffer'
+            }, cancellationToken));
+          } catch (e) {
+            console.log(e);
+          }
+        }
         );
       }
     }
@@ -145,7 +150,8 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
     .then(
       response => this.downloadMergeFragment(keyBaseUrl, response, chunk.fragmentId, cancellationToken)
       .then(data => decodeFragmentChunkM(chunk, data)))
-    .catch(() => {
+    .catch((e) => {
+      console.log(e);
       const url = `${keyBaseUrl}/${chunk.fragmentId}.ngmesh`;
       return makeRequestWithCredentials(this.credentialsProvider, {
           method: 'GET', url: url, responseType: 'arraybuffer'
@@ -542,6 +548,9 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         })
         .then(() => {
           return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
+        })
+        .catch(e => {
+          throw new Error(e);
         });
     } else {
       return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);

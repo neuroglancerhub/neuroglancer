@@ -150,6 +150,8 @@ export class VolumeChunkSource extends SliceViewChunkSource<VolumeChunkSpecifica
   getChunk(x: any): VolumeChunk {
     return <VolumeChunk>this.chunkFormatHandler.getChunk(this, x);
   }
+
+  
 }
 
 export abstract class VolumeChunk extends SliceViewChunk {

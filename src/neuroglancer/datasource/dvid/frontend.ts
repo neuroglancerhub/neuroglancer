@@ -769,7 +769,7 @@ export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
       method: 'POST',
       responseType: 'json',
       payload: data
-    }).then(async response => {
+    }).then(async () => {
       let meshUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}_meshes/key/${newBodyArray[0]}.merge`);
       await makeRequestWithCredentials(
         credentialsProvider, {
@@ -795,7 +795,7 @@ export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
       //   }
       // );
       
-      return response;
+      return newBodyArray;
     });
 }
 
