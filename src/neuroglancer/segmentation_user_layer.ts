@@ -438,6 +438,19 @@ class DisplayOptionsTab extends Tab {
       element.appendChild(label);
     }
 
+    {
+      const checkbox =
+          this.registerDisposer(new TrackableBooleanCheckbox(layer.displayState.segmentHighlight));
+      checkbox.element.className =
+          'neuroglancer-segmentation-dropdown-segment-highlight neuroglancer-noselect';
+      const label = document.createElement('label');
+      label.className =
+          'neuroglancer-segmentation-dropdown-segment-highlight neuroglancer-noselect';
+      label.appendChild(document.createTextNode('Show hovered segment'));
+      label.appendChild(checkbox.element);
+      element.appendChild(label);
+    }
+
     const visibleSegmentWidget =
         this.registerDisposer(new SegmentSetWidget(this.layer.displayState));
     const addSegmentWidget = this.registerDisposer(new Uint64EntryWidget());
@@ -445,19 +458,6 @@ class DisplayOptionsTab extends Tab {
     addSegmentWidget.element.classList.add('add-segment');
     addSegmentWidget.element.title = 'Add one or more segment IDs';
     element.appendChild(this.registerDisposer(addSegmentWidget).element);
-
-    {
-      const checkbox =
-          this.registerDisposer(new TrackableBooleanCheckbox(layer.displayState.segmentHighlight));
-      checkbox.element.className =
-          'neuroglancer-segmentation-dropdown-hide-segment-zero neuroglancer-noselect';
-      const label = document.createElement('label');
-      label.className =
-          'neuroglancer-segmentation-dropdown-hide-segment-zero neuroglancer-noselect';
-      label.appendChild(document.createTextNode('Show hovered segment'));
-      label.appendChild(checkbox.element);
-      element.appendChild(label);
-    }
 
     {
       let mergeElement = document.createElement('div');
