@@ -771,19 +771,19 @@ export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
       payload: data
     }).then(async () => {
       let meshUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}_meshes/key/${newBodyArray[0]}.merge`);
-      await makeRequestWithCredentials(
-        credentialsProvider, {
-        method: 'GET', url: meshUrl, responseType: 'json'
-      }).then(
-        response => { 
-          newBodyArray = newBodyArray.concat(response.slice(1).map((e: any) => String(e)));
-          uploadMergedMesh(meshUrl, newBodyArray, user, credentialsProvider);
-        }
-      ).catch(
-        () => {
-          uploadMergedMesh(meshUrl, newBodyArray, user, credentialsProvider);
-        }
-      );
+      try {
+        await makeRequestWithCredentials(
+          credentialsProvider, {
+          method: 'GET', url: meshUrl, responseType: 'json'
+        }).then(
+          response => {
+            newBodyArray = newBodyArray.concat(response.slice(1).map((e: any) => String(e)));
+            uploadMergedMesh(meshUrl, newBodyArray, user, credentialsProvider);
+          }
+        )
+      } catch (e) {
+        uploadMergedMesh(meshUrl, newBodyArray, user, credentialsProvider);
+      }
       
       // await makeRequestWithCredentials(
       //   credentialsProvider,

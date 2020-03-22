@@ -36,6 +36,9 @@ import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neu
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base';
+// import {StringMemoize} from 'neuroglancer/util/memoize';
+
+// let MeshMemoize = new StringMemoize();
 
 @registerSharedObject() export class DVIDSkeletonSource extends
 (DVIDSource(SkeletonSource, SkeletonSourceParameters)) {
@@ -102,14 +105,25 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
       //   url += '.ngmesh';
       // }
 
-      if (masterKey === key) {
-        await makeRequestWithCredentials(this.credentialsProvider, {
-          method: 'GET', url: url + '.ngmesh', responseType: 'arraybuffer'
-        }, cancellationToken).then(
+      let meshUrl = url + '.ngmesh';
+      if (String(masterKey) === String(key)) {
+        try {
+          let response = await /*MeshMemoize.getUncounted(meshUrl, () =>*/ makeRequestWithCredentials(this.credentialsProvider, {
+            method: 'GET', url: meshUrl, responseType: 'arraybuffer'
+          }, cancellationToken);
+
+          data.push(response);
+        } catch(e) {
+          console.log(e);
+        }
+        
+        /*
+        then(
           response => { data.push(response); }
         ).catch(e => {
           throw new Error(e);
         });
+        */
       } else {
         await makeRequestWithCredentials(this.credentialsProvider, {
           method: 'GET', url: url + '.merge', responseType: 'json'
@@ -123,9 +137,11 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
           }
         ).catch(async () => {
           try {
-            data.push(await makeRequestWithCredentials(this.credentialsProvider, {
-              method: 'GET', url: url + '.ngmesh', responseType: 'arraybuffer'
-            }, cancellationToken));
+            let response = await /*MeshMemoize.getUncounted(meshUrl, () => */makeRequestWithCredentials(this.credentialsProvider, {
+              method: 'GET', url: meshUrl, responseType: 'arraybuffer'
+            }, cancellationToken);
+
+            data.push(response);
           } catch (e) {
             console.log(e);
           }
@@ -157,12 +173,8 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
           method: 'GET', url: url, responseType: 'arraybuffer'
         }, cancellationToken).then(response => decodeFragmentChunk(chunk, response));
     });
-
-        /*
-    return cancellableFetchOk(url, {}, responseArrayBuffer, cancellationToken)
-        .then(response => decodeFragmentChunk(chunk, response));
-        */
   }
+
 }
 
 @registerSharedObject() export class DVIDVolumeChunkSource extends
