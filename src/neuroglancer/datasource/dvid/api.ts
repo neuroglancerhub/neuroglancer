@@ -46,6 +46,16 @@ export class DVIDInstance {
   getRepoInfoUrl(): string {
     return `${this.baseUrl}/api/repos/info`;
   }
+
+  getKeyValueUrl(dataName: string, key: string) {
+    return `${this.getNodeApiUrl()}/${dataName}/key/${key}`;
+  }
+
+  getMergeStatUrl(dataName: string, user: string) {
+    let today = new Date();
+    let dateString = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
+    return this.getKeyValueUrl(dataName, `progress_${user}_${dateString}`);
+  }
 }
 
 export function responseText(response: Response): Promise<any> {

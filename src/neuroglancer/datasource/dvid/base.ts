@@ -30,7 +30,9 @@ export class DVIDSourceParameters {
   baseUrl: string;
   nodeKey: string;
   dataInstanceKey: string;
-  authServer?: string
+  authServer?: string;
+  user?: string;
+  usertag?: boolean;
 }
 
 export class VolumeChunkSourceParameters extends DVIDSourceParameters {
@@ -47,13 +49,11 @@ export class MeshSourceParameters extends DVIDSourceParameters {
   static RPC_ID = 'dvid/MeshSource';
 }
 
-class AnnotationSourceParametersBase extends DVIDSourceParameters {
+export class AnnotationSourceParametersBase extends DVIDSourceParameters {
   chunkDataSize = annotationChunkDataSize;
   properties: AnnotationPropertySpec[];
   syncedLabel?: string;
   readonly?: boolean;
-  usertag?: boolean;
-  user?: string;
   tags?: any;
   schema?: any;
 }

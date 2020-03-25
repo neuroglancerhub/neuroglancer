@@ -382,6 +382,11 @@ function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefine
     obj.Prop['type'] = annotationToDVIDType(annotFac.bookmarkType);
   }
   removeEmptyField(obj.Prop);
+  if ('checked' in obj.Prop) {
+    if (!annotFac.checked) {
+      delete obj.Prop['checked'];
+    }
+  }
 
   /*
   if (annotFac.comment) {

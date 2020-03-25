@@ -3,6 +3,8 @@
 const ANNOTATION_ROOT_ID = 'annotation';
 
 import {JsonObject, getJsonSchemaProperties, PropertyTreeNode} from './jsonschema';
+import {mergeBodies, proofreadingStats} from 'neuroglancer/datasource/dvid/frontend';
+import {StatusMessage} from 'neuroglancer/status';
 
 export function createTitleElement(title: string)
 {
@@ -60,6 +62,9 @@ export function createBasicElement(
       valueElement.type = 'checkbox';
       if (typeof(value) === 'boolean') {
         valueElement.checked = value;
+      } else { 
+        //can be either 1 or '1'
+        valueElement.checked = (value == 1) ? true : false;
       }
       break;
     default:
@@ -149,6 +154,81 @@ function createElement(obj: any, id: string) : HTMLDivElement
   return element;
 }
 */
+
+function createTableElement(matrix: HTMLElement[][])
+{
+  let table = document.createElement('table');
+  table.style.borderCollapse = 'collapse';
+  table.style.borderSpacing = '0px';
+  table.style.display = 'block';
+  for (let row of matrix) {
+    let tr = document.createElement('tr');
+    for (let cell of row) {
+      let td = document.createElement('td');
+      td.appendChild(cell);
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+
+  return table;
+}
+
+export function createProofreadWidget(sourceUrl: string, mergingJsonProvider: () => Array<string>, postUpload: () => void) {
+  let proofreadElement = document.createElement('div');
+
+  let row = [];
+
+  let fieldset = document.createElement('fieldset');
+  let legend = document.createElement('legend');
+  legend.textContent = 'Proofread';
+  fieldset.appendChild(legend);
+  proofreadElement.appendChild(fieldset);
+
+  const uploadButton = document.createElement('button');
+  row.push(uploadButton);
+
+  uploadButton.textContent = 'Merge';
+  uploadButton.addEventListener('click', () => {
+    let mergingJson = mergingJsonProvider();
+    if (mergingJson.length > 1) {
+      let merging = window.confirm('Do you want to merge the selected bodies now? It cannot be undone!');
+      if (merging) {
+        StatusMessage.showTemporaryMessage('Merging bodies: ' + mergingJson);
+        mergeBodies(sourceUrl, mergingJson).then(response => {
+          StatusMessage.showTemporaryMessage('Merged: ' + JSON.stringify(response));
+          postUpload();
+        }
+        ).catch(e => {
+          throw e;
+        }
+        );
+      }
+    } else {
+      StatusMessage.showTemporaryMessage('You need to select at least two bodies to merge.')
+    }
+  });
+
+  let chartElement = document.createElement('pre');
+  chartElement.innerText = '|  #Bodies merged today: ' + String(proofreadingStats.numBodyMerged.value);
+  proofreadingStats.numBodyMerged.changed.add(() => {
+    chartElement.innerText = '|  #Bodies merged today: ' + String(proofreadingStats.numBodyMerged.value);
+  });
+  // statElement.appendChild(chartElement);
+
+  let tdStat = document.createElement('td');
+  row.push(tdStat);
+
+  tdStat.style.padding = '0px';
+  tdStat.style.margin = '0px';
+  tdStat.appendChild(chartElement);
+
+  let layoutElement = createTableElement([row]);
+  fieldset.appendChild(layoutElement);
+
+
+  return proofreadElement;
+}
 
 export function createAnnotationWidget(schema: JsonObject, assigned: JsonObject, readonly = false)
 {

@@ -23,7 +23,7 @@ import {makeDataBoundsBoundingBoxAnnotationSet} from 'neuroglancer/annotation';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {BoundingBox, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {CompleteUrlOptions, CompletionResult, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
-import {AnnotationSourceParameters, DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, AnnotationChunkSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {AnnotationSourceParameters, DVIDSourceParameters, MeshSourceParameters, SkeletonSourceParameters, VolumeChunkEncoding, VolumeChunkSourceParameters, AnnotationChunkSourceParameters, AnnotationSourceParametersBase} from 'neuroglancer/datasource/dvid/base';
 import {MeshSource} from 'neuroglancer/mesh/frontend';
 import {SkeletonSource} from 'neuroglancer/skeleton/frontend';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
@@ -49,6 +49,8 @@ import {defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 // import {Uint64} from 'neuroglancer/util/uint64';
 // import { DVIDAnnotationGeometryChunkSource } from './backend';
+import {TrackableValue} from 'neuroglancer/trackable_value';
+import {verifyInt} from 'neuroglancer/util/json';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -137,6 +139,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
   dataType: DataType;
   meshSrc: string;
   skeletonSrc: string;
+  mergeSrc: string;
 
   constructor(
       obj: any, name: string, base: DataInstanceBaseInfo, public encoding: VolumeChunkEncoding,
@@ -166,6 +169,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
 
     if (instSet.has(name + '_meshes')) {
       this.meshSrc = name + '_meshes';
+      this.mergeSrc = 'neutu_merge_opr';
     } else {
       this.meshSrc = '';
     }
@@ -175,7 +179,6 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
     } else {
       this.skeletonSrc = '';
     }
-
 
     this.dataType =
         verifyObjectProperty(extendedValues[0], 'DataType', x => verifyMapKey(x, serverDataTypes));
@@ -284,7 +287,7 @@ export function parseDataInstanceFromRepoInfo(
     }
 
     return new AnnotationDataInstanceInfo(dataInstance, name, baseInfo);
-  } else {
+  } {
     return parseDataInstance(dataInstance, name, instanceNames);
   }
 }
@@ -353,7 +356,6 @@ export class RepositoryInfo {
     for (let key of instanceKeys) {
       try {
         this.dataInstances.set(key, parseDataInstanceFromRepoInfo(dataInstanceObjs, key, instanceKeys));
-        // this.dataInstances.set(key, parseDataInstance(dataInstanceObjs[key], key, instanceKeys));
       } catch (parseError) {
         let message = `Failed to parse data instance ${JSON.stringify(key)}: ${parseError.message}`;
         console.log(message);
@@ -480,11 +482,15 @@ function getSyncedLabel(dataInfo: any): string {
   }
 }
 
-function userTagged(parameters: AnnotationSourceParameters) {
+function userTagged(parameters: DVIDSourceParameters) {
   if (parameters.usertag) {
     return true;
-  } else if (parameters.tags && parameters.usertag === undefined) {
-    return parameters.tags['annotation'] === 'user-supplied';
+  } else {
+    if (parameters instanceof AnnotationSourceParametersBase) {
+      if(parameters.tags && parameters.usertag === undefined) {
+        return parameters.tags['annotation'] === 'user-supplied';
+      }
+    }
   }
 
   return false;
@@ -523,15 +529,15 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 // const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)(\?.*)?$/;
 const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/;
 
-function parseSourceUrl(url: string): AnnotationSourceParameters {
+function parseSourceUrl(url: string): DVIDSourceParameters {
   let match = url.match(urlPattern);
   if (match === null) {
     throw new Error(`Invalid DVID URL: ${JSON.stringify(url)}.`);
   }
 
   let queryString = match[4];
-  let sourceParameters: AnnotationSourceParameters = {
-    ...new AnnotationSourceParameters(),
+  let sourceParameters: DVIDSourceParameters = {
+    // ...new AnnotationSourceParameters(),
     baseUrl: match[1],
     nodeKey: match[2],
     dataInstanceKey: match[3],
@@ -603,6 +609,27 @@ async function getAnnotationSource(options: GetDataSourceOptions, sourceParamete
   };
 
   return dataSource;
+}
+
+async function updateMergeStat(mergeDataName: string, sourceParameters: DVIDSourceParameters, credentialsProvider: CredentialsProvider<DVIDToken>) {
+  let credentials = await credentialsProvider.get();
+  const user = getUser(sourceParameters, credentials.credentials);
+  if (user) {
+    let dataInstance = new DVIDInstance(sourceParameters.baseUrl, sourceParameters.nodeKey);
+    makeRequestWithCredentials(credentialsProvider, {
+      method: 'GET',
+      url: dataInstance.getMergeStatUrl(mergeDataName, user),
+      responseType: 'json'
+    }).then(
+      response => {
+        verifyObject(response);
+        proofreadingStats.numBodyMerged.value = verifyObjectProperty(response,'numBodyMerged', verifyInt);
+      }
+    ).catch ( e => {
+      console.log(e);
+    }
+    );
+  }
 }
 
 async function getVolumeSource(options: GetDataSourceOptions, sourceParameters: DVIDSourceParameters, dataInstanceInfo: DataInstanceInfo, credentialsProvider: CredentialsProvider<DVIDToken>) {
@@ -679,6 +706,10 @@ async function getVolumeSource(options: GetDataSourceOptions, sourceParameters: 
     default: true,
   });
 
+  if (info.mergeSrc) {
+    updateMergeStat(info.mergeSrc, sourceParameters, credentialsProvider);
+  }
+
   return dataSource;
 }
 
@@ -707,15 +738,21 @@ function getCredentialsProvider(authServer: AuthType) {
 async function uploadMergedMesh(
   meshUrl: string, bodyArray: Array<string>, user: string | null | undefined, credentialsProvider: CredentialsProvider<DVIDToken>) 
 {
-  return makeRequestWithCredentials(
-    credentialsProvider,
-    {
-      url: meshUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
-      method: 'POST',
-      responseType: 'json',
-      payload: bodyArrayToJson(bodyArray)
-    }
-  );
+  try {
+    let response = await makeRequestWithCredentials(
+      credentialsProvider,
+      {
+        url: meshUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
+        method: 'POST',
+        responseType: '',
+        payload: bodyArrayToJson(bodyArray)
+      }
+    );
+
+    return response;
+  } catch (e) {
+    throw new Error(e);
+  }
 }
 
 async function getBodySizes(dataInstanceUrl: string, bodyArray: Array<string>, credentialsProvider: CredentialsProvider<DVIDToken>)
@@ -733,10 +770,15 @@ async function getBodySizes(dataInstanceUrl: string, bodyArray: Array<string>, c
       ).then(response => verifyObjectProperty(response, 'voxels', verifyPositiveInt)).catch(e => {
         throw new Error(`Failed to read body size for ${body}: ` + e);
       })
-    )
+    );
   }
   return Promise.all(promiseArray);
 }
+
+export let proofreadingStats = {
+  numBodyMerged: new TrackableValue<number>(0, verifyInt),
+  numBookmarkAdded: new TrackableValue<number>(0, verifyInt)
+};
 
 export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
 {
@@ -770,6 +812,23 @@ export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
       responseType: 'json',
       payload: data
     }).then(async () => {
+      proofreadingStats.numBodyMerged.value = proofreadingStats.numBodyMerged.value + bodyArray.length;
+      try {
+        if (user) {
+          makeRequestWithCredentials(
+            credentialsProvider,
+            {
+              url: dvidInstance.getMergeStatUrl('neutu_merge_opr', user) + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
+              method: 'POST',
+              responseType: '',
+              payload: JSON.stringify({'numBodyMerged': proofreadingStats.numBodyMerged.value})
+            }
+          );
+        }
+      } catch(e) {
+        throw new Error(e);
+      }
+
       let meshUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}_meshes/key/${newBodyArray[0]}.merge`);
       try {
         await makeRequestWithCredentials(
@@ -837,24 +896,31 @@ export function getDataSource(options: GetDataSourceOptions, getCredentialsProvi
             throw new Error(`Invalid data instance ${dataInstanceKey}.`);
           }
 
-          sourceParameters.tags = dataInstanceInfo.tags;
-          sourceParameters.usertag = userTagged(sourceParameters);
-          sourceParameters.user = getUser(sourceParameters, credentials.credentials);
-          sourceParameters.schema = getSchema(sourceParameters);
-          sourceParameters.syncedLabel = getSyncedLabel({Base: dataInstanceInfo.base.obj});
-          sourceParameters.properties =[{
+          let annotationSourceParameters: AnnotationSourceParameters = {
+            ...new AnnotationSourceParameters(),
+            ...sourceParameters
+          };
+
+          annotationSourceParameters.tags = dataInstanceInfo.tags;
+          annotationSourceParameters.schema = getSchema(annotationSourceParameters);
+          annotationSourceParameters.syncedLabel = getSyncedLabel({ Base: dataInstanceInfo.base.obj });
+          annotationSourceParameters.properties = [{
             identifier: 'rendering_attribute',
             description: 'rendering attribute',
             type: 'int32',
             default: 0,
             min: 0,
             max: 5,
-            step: 1 
+            step: 1
           }];
+
+          annotationSourceParameters.usertag = userTagged(sourceParameters);
+          annotationSourceParameters.user = getUser(sourceParameters, credentials.credentials);
+
 
           // let annotationDataInstanceInfo = await getAnnotationDataInstanceDetails(options.chunkManager, sourceParameters, dataInstanceInfo, credentialsProvider);
           
-          return getAnnotationSource(options, sourceParameters, dataInstanceInfo, credentialsProvider);
+          return getAnnotationSource(options, annotationSourceParameters, dataInstanceInfo, credentialsProvider);
         } else {
           if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo)) {
             throw new Error(`Invalid data instance ${dataInstanceKey}.`);
@@ -1036,7 +1102,7 @@ export class DVIDDataSource extends DataSourceProvider {
   }
 }
 
-function getUser(parameters: AnnotationSourceParameters, token:string) {
+function getUser(parameters: DVIDSourceParameters, token:string) {
   const tokenUser = getUserFromToken(token);
   if (tokenUser) {
     if (parameters.user) {
@@ -1049,8 +1115,10 @@ function getUser(parameters: AnnotationSourceParameters, token:string) {
   }
 
   if (parameters.usertag && !parameters.user) {
-    if (parameters.tags) {
-      parameters.user = parameters.tags['guest'];
+    if (parameters instanceof AnnotationSourceParametersBase) {
+      if (parameters.tags) {
+        parameters.user = parameters.tags['guest'];
+      }
     }
     if (!parameters.user) {
       return Env.getUser();
@@ -1059,25 +1127,6 @@ function getUser(parameters: AnnotationSourceParameters, token:string) {
 
   return parameters.user;
 }
-
-/*
-function getDataInfoUrl(parameters: AnnotationSourceParameters): string {
-  return `${parameters.baseUrl}/api/node/${parameters.nodeKey}/${parameters.dataInstanceKey}/info`;
-}
-
-function getDataInfo(
-  parameters: AnnotationSourceParameters, credentials: DVIDToken): Promise<any> {
-  // let instance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-  return makeRequestWithReadyCredentials(
-    credentials,
-    {
-      method: 'GET',
-      url: getDataInfoUrl(parameters),
-      responseType: 'json'
-    }
-  )
-}
-*/
 
 const MultiscaleAnnotationSourceBase = WithParameters(
   WithCredentialsProvider<DVIDToken>()(MultiscaleAnnotationSource), AnnotationSourceParameters);
@@ -1177,8 +1226,6 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         let annotFac = new DVIDPointAnnotationFacade(newAnnotation);
         if (x.checked) {
           x.checked = annotFac.getBooleanProperty(x.checked);
-        } else {
-          delete x['checked'];
         }
         annotFac.prop = {...newAnnotation.prop, ...x};
         

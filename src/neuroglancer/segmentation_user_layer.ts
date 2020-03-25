@@ -55,8 +55,9 @@ import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 
 //DVID TMP HACK
-import {mergeBodies} from 'neuroglancer/datasource/dvid/frontend';
-import {StatusMessage} from 'neuroglancer/status';
+// import {mergeBodies, proofreadingStats} from 'neuroglancer/datasource/dvid/frontend';
+import {createProofreadWidget} from 'neuroglancer/datasource/dvid/widgets';
+// import {StatusMessage} from 'neuroglancer/status';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -460,6 +461,33 @@ class DisplayOptionsTab extends Tab {
     element.appendChild(this.registerDisposer(addSegmentWidget).element);
 
     {
+      const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
+      let source = verifyObjectProperty(this.layer.specification, 'source', x => verifyObjectProperty(x, 'url', verifyString));
+      const m = source.match(protocolPattern);
+      if (m === null || m[1] === undefined) {
+        throw new Error(`Data source URL must have the form "<protocol>://<path>".`);
+      }
+      // let mergingJson = this.layer.displayState.visibleSegments.toJSON();
+      let proofreadWidget = createProofreadWidget(m[2], () => {
+        return this.layer.displayState.visibleSegments.toJSON();
+      }, () => {
+        this.layer.displayState.visibleSegments.clear();
+        for (let layer of this.layer.renderLayers) {
+          if (layer instanceof SegmentationRenderLayer) {
+            for (let source of layer.visibleSourcesList) {
+              source.source.invalidateCache();
+            }
+          }else if (layer instanceof MeshLayer) {
+            layer.source.invalidateCache();
+          } else if (layer instanceof SkeletonLayer) {
+            layer.source.invalidateCache();
+          }
+        }
+      })
+      if (m && (m[1] === 'dvid')) {
+        element.appendChild(proofreadWidget);
+      }
+/*
       let mergeElement = document.createElement('div');
       let fieldset = document.createElement('fieldset');
       let legend = document.createElement('legend');
@@ -476,9 +504,7 @@ class DisplayOptionsTab extends Tab {
 
       const uploadButton = document.createElement('button');
       uploadButton.textContent = 'Merge';
-      const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
-      let source = verifyObjectProperty(this.layer.specification, 'source', x => verifyObjectProperty(x, 'url', verifyString));
-      const m = source.match(protocolPattern);
+      
       uploadButton.addEventListener('click', () => {
         if (this.layer.displayState.visibleSegments.size > 1) {
           let merging = window.confirm('Do you want to merge the selected bodies now? It cannot be undone!');
@@ -521,9 +547,21 @@ class DisplayOptionsTab extends Tab {
           }
       });
       fieldset.appendChild(uploadButton);
+
+      const statElement = document.createElement('div');
+      let statFieldset = document.createElement('fieldset');
+      let statLegend = document.createElement('legend');
+      statLegend.textContent = '#Bodies merged today';
+      statFieldset.appendChild(statLegend);
+      statElement.append(statFieldset);
+      let chartElement = document.createElement('label');
+      chartElement.textContent = String(proofreadingStats.numBodyMerged);
+      fieldset.appendChild(statElement);
+
       if (m && (m[1] === 'dvid')) {
         element.appendChild(mergeElement);
       }
+      */
     }
 
     this.registerDisposer(addSegmentWidget.valuesEntered.add((values: Uint64[]) => {
