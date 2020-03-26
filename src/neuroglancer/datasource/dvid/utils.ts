@@ -80,6 +80,14 @@ export class DVIDPointAnnotationFacade {
     return this.prop && this.prop.type;
   }
 
+  get timestamp() {
+    return (this.prop && this.prop.timestamp) ? Number(this.prop.timestamp) : 0;
+  }
+
+  addTimeStamp() {
+    this.prop['timestamp'] = String(Date.now());
+  }
+
   get custom() {
     return (this.prop && this.prop.custom === '1') ? true : false;
   }
@@ -148,7 +156,8 @@ export function getAnnotationDescription(annotation: DVIDPointAnnotation): strin
   return description;
 }
 
-export function getUserFromToken(token: string): string|null {
+/*
+function getUserFromToken(token: string): string|null {
   const payload = token.split('.')[1];
   if (payload) {
     const obj = JSON.parse(window.atob(payload));
@@ -160,6 +169,32 @@ export function getUserFromToken(token: string): string|null {
   }
 
   return null;
+}
+*/
+
+export function getUserFromToken(token: string, defaultUser?: string|undefined) {
+  let tokenUser:string|null = null;
+
+  const payload = token.split('.')[1];
+  if (payload) {
+    const obj = JSON.parse(window.atob(payload));
+    if ('user' in obj) {
+      tokenUser = obj['user'];
+    } else if ('email' in obj) {
+      tokenUser = obj['email'];
+    }
+  }
+
+  // const tokenUser = getUserFromToken(token);
+  if (tokenUser) {
+    if (defaultUser) {
+      if (defaultUser !== tokenUser) {
+        return undefined;
+      }
+    }
+  }
+
+  return tokenUser;
 }
 
 export const defaultJsonSchema = {

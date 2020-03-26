@@ -3,7 +3,7 @@
 const ANNOTATION_ROOT_ID = 'annotation';
 
 import {JsonObject, getJsonSchemaProperties, PropertyTreeNode} from './jsonschema';
-import {mergeBodies, proofreadingStats} from 'neuroglancer/datasource/dvid/frontend';
+import {proofreadingStats} from 'neuroglancer/datasource/dvid/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 
 export function createTitleElement(title: string)
@@ -174,7 +174,7 @@ function createTableElement(matrix: HTMLElement[][])
   return table;
 }
 
-export function createProofreadWidget(sourceUrl: string, mergingJsonProvider: () => Array<string>, postUpload: () => void) {
+export function createProofreadWidget(mergeFunc: (mergingJson: Array<string>) => Promise<any>, mergingJsonProvider: () => Array<string>, postUpload: () => void) {
   let proofreadElement = document.createElement('div');
 
   let row = [];
@@ -195,7 +195,7 @@ export function createProofreadWidget(sourceUrl: string, mergingJsonProvider: ()
       let merging = window.confirm('Do you want to merge the selected bodies now? It cannot be undone!');
       if (merging) {
         StatusMessage.showTemporaryMessage('Merging bodies: ' + mergingJson);
-        mergeBodies(sourceUrl, mergingJson).then(response => {
+        mergeFunc(mergingJson).then(response => {
           StatusMessage.showTemporaryMessage('Merged: ' + JSON.stringify(response));
           postUpload();
         }

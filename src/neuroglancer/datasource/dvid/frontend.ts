@@ -44,7 +44,7 @@ import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } 
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider'
 import { makeSliceViewChunkSpecification } from 'neuroglancer/sliceview/base';
-import {createAnnotationWidget, getObjectFromWidget} from 'neuroglancer/datasource/dvid/widgets';
+import {createAnnotationWidget, getObjectFromWidget, createProofreadWidget} from 'neuroglancer/datasource/dvid/widgets';
 import {defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 // import {Uint64} from 'neuroglancer/util/uint64';
@@ -77,6 +77,7 @@ export class DataInstanceInfo {
   voxelSize: vec3;
   blockSize: vec3;
   numLevels: number;
+  defaultUser?: string;
 
   constructor(public obj: any, public name: string, public base: DataInstanceBaseInfo) {}
 }
@@ -512,6 +513,15 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       chunkManager: ChunkManager, public baseUrl: string, public nodeKey: string,
       public dataInstanceKey: string, public info: VolumeDataInstanceInfo, public credentialsProvider: CredentialsProvider<DVIDToken>) {
     super(chunkManager);
+
+    this.makeProofreadWidget = (mergingJsonProvider: () => Array<string>, postUpload: () => void) => {
+      return createProofreadWidget((mergingJson: Array<string>) => {
+        let dvidInstance = new DVIDInstance(this.baseUrl, this.nodeKey);
+        return mergeBodies(dvidInstance, this.dataInstanceKey, mergingJson, this.credentialsProvider, this.info.defaultUser);
+      },
+      mergingJsonProvider,
+      postUpload)
+    };
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -524,6 +534,18 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
         volumeSourceOptions,
         this.credentialsProvider);
   }
+
+    /*
+    let dvidInstance = new DVIDInstance(this.baseUrl, this.nodeKey);
+    mergeBodiesT(dvidInstance, this.dataInstanceKey, mergingJsonProvider(), this.credentialsProvider, this.info.defaultUser).then(response => {
+      StatusMessage.showTemporaryMessage('Merged: ' + JSON.stringify(response));
+      postUpload();
+    }
+    ).catch(e => {
+      throw e;
+    }
+    );
+    */
 }
 
 // const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)(\?.*)?$/;
@@ -780,16 +802,11 @@ export let proofreadingStats = {
   numBookmarkAdded: new TrackableValue<number>(0, verifyInt)
 };
 
-export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
+export async function mergeBodies(dvidInstance: DVIDInstance, dataInstanceKey: string, bodyArray: Array<string>, credentialsProvider: CredentialsProvider<DVIDToken>, defaultUser?: string)
 {
-  let sourceParameters = parseSourceUrl(sourceUrl);
-  let { baseUrl, nodeKey, dataInstanceKey } = sourceParameters;
-
-  let dvidInstance = new DVIDInstance(baseUrl, nodeKey);
-
-  let credentials = await getCredentialsProvider(sourceParameters.authServer).get();
-  const credentialsProvider = getCredentialsProvider('token:' + credentials.credentials);
-  const user = getUser(sourceParameters, credentials.credentials);
+  let credentials = await credentialsProvider.get();
+  const tokenProvider = getCredentialsProvider('token:' + credentials.credentials);
+  const user = getUserFromToken(credentials.credentials, defaultUser);
 
   let dataInstanceUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}`);
 
@@ -803,7 +820,7 @@ export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
   let data = bodyArrayToJson(newBodyArray);
   let mergeUrl = `${dataInstanceUrl}/merge`;
   return makeRequestWithCredentials(
-    credentialsProvider,
+    tokenProvider,
     {
       // url: dvidInstance.getNodeApiUrl(`/${dataInstanceKey}/info`),
       // method: 'GET',
@@ -832,16 +849,16 @@ export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
       let meshUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}_meshes/key/${newBodyArray[0]}.merge`);
       try {
         await makeRequestWithCredentials(
-          credentialsProvider, {
+          tokenProvider, {
           method: 'GET', url: meshUrl, responseType: 'json'
         }).then(
           response => {
             newBodyArray = newBodyArray.concat(response.slice(1).map((e: any) => String(e)));
-            uploadMergedMesh(meshUrl, newBodyArray, user, credentialsProvider);
+            uploadMergedMesh(meshUrl, newBodyArray, user, tokenProvider);
           }
         )
       } catch (e) {
-        uploadMergedMesh(meshUrl, newBodyArray, user, credentialsProvider);
+        uploadMergedMesh(meshUrl, newBodyArray, user, tokenProvider);
       }
       
       // await makeRequestWithCredentials(
@@ -857,6 +874,17 @@ export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
       return newBodyArray;
     });
 }
+
+/*
+export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
+{
+  let sourceParameters = parseSourceUrl(sourceUrl);
+  let { baseUrl, nodeKey, dataInstanceKey } = sourceParameters;
+
+  let dvidInstance = new DVIDInstance(baseUrl, nodeKey);
+  mergeBodiesT(dvidInstance, dataInstanceKey, bodyArray, getCredentialsProvider(sourceParameters.authServer), sourceParameters.user);
+}
+*/
 
 export function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<DataSource> {
   // let match = options.providerUrl.match(urlPattern);
@@ -889,6 +917,10 @@ export function getDataSource(options: GetDataSourceOptions, getCredentialsProvi
 
         if (!dataInstanceInfo) {
           throw new Error(`Invalid data instance ${dataInstanceKey}.`);
+        }
+
+        if (sourceParameters.user) {
+          dataInstanceInfo.defaultUser = sourceParameters.user;
         }
 
         if (dataInstanceInfo.base.typeName === 'annotation') {
@@ -1298,6 +1330,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       // (<DVIDPointAnnotation>annotation).kind = 'Note';
       annotation.point = annotation.point.map(x => Math.round(x));
       annotationRef.setCustom(true);
+      annotationRef.addTimeStamp();
     }
     return super.add(annotation, commit);
   }

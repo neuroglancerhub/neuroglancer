@@ -173,4 +173,5 @@ export abstract class MultiscaleVolumeChunkSource extends
     MultiscaleSliceViewChunkSource<VolumeChunkSource, VolumeSourceOptions> {
   dataType: DataType;
   volumeType: VolumeType;
+  makeProofreadWidget?: (mergingJsonProvider: () => Array<string>, postUpload: () => void) => HTMLElement|null;
 }

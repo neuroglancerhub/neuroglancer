@@ -54,11 +54,6 @@ import {ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 
-//DVID TMP HACK
-// import {mergeBodies, proofreadingStats} from 'neuroglancer/datasource/dvid/frontend';
-import {createProofreadWidget} from 'neuroglancer/datasource/dvid/widgets';
-// import {StatusMessage} from 'neuroglancer/status';
-
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
@@ -81,6 +76,7 @@ const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
+  updateLayerWidget = (_: SegmentationRenderLayer) => {};
 
   displayState = {
     segmentColorHash: SegmentColorHash.getDefault(),
@@ -156,13 +152,17 @@ export class SegmentationUserLayer extends Base {
             continue;
         }
         loadedSubsource.activate(
-            () => loadedSubsource.addRenderLayer(new SegmentationRenderLayer(volume, {
-              ...this.displayState,
-              transform: loadedSubsource.getRenderLayerTransform(),
-              renderScaleTarget: this.sliceViewRenderScaleTarget,
-              renderScaleHistogram: this.sliceViewRenderScaleHistogram,
-              localPosition: this.localPosition,
-            })));
+            () => { 
+              let layer = new SegmentationRenderLayer(volume, {
+                ...this.displayState,
+                transform: loadedSubsource.getRenderLayerTransform(),
+                renderScaleTarget: this.sliceViewRenderScaleTarget,
+                renderScaleHistogram: this.sliceViewRenderScaleHistogram,
+                localPosition: this.localPosition,
+              });
+              loadedSubsource.addRenderLayer(layer);
+              this.updateLayerWidget(layer);}
+            );
       } else if (mesh !== undefined) {
         loadedSubsource.activate(() => {
           const displayState = {
@@ -460,109 +460,31 @@ class DisplayOptionsTab extends Tab {
     addSegmentWidget.element.title = 'Add one or more segment IDs';
     element.appendChild(this.registerDisposer(addSegmentWidget).element);
 
+    let proofreadElement = document.createElement('div');
+    element.appendChild(proofreadElement);
+    this.layer.updateLayerWidget = (layer: SegmentationRenderLayer) =>
     {
-      const protocolPattern = /^(?:([a-zA-Z][a-zA-Z0-9-+_]*):\/\/)?(.*)$/;
-      let source = verifyObjectProperty(this.layer.specification, 'source', x => verifyObjectProperty(x, 'url', verifyString));
-      const m = source.match(protocolPattern);
-      if (m === null || m[1] === undefined) {
-        throw new Error(`Data source URL must have the form "<protocol>://<path>".`);
-      }
-      // let mergingJson = this.layer.displayState.visibleSegments.toJSON();
-      let proofreadWidget = createProofreadWidget(m[2], () => {
-        return this.layer.displayState.visibleSegments.toJSON();
-      }, () => {
-        this.layer.displayState.visibleSegments.clear();
-        for (let layer of this.layer.renderLayers) {
-          if (layer instanceof SegmentationRenderLayer) {
-            for (let source of layer.visibleSourcesList) {
-              source.source.invalidateCache();
-            }
-          }else if (layer instanceof MeshLayer) {
-            layer.source.invalidateCache();
-          } else if (layer instanceof SkeletonLayer) {
-            layer.source.invalidateCache();
-          }
-        }
-      })
-      if (m && (m[1] === 'dvid')) {
-        element.appendChild(proofreadWidget);
-      }
-/*
-      let mergeElement = document.createElement('div');
-      let fieldset = document.createElement('fieldset');
-      let legend = document.createElement('legend');
-      legend.textContent = 'Proofread';
-      fieldset.appendChild(legend);
-      mergeElement.appendChild(fieldset);
-
-      // const groupButton = document.createElement('button');
-      // groupButton.textContent = 'Group';
-      // fieldset.appendChild(groupButton);
-
-      // const decoration = document.createTextNode(" => ");
-      // fieldset.appendChild(decoration);
-
-      const uploadButton = document.createElement('button');
-      uploadButton.textContent = 'Merge';
-      
-      uploadButton.addEventListener('click', () => {
-        if (this.layer.displayState.visibleSegments.size > 1) {
-          let merging = window.confirm('Do you want to merge the selected bodies now? It cannot be undone!');
-          if (merging) {
-            
-            if (m === null || m[1] === undefined) {
-              throw new Error(`Data source URL must have the form "<protocol>://<path>".`);
-            }
-            let mergingJson = this.layer.displayState.visibleSegments.toJSON();
+      if (layer.multiscaleSource.makeProofreadWidget) {
+        let proofreadWidget =
+          layer.multiscaleSource.makeProofreadWidget(() => {
+            return this.layer.displayState.visibleSegments.toJSON();
+          }, () => {
             this.layer.displayState.visibleSegments.clear();
-            StatusMessage.showTemporaryMessage('Merging bodies: ' + mergingJson);
-            mergeBodies(m[2], mergingJson).then(response => {
-              StatusMessage.showTemporaryMessage('Merged: ' + JSON.stringify(response));
-              for (let layer of this.layer.renderLayers) {
-                if (layer instanceof SegmentationRenderLayer) {
-                  for (let source of layer.visibleSourcesList) {
-                    source.source.invalidateCache();
-                  }
-                }else if (layer instanceof MeshLayer) {
-                  layer.source.invalidateCache();
-                } else if (layer instanceof SkeletonLayer) {
-                  layer.source.invalidateCache();
+            for (let layer of this.layer.renderLayers) {
+              if (layer instanceof SegmentationRenderLayer) {
+                for (let source of layer.visibleSourcesList) {
+                  source.source.invalidateCache();
                 }
+              } else if ((layer instanceof MeshLayer) || (layer instanceof SkeletonLayer)) {
+                layer.source.invalidateCache();
               }
-              // this.layer.updateDataSubsourceActivations();
-              // for (let source of this.layer.dataSources) {
-              //   source.invalidateCache();
-              // }
-              // this.layer.displayState.visibleSegments.clear();
-              // this.layer.restoreState(this.layer.toJSON());
-              // setTimeout(() => { window.location.reload() }, 500);
             }
-            ).catch(e => {
-              throw e;
-            }
-            );
-          } 
-        }else {
-            StatusMessage.showTemporaryMessage('You need to select at least two bodies to merge.')
-          }
-      });
-      fieldset.appendChild(uploadButton);
-
-      const statElement = document.createElement('div');
-      let statFieldset = document.createElement('fieldset');
-      let statLegend = document.createElement('legend');
-      statLegend.textContent = '#Bodies merged today';
-      statFieldset.appendChild(statLegend);
-      statElement.append(statFieldset);
-      let chartElement = document.createElement('label');
-      chartElement.textContent = String(proofreadingStats.numBodyMerged);
-      fieldset.appendChild(statElement);
-
-      if (m && (m[1] === 'dvid')) {
-        element.appendChild(mergeElement);
+          });
+        if (proofreadWidget) {
+          proofreadElement.appendChild(proofreadWidget);
+        }
       }
-      */
-    }
+    };
 
     this.registerDisposer(addSegmentWidget.valuesEntered.add((values: Uint64[]) => {
       for (const value of values) {
