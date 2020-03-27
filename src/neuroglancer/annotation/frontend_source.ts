@@ -351,6 +351,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   spatiallyIndexedSources = new Set<Borrowed<AnnotationGeometryChunkSource>>();
   rank: number;
   makeEditWidget: (reference: AnnotationReference) => HTMLElement|null;
+  makeFilterWidget?: () => HTMLElement|null;
   invalidateCache?(): void;
 
   readonly relationships: readonly string[];

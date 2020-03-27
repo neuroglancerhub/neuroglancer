@@ -462,29 +462,41 @@ class DisplayOptionsTab extends Tab {
 
     let proofreadElement = document.createElement('div');
     element.appendChild(proofreadElement);
+
+    let postUpdate = () => {
+      this.layer.displayState.visibleSegments.clear();
+      for (let layer of this.layer.renderLayers) {
+        if (layer instanceof SegmentationRenderLayer) {
+          for (let source of layer.visibleSourcesList) {
+            source.source.invalidateCache();
+          }
+        } else if ((layer instanceof MeshLayer) || (layer instanceof SkeletonLayer)) {
+          layer.source.invalidateCache();
+        }
+      }
+    };
+
     this.layer.updateLayerWidget = (layer: SegmentationRenderLayer) =>
     {
       if (layer.multiscaleSource.makeProofreadWidget) {
         let proofreadWidget =
           layer.multiscaleSource.makeProofreadWidget(() => {
             return this.layer.displayState.visibleSegments.toJSON();
-          }, () => {
-            this.layer.displayState.visibleSegments.clear();
-            for (let layer of this.layer.renderLayers) {
-              if (layer instanceof SegmentationRenderLayer) {
-                for (let source of layer.visibleSourcesList) {
-                  source.source.invalidateCache();
-                }
-              } else if ((layer instanceof MeshLayer) || (layer instanceof SkeletonLayer)) {
-                layer.source.invalidateCache();
-              }
-            }
-          });
+          }, postUpdate);
         if (proofreadWidget) {
           proofreadElement.appendChild(proofreadWidget);
         }
       }
     };
+
+    for (let layer of this.layer.renderLayers) {
+      if (layer instanceof SegmentationRenderLayer) {
+        this.layer.updateLayerWidget(layer);
+        //No need to update the widget later if it can be created here
+        this.layer.updateLayerWidget = (_: SegmentationRenderLayer) => {};
+        break;
+      }
+    }
 
     this.registerDisposer(addSegmentWidget.valuesEntered.add((values: Uint64[]) => {
       for (const value of values) {

@@ -44,7 +44,7 @@ import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } 
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider'
 import { makeSliceViewChunkSpecification } from 'neuroglancer/sliceview/base';
-import {createAnnotationWidget, getObjectFromWidget, createProofreadWidget} from 'neuroglancer/datasource/dvid/widgets';
+import {createAnnotationWidget, getObjectFromWidget, createProofreadWidget, createBasicElement} from 'neuroglancer/datasource/dvid/widgets';
 import {defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 // import {Uint64} from 'neuroglancer/util/uint64';
@@ -1269,6 +1269,16 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
 
       return widget;
     }
+
+    this.makeFilterWidget = () => {
+      let element = createBasicElement(
+        {title: 'Filter', type: 'string'}, 'annotationFilter', '');
+      element.addEventListener('change', (e: Event) => {
+        console.log(e);
+      });
+      
+      return element;
+    };
   }
 
   getSources(_options: VolumeSourceOptions):

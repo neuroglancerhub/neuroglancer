@@ -653,6 +653,18 @@ export class AnnotationLayerView extends Tab {
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
 
+    /*
+    let { source } = this.layer;
+    if (source instanceof MultiscaleAnnotationSource) {
+      if (source.makeFilterWidget) {
+        let filterWidget = source.makeFilterWidget();
+        if (filterWidget) {
+          this.element.appendChild(filterWidget);
+        }
+      }
+    }
+    */
+
     this.element.appendChild(this.listContainer);
     this.listContainer.addEventListener('mouseleave', () => {
       this.displayState.hoverState.value = undefined;
@@ -1198,9 +1210,10 @@ export class AnnotationDetailsTab extends Tab {
     let widget = null;
 
     if (annotation.type === AnnotationType.POINT) {
-      if (annotationLayer.source instanceof MultiscaleAnnotationSource) {
-        if (annotationLayer.source.makeEditWidget) {
-          widget = annotationLayer.source.makeEditWidget(reference);
+      let {source} = annotationLayer;
+      if (source instanceof MultiscaleAnnotationSource) {
+        if (source.makeEditWidget) {
+          widget = source.makeEditWidget(reference);
         }
       }
     }
@@ -1601,6 +1614,7 @@ export interface UserLayerWithAnnotations extends UserLayer {
   annotationDisplayState: AnnotationDisplayState;
   annotationStates: MergedAnnotationStates;
   initializeAnnotationLayerViewTab(tab: AnnotationLayerView): void;
+  updateLayerWidget?: (_: AnnotationLayer) => {}
   annotationCrossSectionRenderScaleHistogram: RenderScaleHistogram;
   annotationCrossSectionRenderScaleTarget: TrackableValue<number>;
   annotationProjectionRenderScaleHistogram: RenderScaleHistogram;

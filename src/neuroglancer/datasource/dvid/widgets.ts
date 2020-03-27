@@ -53,7 +53,7 @@ export function createBasicElement(
         if (typeof(value) === 'string') {
           valueElement.value = value;
           valueElement.setAttribute('value', value);
-          console.log('value', value);
+          // console.log('value', value);
         }
       }
       break;
@@ -75,7 +75,7 @@ export function createBasicElement(
     valueElement.id = id;
     valueElement.readOnly = readonly;
     element.appendChild(valueElement);
-    console.log(valueElement.outerHTML);
+    // console.log(valueElement.outerHTML);
   }
 
   return element;
