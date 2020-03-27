@@ -665,30 +665,74 @@ export class AnnotationLayerView extends Tab {
     filterElement.type = 'text';
     filterElement.setAttribute('autocomplete', "off");
     filterWidget.appendChild(filterElement);
+
+    let todayElement = document.createElement('input');
+    todayElement.type = 'checkbox';
+    todayElement.id = 'show_annotation_today_only';
+    let todayElementLabel = document.createElement('label');
+    todayElementLabel.innerText = 'Today';
+    todayElementLabel.htmlFor = todayElement.id;
+
+    filterWidget.appendChild(todayElement);
+    filterWidget.appendChild(todayElementLabel);
+
     this.element.appendChild(filterWidget);
     
-    filterElement.onkeyup = () => {
-      // console.log(filterElement.value);
-      const self = this;
-      for (const [state, {sublistContainer, listElements}] of self.attachedAnnotationStates) {
-        console.log(sublistContainer);
-        for (let [id, element] of listElements) {
-          if (filterElement.value) {
-            let annotRef = state.source.getReference(id);
+    let filterAnnotation = (annotation: Annotation, element: HTMLElement, filters: Array<(annotation: Annotation) => Boolean>) => {
+      element.style.display = "";
+      for (let filter of filters) {
+        if (!filter(annotation)) {
+          element.style.display = "none";
+          break;
+        }
+      }
+    };
 
-            if (annotRef.value && annotRef.value.description &&
-              annotRef.value.description.toLowerCase().includes(filterElement.value.toLowerCase())) {
-              element.style.display = "";
-            } else {
-              element.style.display = "none";
-            }
+    let filters = [
+      (annotation: Annotation) => {
+        if (filterElement.value) {
+          if (annotation.description) {
+            return annotation.description.toLowerCase().includes(filterElement.value.toLowerCase());
           } else {
-            element.style.display = "";
+            return false;
+          }
+        } else {
+          return true;
+        }
+      },
+      (annotation: Annotation) => {
+        if (todayElement.checked) {
+          if ('prop' in annotation) {
+            let prop = annotation['prop'];
+            if ('timestamp' in prop) {
+              let timestamp = Number(prop['timestamp']);
+              let annotationDate = new Date(timestamp);
+              let today = new Date();
+              return (annotationDate.toDateString() === today.toDateString());
+            }
+          }
+          return false;
+        } else {
+          return true;
+        }
+      }
+    ];
+
+    let updateTable = () => {
+      const self = this;
+      for (const [state, { listElements }] of self.attachedAnnotationStates) {
+        // console.log(sublistContainer);
+        for (let [id, element] of listElements) {
+          let annotRef = state.source.getReference(id);
+          if (annotRef.value) {
+            filterAnnotation(annotRef.value, element, filters);
           }
         }
       }
     };
-    
+
+    filterElement.onkeyup = updateTable;
+    todayElement.onclick = updateTable;
 
     /*
     let { source } = this.layer;
@@ -1004,6 +1048,9 @@ export class AnnotationLayerView extends Tab {
       addDims(
           this.localDimensionIndices, chunkTransform.modelTransform.localToRenderLayerDimensions);
       maybeAddDeleteButton();
+
+      //tmp hack for downloading annotation data
+      state.source.getReference(annotation.id);
     };
     switch (annotation.type) {
       case AnnotationType.POINT:
