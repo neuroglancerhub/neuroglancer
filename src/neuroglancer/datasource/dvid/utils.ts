@@ -172,8 +172,8 @@ function getUserFromToken(token: string): string|null {
 }
 */
 
-export function getUserFromToken(token: string, defaultUser?: string|undefined) {
-  let tokenUser:string|null = null;
+export function getUserFromToken(token: string, defaultUser?: string) {
+  let tokenUser:string|undefined = undefined;
 
   const payload = token.split('.')[1];
   if (payload) {
@@ -187,11 +187,11 @@ export function getUserFromToken(token: string, defaultUser?: string|undefined) 
 
   // const tokenUser = getUserFromToken(token);
   if (tokenUser) {
-    if (defaultUser) {
-      if (defaultUser !== tokenUser) {
-        return undefined;
-      }
+    if (defaultUser && (defaultUser !== tokenUser)) {
+      return undefined;
     }
+  } else {
+    tokenUser = defaultUser;
   }
 
   return tokenUser;
