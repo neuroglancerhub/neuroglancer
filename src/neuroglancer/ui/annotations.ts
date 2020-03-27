@@ -653,6 +653,43 @@ export class AnnotationLayerView extends Tab {
     toolbox.appendChild(mutableControls);
     this.element.appendChild(toolbox);
 
+    let separator = document.createElement('hr');
+    separator.style.border = '1px solid #505050';
+    separator.setAttribute('width', '300px');
+    this.element.appendChild(separator);
+
+    ////// tmp hack
+    let filterWidget = document.createElement('div');
+    filterWidget.appendChild(document.createTextNode('Filter: '));
+    let filterElement = document.createElement('input');
+    filterElement.type = 'text';
+    filterElement.setAttribute('autocomplete', "off");
+    filterWidget.appendChild(filterElement);
+    this.element.appendChild(filterWidget);
+    
+    filterElement.onkeyup = () => {
+      // console.log(filterElement.value);
+      const self = this;
+      for (const [state, {sublistContainer, listElements}] of self.attachedAnnotationStates) {
+        console.log(sublistContainer);
+        for (let [id, element] of listElements) {
+          if (filterElement.value) {
+            let annotRef = state.source.getReference(id);
+
+            if (annotRef.value && annotRef.value.description &&
+              annotRef.value.description.toLowerCase().includes(filterElement.value.toLowerCase())) {
+              element.style.display = "";
+            } else {
+              element.style.display = "none";
+            }
+          } else {
+            element.style.display = "";
+          }
+        }
+      }
+    };
+    
+
     /*
     let { source } = this.layer;
     if (source instanceof MultiscaleAnnotationSource) {
