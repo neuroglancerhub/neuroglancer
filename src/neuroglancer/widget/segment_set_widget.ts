@@ -103,24 +103,31 @@ export class SegmentSetWidget extends RefCounted {
   private addElement(s: string) {
     let itemElement = document.createElement('button');
     itemElement.className = 'segment-button';
+    itemElement.value = s;
     itemElement.textContent = s;
+    if (this.displayState.segmentAnnotaions) {
+      let annot = this.displayState.segmentAnnotaions.get(s);
+      if (annot) {
+        itemElement.textContent += ' ' + annot;
+      }
+    }
     itemElement.title = `Click to remove segment ID ${s}, control+click/right click to copy ID`;
     let widget = this;
     itemElement.addEventListener('click', function(this: ItemElement) {
-      temp.tryParseString(this.textContent!);
+      temp.tryParseString(this.value!);
       widget.visibleSegments.delete(temp);
     });
     itemElement.addEventListener('contextmenu', function(this: ItemElement) {
-      const result = setClipboard(this.textContent!);
+      const result = setClipboard(this.value!);
       StatusMessage.showTemporaryMessage(
-        result ? `Segment ID ${this.textContent} copied to clipboard` : `Failed to copy segment ID to clipboard`);
+        result ? `Segment ID ${this.value} copied to clipboard` : `Failed to copy segment ID to clipboard`);
     });
     itemElement.addEventListener('mouseenter', function(this: ItemElement) {
-      temp.tryParseString(this.textContent!);
+      temp.tryParseString(this.value!);
       widget.segmentSelectionState.set(temp);
     });
     itemElement.addEventListener('mouseleave', function(this: ItemElement) {
-      temp.tryParseString(this.textContent!);
+      temp.tryParseString(this.value!);
       widget.segmentSelectionState.set(null);
     });
     this.setItemColor(itemElement);
@@ -129,7 +136,7 @@ export class SegmentSetWidget extends RefCounted {
   }
 
   private setItemColor(itemElement: ItemElement) {
-    temp.tryParseString(itemElement.textContent!);
+    temp.tryParseString(itemElement.value!);
     itemElement.style.backgroundColor = this.segmentColorHash.computeCssColor(temp);
   }
 

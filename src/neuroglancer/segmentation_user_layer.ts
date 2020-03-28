@@ -90,6 +90,7 @@ export class SegmentationUserLayer extends Base {
     hideSegmentZero: new TrackableBoolean(true, true),
     // groupedSegments: Uint64Map.makeWithCounterpart(this.manager.worker),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
+    segmentAnnotaions: new Map<string, string>(),
     highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
     skeletonRenderingOptions: new SkeletonRenderingOptions(),
@@ -326,6 +327,16 @@ export class SegmentationUserLayer extends Base {
     return new Uint64MapEntry(value, mappedValue);
   }
 
+  getSegmentationSource() {
+    for (let layer of this.renderLayers) {
+      if (layer instanceof SegmentationRenderLayer) {
+        return layer.multiscaleSource;
+      }
+    }
+
+    return undefined;
+  }
+
   handleAction(action: string) {
     switch (action) {
       case 'recolor': {
@@ -344,7 +355,17 @@ export class SegmentationUserLayer extends Base {
           if (visibleSegments.has(segment)) {
             visibleSegments.delete(segment);
           } else {
-            visibleSegments.add(segment);
+            const source = this.getSegmentationSource();
+            if (!(this.displayState.segmentAnnotaions.has(segment.toString())) && source && source.getBodyAnnotation) {
+              source.getBodyAnnotation(segment.toString()).then(
+                response => {
+                  this.displayState.segmentAnnotaions.set(segment.toString(), response);
+                  visibleSegments.add(segment);
+                }
+              );
+            } else {
+              visibleSegments.add(segment);
+            }
           }
         }
         break;

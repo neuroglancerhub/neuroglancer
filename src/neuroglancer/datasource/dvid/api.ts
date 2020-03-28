@@ -56,6 +56,10 @@ export class DVIDInstance {
     let dateString = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
     return this.getKeyValueUrl(dataName, `progress_${user}_${dateString}`);
   }
+
+  getBodyAnnotationUrl(segmentationDataName: string, id: string) {
+    return this.getKeyValueUrl(segmentationDataName + '_annotations', id);
+  }
 }
 
 export function responseText(response: Response): Promise<any> {

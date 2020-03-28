@@ -174,4 +174,5 @@ export abstract class MultiscaleVolumeChunkSource extends
   dataType: DataType;
   volumeType: VolumeType;
   makeProofreadWidget?: (mergingJsonProvider: () => Array<string>, postUpload: () => void) => HTMLElement|null;
+  getBodyAnnotation?: (id: string) => Promise<string>;
 }

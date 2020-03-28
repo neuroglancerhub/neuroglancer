@@ -522,6 +522,34 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       mergingJsonProvider,
       postUpload)
     };
+
+    this.getBodyAnnotation = (id: string) => {
+      let dvidInstance = new DVIDInstance(this.baseUrl, this.nodeKey);
+      return makeRequestWithCredentials(
+        this.credentialsProvider,
+        {
+          method: 'GET',
+          url: dvidInstance.getBodyAnnotationUrl(this.dataInstanceKey, id),
+          responseType: 'json'
+        }).then(response => {
+          let annot = ('instance' in response) ? response['instance'] : '';
+          let type = ('class' in response) ? response['class'] : '';
+          if (annot || type) {
+            annot += ':' + type;
+          }
+          let status = ('status' in response) ? response['status'] : '';
+          
+          if (status) {
+            annot += ', ' + status;
+          }
+          return annot;
+        }).catch(
+          e => {
+            console.log(e);
+            return '';
+          }
+        );
+    };
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
@@ -534,6 +562,7 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
         volumeSourceOptions,
         this.credentialsProvider);
   }
+
 
     /*
     let dvidInstance = new DVIDInstance(this.baseUrl, this.nodeKey);
