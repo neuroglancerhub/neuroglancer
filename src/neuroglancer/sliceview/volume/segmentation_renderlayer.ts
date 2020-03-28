@@ -141,6 +141,7 @@ uint64_t getMappedObjectId() {
     builder.addUniform('highp float', 'uSelectedAlpha');
     builder.addUniform('highp float', 'uNotSelectedAlpha');
     builder.addUniform('highp float', 'uSaturation');
+    builder.addUniform('highp float', 'uHoverSaturation');
     let fragmentMain = `
   uint64_t value = getMappedObjectId();
 
@@ -158,7 +159,7 @@ uint64_t getMappedObjectId() {
     fragmentMain += `
   bool has = uShowAllSegments != 0u ? true : ${this.hashTableManager.hasFunctionName}(value);
   if (uSelectedSegment == value.value) {
-    saturation = has ? 0.5 : 0.75;
+    saturation = has ? 0.5 : uHoverSaturation;
   } else if (!has) {
     alpha = uNotSelectedAlpha;
   }
@@ -208,6 +209,7 @@ uint64_t getMappedObjectId() {
     }
     gl.uniform1f(shader.uniform('uSelectedAlpha'), this.displayState.selectedAlpha.value);
     gl.uniform1f(shader.uniform('uSaturation'), this.displayState.saturation.value);
+    gl.uniform1f(shader.uniform('uHoverSaturation'), this.displayState.hoverSaturation!.value);
     gl.uniform1f(shader.uniform('uNotSelectedAlpha'), this.displayState.notSelectedAlpha.value);
     gl.uniform2ui(shader.uniform('uSelectedSegment'), selectedSegmentLow, selectedSegmentHigh);
     gl.uniform1ui(shader.uniform('uShowAllSegments'), visibleSegments.hashTable.size ? 0 : 1);

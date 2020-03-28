@@ -88,6 +88,7 @@ export interface SegmentationDisplayState extends VisibleSegmentsState {
   segmentColorHash: SegmentColorHash;
   segmentStatedColors: Uint64Map;
   saturation: TrackableAlphaValue;
+  hoverSaturation?: TrackableAlphaValue;
   highlightedSegments: Uint64Set;
 }
 

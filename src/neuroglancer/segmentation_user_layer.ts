@@ -58,6 +58,7 @@ const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
 const OBJECT_ALPHA_JSON_KEY = 'objectAlpha';
 const SATURATION_JSON_KEY = 'saturation';
+const HOVER_SATURATION_JSON_KEY = 'hoverSaturation';
 const HIDE_SEGMENT_ZERO_JSON_KEY = 'hideSegmentZero';
 const SEGEMNT_HIGHLIGHT_JSON_KEY = 'showHoveredSegment';
 const MESH_JSON_KEY = 'mesh';
@@ -84,6 +85,7 @@ export class SegmentationUserLayer extends Base {
     segmentSelectionState: new SegmentSelectionState(),
     selectedAlpha: trackableAlphaValue(0.5),
     saturation: trackableAlphaValue(1.0),
+    hoverSaturation: trackableAlphaValue(0.1),
     notSelectedAlpha: trackableAlphaValue(0),
     objectAlpha: trackableAlphaValue(1.0),
     segmentHighlight: new TrackableBoolean(true, true),
@@ -279,6 +281,7 @@ export class SegmentationUserLayer extends Base {
     x[SELECTED_ALPHA_JSON_KEY] = this.displayState.selectedAlpha.toJSON();
     x[NOT_SELECTED_ALPHA_JSON_KEY] = this.displayState.notSelectedAlpha.toJSON();
     x[SATURATION_JSON_KEY] = this.displayState.saturation.toJSON();
+    x[HOVER_SATURATION_JSON_KEY] = this.displayState.hoverSaturation.toJSON();
     x[OBJECT_ALPHA_JSON_KEY] = this.displayState.objectAlpha.toJSON();
     x[HIDE_SEGMENT_ZERO_JSON_KEY] = this.displayState.hideSegmentZero.toJSON();
     x[SEGEMNT_HIGHLIGHT_JSON_KEY] = this.displayState.segmentHighlight.toJSON();
@@ -407,6 +410,13 @@ class DisplayOptionsTab extends Tab {
           this.registerDisposer(new RangeWidget(this.layer.displayState.saturation));
       saturationWidget.promptElement.textContent = 'Saturation';
       element.appendChild(saturationWidget.element);
+    }
+
+    {
+      const hoverSaturationWidget =
+          this.registerDisposer(new RangeWidget(this.layer.displayState.hoverSaturation));
+          hoverSaturationWidget.promptElement.textContent = 'Hover Saturation';
+      element.appendChild(hoverSaturationWidget.element);
     }
 
     // 2-d only controls
