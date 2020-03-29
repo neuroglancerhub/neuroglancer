@@ -15,10 +15,12 @@
  */
 
 import {RefCounted} from 'neuroglancer/util/disposable';
-import {NullarySignal} from 'neuroglancer/util/signal';
+import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 
 export class WatchableMap<K, V> extends RefCounted {
   changed = new NullarySignal();
+  //tmp hack
+  mapChanged = new Signal<(k: K) => void>();
   map: Map<K, V>;
   private disposerMap = new Map<K, RefCounted>();
   constructor(
@@ -52,6 +54,7 @@ export class WatchableMap<K, V> extends RefCounted {
     map.set(key, value);
     this.register(context, value, key);
     this.changed.dispatch();
+    this.mapChanged.dispatch(key);
     return this;
   }
   delete(key: K) {
@@ -62,6 +65,7 @@ export class WatchableMap<K, V> extends RefCounted {
       disposerMap.delete(key);
       map.delete(key);
       this.changed.dispatch();
+      this.mapChanged.dispatch(key);
       return true;
     }
     return false;

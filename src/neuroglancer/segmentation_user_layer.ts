@@ -53,6 +53,8 @@ import {ShaderCodeWidget} from 'neuroglancer/widget/shader_code_widget';
 import {ShaderControls} from 'neuroglancer/widget/shader_controls';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
+import {WatchableMap} from 'neuroglancer/util/watchable_map';
+import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 
 const SELECTED_ALPHA_JSON_KEY = 'selectedAlpha';
 const NOT_SELECTED_ALPHA_JSON_KEY = 'notSelectedAlpha';
@@ -77,7 +79,7 @@ const Base = UserLayerWithAnnotationsMixin(UserLayer);
 export class SegmentationUserLayer extends Base {
   sliceViewRenderScaleHistogram = new RenderScaleHistogram();
   sliceViewRenderScaleTarget = trackableRenderScaleTarget(1);
-  updateLayerWidget = (_: SegmentationRenderLayer) => {};
+  updateLayerWidget = (_1: SegmentationRenderLayer, _2: SegmentationDisplayState) => {};
 
   displayState = {
     segmentColorHash: SegmentColorHash.getDefault(),
@@ -92,7 +94,7 @@ export class SegmentationUserLayer extends Base {
     hideSegmentZero: new TrackableBoolean(true, true),
     // groupedSegments: Uint64Map.makeWithCounterpart(this.manager.worker),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
-    segmentAnnotaions: new Map<string, string>(),
+    segmentAnnotaions: new WatchableMap<string, string>(() => {}),
     highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
     skeletonRenderingOptions: new SkeletonRenderingOptions(),
@@ -164,7 +166,7 @@ export class SegmentationUserLayer extends Base {
                 localPosition: this.localPosition,
               });
               loadedSubsource.addRenderLayer(layer);
-              this.updateLayerWidget(layer);}
+              this.updateLayerWidget(layer, this.displayState);}
             );
       } else if (mesh !== undefined) {
         loadedSubsource.activate(() => {
@@ -359,8 +361,8 @@ export class SegmentationUserLayer extends Base {
             visibleSegments.delete(segment);
           } else {
             const source = this.getSegmentationSource();
-            if (!(this.displayState.segmentAnnotaions.has(segment.toString())) && source && source.getBodyAnnotation) {
-              source.getBodyAnnotation(segment.toString()).then(
+            if (!(this.displayState.segmentAnnotaions.has(segment.toString())) && source && source.getSegmentAnnotation) {
+              source.getSegmentAnnotation(segment.toString()).then(
                 response => {
                   this.displayState.segmentAnnotaions.set(segment.toString(), response);
                   visibleSegments.add(segment);
@@ -507,7 +509,7 @@ class DisplayOptionsTab extends Tab {
       }
     };
 
-    this.layer.updateLayerWidget = (layer: SegmentationRenderLayer) =>
+    this.layer.updateLayerWidget = (layer: SegmentationRenderLayer, displayState: SegmentationDisplayState) =>
     {
       if (layer.multiscaleSource.makeProofreadWidget) {
         let proofreadWidget =
@@ -518,11 +520,30 @@ class DisplayOptionsTab extends Tab {
           proofreadElement.appendChild(proofreadWidget);
         }
       }
+
+      if (layer.multiscaleSource.getSegmentAnnotation) {
+        if (displayState.visibleSegments.size > 0) {
+          for (let segment of displayState.visibleSegments) {
+            let updateSegmentAnnotation = ((s: Uint64) => {
+              let cs = s.clone();
+              return (response: any) => {
+                displayState.segmentAnnotaions!.set(cs.toString(), response);
+                displayState.visibleSegments.add(cs);
+              }
+            })(segment);
+            layer.multiscaleSource.getSegmentAnnotation(segment.toString()).then(
+              response => {
+                updateSegmentAnnotation(response);
+              }
+            );
+          }
+        }
+      }
     };
 
     for (let layer of this.layer.renderLayers) {
       if (layer instanceof SegmentationRenderLayer) {
-        this.layer.updateLayerWidget(layer);
+        this.layer.updateLayerWidget(layer, this.layer.displayState);
         //No need to update the widget later if it can be created here
         this.layer.updateLayerWidget = (_: SegmentationRenderLayer) => {};
         break;

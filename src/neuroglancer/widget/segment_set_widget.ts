@@ -64,6 +64,9 @@ export class SegmentSetWidget extends RefCounted {
     this.registerDisposer(displayState.segmentColorHash.changed.add(() => {
       this.handleColorChanged();
     }));
+    this.registerDisposer(displayState.segmentAnnotaions!.mapChanged.add((s: string) => {
+      this.updateElement(s);
+    }));
 
     for (let x of displayState.visibleSegments) {
       this.addElement(x.toString());
@@ -100,7 +103,7 @@ export class SegmentSetWidget extends RefCounted {
     }
   }
 
-  private addElement(s: string) {
+  private makeElement(s: string) {
     let itemElement = document.createElement('button');
     itemElement.className = 'segment-button';
     itemElement.value = s;
@@ -131,6 +134,20 @@ export class SegmentSetWidget extends RefCounted {
       widget.segmentSelectionState.set(null);
     });
     this.setItemColor(itemElement);
+
+    return itemElement;
+  }
+
+  private updateElement(s: string) {
+    if (this.items.has(s)) {
+      let itemElement = this.makeElement(s);
+      this.itemContainer.replaceChild(itemElement, this.items.get(s)!);
+      this.items.set(s, itemElement);
+    }
+  }
+  
+  private addElement(s: string) {
+    let itemElement = this.makeElement(s);
     this.itemContainer.appendChild(itemElement);
     this.items.set(s, itemElement);
   }

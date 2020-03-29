@@ -17,11 +17,12 @@
 import {SharedDisjointUint64Sets} from 'neuroglancer/shared_disjoint_sets';
 import {Uint64Set} from 'neuroglancer/uint64_set';
 import {Uint64} from 'neuroglancer/util/uint64';
+import {WatchableMap} from 'neuroglancer/util/watchable_map';
 
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
-  segmentAnnotaions?: Map<string, string>;
+  segmentAnnotaions?: WatchableMap<string, string>;
 }
 
 /**

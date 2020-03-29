@@ -523,7 +523,7 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       postUpload)
     };
 
-    this.getBodyAnnotation = (id: string) => {
+    this.getSegmentAnnotation = (id: string) => {
       let dvidInstance = new DVIDInstance(this.baseUrl, this.nodeKey);
       return makeRequestWithCredentials(
         this.credentialsProvider,
