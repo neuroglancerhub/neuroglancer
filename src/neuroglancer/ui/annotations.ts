@@ -590,6 +590,23 @@ export class AnnotationLayerView extends Tab {
     }
   }
 
+  private countAnnotaionTable() {
+    let count = 0;
+    for (const [state, { listElements }] of this.attachedAnnotationStates) {
+      if (state) {
+        for (let e of listElements) {
+          if (e[1].style.display !== 'none') {
+            count += 1;
+          }
+        }
+      }
+    }
+
+    return count;
+  }
+
+  private updateNumAnnotationWidget: () => void;
+
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
       public state: Owned<SelectedAnnotationState>, public displayState: AnnotationDisplayState) {
@@ -729,6 +746,7 @@ export class AnnotationLayerView extends Tab {
           }
         }
       }
+      this.updateNumAnnotationWidget();
     };
 
     filterElement.onkeyup = updateTable;
@@ -745,6 +763,13 @@ export class AnnotationLayerView extends Tab {
       }
     }
     */
+
+   let numAnnotationWidget = document.createElement('p');
+   numAnnotationWidget.innerText = `#Annotations: ${this.countAnnotaionTable()}`;
+   this.element.appendChild(numAnnotationWidget);
+   this.updateNumAnnotationWidget = () => {
+    numAnnotationWidget.innerText = `#Annotations: ${this.countAnnotaionTable()}`;
+   };
 
     this.element.appendChild(this.listContainer);
     this.listContainer.addEventListener('mouseleave', () => {
@@ -979,6 +1004,7 @@ export class AnnotationLayerView extends Tab {
     this.updated = true;
     this.updateHoverView();
     this.updateSelectionView();
+    this.updateNumAnnotationWidget();
   }
 
   private makeAnnotationListElement(annotation: Annotation, state: AnnotationLayerState) {

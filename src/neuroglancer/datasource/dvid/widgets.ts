@@ -210,9 +210,12 @@ export function createProofreadWidget(mergeFunc: (mergingJson: Array<string>) =>
   });
 
   let chartElement = document.createElement('pre');
-  chartElement.innerText = '|  #Bodies merged today: ' + String(proofreadingStats.numBodyMerged.value);
-  proofreadingStats.numBodyMerged.changed.add(() => {
+  let updateChartElement = () => {
     chartElement.innerText = '|  #Bodies merged today: ' + String(proofreadingStats.numBodyMerged.value);
+  }
+  updateChartElement();
+  proofreadingStats.numBodyMerged.changed.add(() => {
+    updateChartElement();
   });
   // statElement.appendChild(chartElement);
 
