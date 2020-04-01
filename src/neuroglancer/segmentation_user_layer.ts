@@ -361,11 +361,13 @@ export class SegmentationUserLayer extends Base {
             visibleSegments.delete(segment);
           } else {
             const source = this.getSegmentationSource();
-            if (!(this.displayState.segmentAnnotaions.has(segment.toString())) && source && source.getSegmentAnnotation) {
-              source.getSegmentAnnotation(segment.toString()).then(
+            const s = segment.toString();
+            const currentSegment = segment.clone();
+            if (!(this.displayState.segmentAnnotaions.has(s)) && source && source.getSegmentAnnotation) {
+              source.getSegmentAnnotation(s).then(
                 response => {
-                  this.displayState.segmentAnnotaions.set(segment.toString(), response);
-                  visibleSegments.add(segment);
+                  this.displayState.segmentAnnotaions.set(s, response);
+                  visibleSegments.add(currentSegment);
                 }
               );
             } else {

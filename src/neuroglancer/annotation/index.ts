@@ -366,7 +366,7 @@ function deserializeTwoFloatVectors(
 }
 
 typeHandlers.set(AnnotationType.LINE, {
-  icon: 'ꕹ',
+  icon: '⚯',
   description: 'Line',
   toJSON(annotation: Line) {
     return {

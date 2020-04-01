@@ -51,6 +51,7 @@ import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/defau
 // import { DVIDAnnotationGeometryChunkSource } from './backend';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {verifyInt} from 'neuroglancer/util/json';
+import {Borrowed} from 'neuroglancer/util/disposable';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -1355,14 +1356,22 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.childRefreshed.dispatch();
   }
 
-  add(annotation: Annotation, commit: boolean = true): AnnotationReference {
-    if (annotation.type === AnnotationType.POINT) {
-      if (this.readonly) {
-        let errorMessage = 'Permission denied for changing annotations.';
-        StatusMessage.showTemporaryMessage(errorMessage);
-        throw Error(errorMessage);
-      }
+  commit(reference: Borrowed<AnnotationReference>) {
+    if (reference.value && reference.value.type === AnnotationType.LINE) {
+      reference.value.pointA = reference.value.pointA.map(x => Math.round(x));
+      reference.value.pointB = reference.value.pointB.map(x => Math.round(x));
+    }
+    super.commit(reference);
+  }
 
+  add(annotation: Annotation, commit: boolean = true): AnnotationReference {
+    if (this.readonly) {
+      let errorMessage = 'Permission denied for changing annotations.';
+      StatusMessage.showTemporaryMessage(errorMessage);
+      throw Error(errorMessage);
+    }
+
+    if (annotation.type === AnnotationType.POINT) {
       let annotationRef = new DVIDPointAnnotationFacade(<DVIDPointAnnotation>annotation);
       annotationRef.kind = 'Note';
       
@@ -1370,7 +1379,11 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       annotation.point = annotation.point.map(x => Math.round(x));
       annotationRef.setCustom(true);
       annotationRef.addTimeStamp();
+    } else if (annotation.type == AnnotationType.LINE) {
+      annotation.pointA = annotation.pointA.map(x => Math.round(x));
+      annotation.pointB = annotation.pointB.map(x => Math.round(x));
     }
+
     return super.add(annotation, commit);
   }
 }

@@ -30,7 +30,7 @@ import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {DVIDInstance, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
 import {DVIDPointAnnotation, DVIDPointAnnotationFacade, getAnnotationDescription} from 'neuroglancer/datasource/dvid/utils';
-import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, AnnotationPropertySpec} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, Line, AnnotationPropertySpec} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk, AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
@@ -538,37 +538,66 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         });
   }
 
-  private uploadable(annotation: Annotation): annotation is Point {
+  private uploadable(annotation: Annotation): annotation is Point | Line {
     const { parameters } = this;
 
     if (parameters.user && parameters.user !== '') {
-      return annotation.type === AnnotationType.POINT;
+      return annotation.type === AnnotationType.POINT || annotation.type === AnnotationType.LINE;
     }
 
     return false;
   }
 
-  add(annotation: Annotation) {
+  private addPointAnnotation(annotation: DVIDPointAnnotation) {
     const { parameters } = this;
+    const dvidAnnotation = annotationToDVID(annotation, parameters.user);
 
-    const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
+    let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+    return makeRequestWithCredentials(
+      this.credentialsProvider,
+      {
+        method: 'POST',
+        url: dataInstance.getNodeApiUrl(this.getElementsPath()),
+        payload: JSON.stringify([dvidAnnotation]),
+        responseType: '',
+      })
+      .then(() => {
+        return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
+      })
+      .catch(e => {
+        throw new Error(e);
+      });
+  }
 
+  private addLineAnnotation(annotation: Line) {
+    const { parameters } = this;
+    let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+    let key = `${annotation.pointA[0]}_${annotation.pointA[1]}_${annotation.pointA[2]}-${annotation.pointB[0]}_${annotation.pointB[1]}_${annotation.pointB[2]}`;
+    return makeRequestWithCredentials(
+      this.credentialsProvider,
+      {
+        method: 'POST',
+        url: dataInstance.getKeyValueUrl('line_annotations', key),
+        payload: JSON.stringify(annotation),
+        responseType: '',
+      })
+      .then(() => {
+        return key;
+      })
+      .catch(e => {
+        throw new Error(e);
+      });
+  }
+
+  add(annotation: Annotation) {
     if (this.uploadable(annotation)) {
-      let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-      return makeRequestWithCredentials(
-        this.credentialsProvider,
-        {
-          method: 'POST',
-          url: dataInstance.getNodeApiUrl(this.getElementsPath()),
-          payload: JSON.stringify([dvidAnnotation]),
-          responseType: '',
-        })
-        .then(() => {
-          return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
-        })
-        .catch(e => {
-          throw new Error(e);
-        });
+      switch (annotation.type) {
+        case AnnotationType.POINT:
+          return this.addPointAnnotation(<DVIDPointAnnotation>annotation);
+        case AnnotationType.LINE:
+          return this.addLineAnnotation(annotation);
+      }
+      
     } else {
       return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
     }
