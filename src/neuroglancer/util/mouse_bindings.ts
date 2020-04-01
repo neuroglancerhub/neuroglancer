@@ -25,18 +25,29 @@ export class MouseEventBinder<EventMap extends EventActionMapInterface> extends 
   private dispatch(baseIdentifier: string, event: MouseEvent) {
     dispatchEventWithModifiers(baseIdentifier, event, event, this.eventMap);
   }
+  private prevClientX:number|null = null;
+  private prevClientY:number|null = null;
   constructor(public target: EventTarget, public eventMap: EventMap) {
     super();
     this.registerEventListener(target, 'wheel', (event: WheelEvent) => {
       this.dispatch('wheel', event);
     });
     this.registerEventListener(target, 'click', (event: MouseEvent) => {
+      if (this.prevClientX !== null && this.prevClientY !== null) {
+        const deltaX = event.clientX - this.prevClientX;
+        const deltaY = event.clientY - this.prevClientY;
+        if (deltaX * deltaX + deltaY * deltaY < 5) {
+          this.dispatch(`realclick${event.button}`, event);
+        }
+      }
       this.dispatch(`click${event.button}`, event);
     });
     this.registerEventListener(target, 'dblclick', (event: MouseEvent) => {
       this.dispatch(`dblclick${event.button}`, event);
     });
     this.registerEventListener(target, 'mousedown', (event: MouseEvent) => {
+      this.prevClientX = event.clientX;
+      this.prevClientY = event.clientY;
       this.dispatch(`mousedown${event.button}`, event);
     });
     this.registerEventListener(target, 'mouseup', (event: MouseEvent) => {
