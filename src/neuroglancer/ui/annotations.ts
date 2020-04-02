@@ -650,14 +650,14 @@ export class AnnotationLayerView extends Tab {
     });
     mutableControls.appendChild(boundingBoxButton);
 
-    // const lineButton = makeIcon({
-    //   text: getAnnotationTypeHandler(AnnotationType.LINE).icon,
-    //   title: 'Annotate line',
-    //   onClick: () => {
-    //     this.layer.tool.value = new PlaceLineTool(this.layer, {});
-    //   },
-    // });
-    // mutableControls.appendChild(lineButton);
+    const lineButton = makeIcon({
+      text: getAnnotationTypeHandler(AnnotationType.LINE).icon,
+      title: 'Annotate line',
+      onClick: () => {
+        this.layer.tool.value = new PlaceLineTool(this.layer, {});
+      },
+    });
+    mutableControls.appendChild(lineButton);
 
     const ellipsoidButton = makeIcon({
       text: getAnnotationTypeHandler(AnnotationType.ELLIPSOID).icon,
@@ -743,6 +743,8 @@ export class AnnotationLayerView extends Tab {
           let annotRef = state.source.getReference(id);
           if (annotRef.value) {
             filterAnnotation(annotRef.value, element, filters);
+          } else {
+            element.style.display = 'none';
           }
         }
       }

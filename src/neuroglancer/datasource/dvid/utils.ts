@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import {Point} from 'neuroglancer/annotation/index';
+import {Point, Line, AnnotationType, AnnotationId} from 'neuroglancer/annotation/index';
 import {StringMemoize} from 'neuroglancer/util/memoize';
 
 let EnvMemoize = new StringMemoize();
@@ -30,9 +30,35 @@ export let Env = {
     }
 };
 
+export const lineAnnotationDataName = 'bookmarks';
+
 export interface DVIDPointAnnotation extends Point {
   kind?: string;
   prop: {[key: string]: string};
+}
+
+export interface DVIDLineAnnotation extends Line
+{
+}
+
+export function typeOfAnnotationId(id: AnnotationId) {
+  if (id.match(/^\d+_\d+_\d+$/)) {
+    return AnnotationType.POINT;
+  } else if (id.match(/^\d+_\d+_\d+-\d+_\d+_\d+$/)) {
+    return AnnotationType.LINE;
+  } else {
+    console.log(id);
+    throw new Error(`Invalid annotation ID for DVID: ${id}`)
+  }
+}
+
+export function isAnnotationIdValid(id: AnnotationId) {
+  try {
+    typeOfAnnotationId(id);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export class DVIDPointAnnotationFacade {
@@ -142,14 +168,18 @@ export class DVIDPointAnnotationFacade {
   }
 }
 
-export function getAnnotationDescription(annotation: DVIDPointAnnotation): string {
+export function getAnnotationDescription(annotation: DVIDPointAnnotation|DVIDLineAnnotation): string {
 
   let description = '';
-  let {prop} = annotation;
-  if (prop) {
-    description = prop.comment || prop.annotation || '';
-    if (prop.type && prop.type !== 'Other') {
-      description += ` (Type: ${prop.type})`;
+  if (annotation.type === AnnotationType.LINE) {
+    return annotation.description || '';
+  } else {
+    let { prop } = annotation;
+    if (prop) {
+      description = prop.comment || prop.annotation || '';
+      if (prop.type && prop.type !== 'Other') {
+        description += ` (Type: ${prop.type})`;
+      }
     }
   }
 

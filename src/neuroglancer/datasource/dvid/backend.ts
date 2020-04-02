@@ -29,7 +29,7 @@ import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {DVIDInstance, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
-import {DVIDPointAnnotation, DVIDPointAnnotationFacade, getAnnotationDescription} from 'neuroglancer/datasource/dvid/utils';
+import {DVIDPointAnnotation, DVIDPointAnnotationFacade, DVIDLineAnnotation, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, lineAnnotationDataName} from 'neuroglancer/datasource/dvid/utils';
 import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, Line, AnnotationPropertySpec} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk, AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
@@ -255,43 +255,73 @@ export function parseUint64ToArray(out: Uint64[], v: string): Uint64[] {
   return out;
 }
 
-function parseAnnotation(entry: any): DVIDPointAnnotation|null {
+function parseLineAnnotation(entry: any): DVIDLineAnnotation
+{
+  const pos = verifyObjectProperty(entry, 'Pos', x => parseIntVec(new Float32Array(6), x));
+  let annotation:DVIDLineAnnotation = {
+    type: AnnotationType.LINE,
+    id: `${pos[0]}_${pos[1]}_${pos[2]}-${pos[3]}_${pos[4]}_${pos[5]}`,
+    pointA: new Float32Array([pos[0], pos[1], pos[2]]),
+    pointB: new Float32Array([pos[3], pos[4], pos[5]]),
+    properties: [0]
+  };
+
+  if ('Prop' in entry) {
+    const propertiesObj = verifyObjectProperty(entry, 'Prop', verifyObject);
+    if ('comment' in propertiesObj) {
+      annotation.description = verifyObjectProperty(propertiesObj, 'comment', verifyString);
+    }
+  }
+
+  return annotation;
+}
+
+function parsePointAnnotation(entry: any, kind: string): DVIDPointAnnotation
+{
+  let prop: { [key: string]: string } = {};
+
+  const propertiesObj = verifyObjectProperty(entry, 'Prop', verifyObject);
+  const corner = verifyObjectProperty(entry, 'Pos', x => parseIntVec(vec3.create(), x));
+  // let segments: Array<Uint64> = new Array<Uint64>();
+  let relatedSegments: Uint64[][] = [[]];
+
+  prop = propertiesObj;
+  if (kind === 'Note') {
+    if (propertiesObj.type) {
+      prop.type = DVIDToAnnotationType(propertiesObj.type);
+    }
+    relatedSegments[0] = verifyObjectProperty(propertiesObj, 'body ID', x => parseUint64ToArray(Array<Uint64>(), x));
+  }
+
+  let annotation: DVIDPointAnnotation = {
+    point: corner,
+    type: AnnotationType.POINT,
+    properties: [],
+    kind,
+    id: `${corner[0]}_${corner[1]}_${corner[2]}`,
+    relatedSegments,
+    prop: {}
+  };
+
+  let annotationRef = new DVIDPointAnnotationFacade(annotation);
+  annotationRef.prop = prop;
+
+  let description = getAnnotationDescription(annotation);
+  if (description) {
+    annotation.description = description;
+  }
+  return annotation;
+}
+
+function parseAnnotation(entry: any): DVIDPointAnnotation|DVIDLineAnnotation|null {
   if (entry) {
     const kind = verifyObjectProperty(entry, 'Kind', verifyString);
     if (kind !== 'Unknown') {
-      let prop:{[key:string]: string} = {};
-
-      const propertiesObj = verifyObjectProperty(entry, 'Prop', verifyObject);
-      const corner = verifyObjectProperty(entry, 'Pos', x => parseIntVec(vec3.create(), x));
-      // let segments: Array<Uint64> = new Array<Uint64>();
-      let relatedSegments : Uint64[][] = [[]];
-
-      prop = propertiesObj;
-      if (kind === 'Note') {
-        if (propertiesObj.type) {
-          prop.type = DVIDToAnnotationType(propertiesObj.type);
-        }
-        relatedSegments[0] = verifyObjectProperty(propertiesObj, 'body ID', x => parseUint64ToArray(Array<Uint64>(), x));
+      if (kind === 'Line') {
+        return parseLineAnnotation(entry);
+      } else {
+        return parsePointAnnotation(entry, kind);
       }
-
-      let annotation: DVIDPointAnnotation = {
-        point: corner,
-        type: AnnotationType.POINT,
-        properties: [],
-        kind,
-        id: `${corner[0]}_${corner[1]}_${corner[2]}`,
-        relatedSegments,
-        prop: {}
-      };
-
-      let annotationRef = new DVIDPointAnnotationFacade(annotation);
-      annotationRef.prop = prop;
-
-      let description = getAnnotationDescription(annotation);
-      if (description) {
-        annotation.description = description;
-      }
-      return annotation;
     }
   }
 
@@ -337,11 +367,11 @@ function parseAnnotations(
           if (annotation) {
             serializer.add(annotation);
             if (emittingAddSignal) {
-              if (annotation.kind === 'Note') {
+              if (annotation.type === AnnotationType.LINE || (annotation.type === AnnotationType.POINT && annotation.kind === 'Note')) {
                 source.rpc!.invoke(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, {
-                  id: source.rpcId,
-                  newAnnotation: {...annotation, description: getAnnotationDescription(annotation)}
-                });
+                      id: source.rpcId,
+                      newAnnotation: { ...annotation, description: getAnnotationDescription(annotation) }
+                    });
               }
             }
           }
@@ -433,19 +463,69 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
     const {parameters} = this;
     if (parameters.usertag) {
       if (parameters.user) {
-        let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey)
-        return makeRequestWithCredentials(
-          this.credentialsProvider,
-          {
-            method: 'GET',
-            url: dataInstance.getNodeApiUrl(this.getPathByUserTag(parameters.user)),
-            payload: undefined,
-            responseType: 'json',
-          },
-          cancellationToken)
-          .then(values => {
-            parseAnnotations(this, chunk, values, parameters.properties, true);
-          });
+        let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+
+        let values:any[] = [];
+        try {
+          let pointAnnotationValues = await makeRequestWithCredentials(
+            this.credentialsProvider,
+            {
+              method: 'GET',
+              url: dataInstance.getNodeApiUrl(this.getPathByUserTag(parameters.user)),
+              payload: undefined,
+              responseType: 'json',
+            },
+            cancellationToken);
+          values = [...pointAnnotationValues];
+        } catch {
+        }
+
+        try {
+          let keys = await makeRequestWithCredentials(
+            this.credentialsProvider,
+            {
+              method: 'GET',
+              url: dataInstance.getKeyValueRangeUrl(lineAnnotationDataName, parameters.user + '--0', parameters.user + '--9'),
+              payload: undefined,
+              responseType: 'json',
+            },
+            cancellationToken);
+
+          console.log(keys);
+
+          for (let key of keys) {
+            try {
+              let lineAnnotaionValue = await makeRequestWithCredentials(
+                this.credentialsProvider,
+                {
+                  method: 'GET',
+                  url: dataInstance.getKeyValueUrl(lineAnnotationDataName, key),
+                  responseType: 'json',
+                },
+                cancellationToken);
+              values.push(lineAnnotaionValue);
+            } catch (e) {
+              console.log(e);
+            }
+          }
+
+          /*
+          let lineAnnotationValues = await makeRequestWithCredentials(
+            this.credentialsProvider,
+            {
+              method: 'GET',
+              url: dataInstance.getKeyValuesUrl(lineAnnotationDataName),
+              payload: JSON.stringify(keys),
+              responseType: 'json',
+            },
+            cancellationToken);
+            */
+
+            // values = [...values, ...lineAnnotationValues];
+        } catch(e) {
+          console.log(e);
+        }
+        return parseAnnotations(this, chunk, values, parameters.properties, true);
       } else {
         throw Error('Expecting a valid user name.')
       }
@@ -513,29 +593,64 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
     }
   }
 
-  downloadMetadata(chunk: AnnotationMetadataChunk, cancellationToken: CancellationToken) {
+  private requestPointMetaData(id: AnnotationId, cancellationToken: CancellationToken) {
     const { parameters } = this;
-    const id = chunk.key!;
     let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
     return makeRequestWithCredentials(
       this.credentialsProvider,
       {
         method: 'GET',
         url: dataInstance.getNodeApiUrl(this.getPathByAnnotationId(id)),
-        payload: undefined,
         responseType: 'json',
       },
-      cancellationToken)
-      .then(response => {
-        if (response.length > 0) {
-          chunk.annotation = parseAnnotation(response[0]);
+      cancellationToken).then(
+        response => {
+          if (response && response.length > 0) {
+            return response[0];
+          } else {
+            return response;
+          }
+        }
+      );
+  }
+
+  private requestLineMetaData(id: AnnotationId, cancellationToken: CancellationToken) {
+    const { parameters } = this;
+    if (parameters.user) {
+      let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+      return makeRequestWithCredentials(
+        this.credentialsProvider,
+        {
+          method: 'GET',
+          url: dataInstance.getKeyValueUrl(lineAnnotationDataName, `${this.parameters.user}--${id}`),
+          responseType: 'json',
+        },
+        cancellationToken);
+    } else {
+      throw new Error('User must be specified for line annotation.');
+    }
+  }
+
+  private requestMetadata(chunk: AnnotationMetadataChunk, cancellationToken: CancellationToken) {
+    const id = chunk.key!;
+    switch (typeOfAnnotationId(id)) {
+      case AnnotationType.POINT:
+        return this.requestPointMetaData(id, cancellationToken);
+      case AnnotationType.LINE:
+        return this.requestLineMetaData(id, cancellationToken);
+    }
+  }
+
+  downloadMetadata(chunk: AnnotationMetadataChunk, cancellationToken: CancellationToken) {
+    return this.requestMetadata(chunk, cancellationToken).then(
+      response => {
+        if (response) {
+          chunk.annotation = parseAnnotation(response);
         } else {
           chunk.annotation = null;
         }
-      },
-        () => {
-          chunk.annotation = null;
-        });
+      }
+    )
   }
 
   private uploadable(annotation: Annotation): annotation is Point | Line {
@@ -548,7 +663,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
     return false;
   }
 
-  private addPointAnnotation(annotation: DVIDPointAnnotation) {
+  private updatePointAnnotation(annotation: DVIDPointAnnotation) {
     const { parameters } = this;
     const dvidAnnotation = annotationToDVID(annotation, parameters.user);
 
@@ -560,7 +675,11 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         url: dataInstance.getNodeApiUrl(this.getElementsPath()),
         payload: JSON.stringify([dvidAnnotation]),
         responseType: '',
-      })
+      });
+  }
+
+  private addPointAnnotation(annotation: DVIDPointAnnotation) {
+    return this.updatePointAnnotation(annotation)
       .then(() => {
         return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
       })
@@ -569,20 +688,48 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
       });
   }
 
-  private addLineAnnotation(annotation: Line) {
+  private getLineAnnotationId(annotation: DVIDLineAnnotation) {
+    return `${annotation.pointA[0]}_${annotation.pointA[1]}_${annotation.pointA[2]}-${annotation.pointB[0]}_${annotation.pointB[1]}_${annotation.pointB[2]}`;
+  }
+
+  private getLineAnnotationKeyFromId(id: AnnotationId) {
+    if (this.parameters.user) {
+      return `${this.parameters.user}--${id}`;
+    } else {
+      throw new Error('Cannot commit line annotation because no user is specified');
+    } 
+  }
+
+  private getLineAnnotationKey(annotation: DVIDLineAnnotation) {
+    return this.getLineAnnotationKeyFromId(this.getLineAnnotationId(annotation));
+  }
+
+  private updateLineAnnotation(annotation: DVIDLineAnnotation) {
     const { parameters } = this;
     let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-    let key = `${annotation.pointA[0]}_${annotation.pointA[1]}_${annotation.pointA[2]}-${annotation.pointB[0]}_${annotation.pointB[1]}_${annotation.pointB[2]}`;
+    let key = this.getLineAnnotationKey(annotation);
+    let dvidAnnotation:any = {
+      Kind: 'Line',
+      Pos: [...annotation.pointA, ...annotation.pointB]
+    };
+    if (annotation.description) {
+      dvidAnnotation.Prop = {comment: annotation.description};
+    }
+
     return makeRequestWithCredentials(
       this.credentialsProvider,
       {
         method: 'POST',
-        url: dataInstance.getKeyValueUrl('line_annotations', key),
-        payload: JSON.stringify(annotation),
+        url: dataInstance.getKeyValueUrl(lineAnnotationDataName, key),
+        payload: JSON.stringify(dvidAnnotation),
         responseType: '',
-      })
+      });
+  }
+
+  private addLineAnnotation(annotation: DVIDLineAnnotation) {
+    return this.updateLineAnnotation(annotation)
       .then(() => {
-        return key;
+        return this.getLineAnnotationId(annotation);
       })
       .catch(e => {
         throw new Error(e);
@@ -602,8 +749,20 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
       return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
     }
   }
-
+  
   update(_: AnnotationId, annotation: Annotation) {
+    if (this.uploadable(annotation)) {
+      switch (annotation.type) {
+        case AnnotationType.POINT:
+          return this.updatePointAnnotation(<DVIDPointAnnotation>annotation);
+        case AnnotationType.LINE:
+          return this.updateLineAnnotation(annotation);
+      }
+      
+    } else {
+      throw new Error('Cannot update DVID annotation');
+    }
+    /*
     if (this.uploadable(annotation)) {
       const { parameters } = this;
       const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
@@ -619,18 +778,33 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
     } else {
       return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
     }
+    */
   }
 
-  delete (id: AnnotationId) {
-    const {parameters} = this;
-    let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-    return makeRequestWithCredentials(
-      this.credentialsProvider,
-      {
-        method: 'DELETE',
-        url: dataInstance.getNodeApiUrl(`/${parameters.dataInstanceKey}/element/${id}`),
-        payload: undefined,
-        responseType: '',
-      });
+  delete(id: AnnotationId) {
+    if (isAnnotationIdValid(id)) {
+      const { parameters } = this;
+      let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+      switch (typeOfAnnotationId(id)) {
+        case AnnotationType.POINT:
+          return makeRequestWithCredentials(
+            this.credentialsProvider,
+            {
+              method: 'DELETE',
+              url: dataInstance.getNodeApiUrl(`/${parameters.dataInstanceKey}/element/${id}`),
+              responseType: '',
+            });
+        case AnnotationType.LINE:
+          return makeRequestWithCredentials(
+            this.credentialsProvider,
+            {
+              method: 'DELETE',
+              url: dataInstance.getKeyValueUrl(lineAnnotationDataName, this.getLineAnnotationKeyFromId(id)),
+              responseType: '',
+            });
+      }
+    } else {
+      return Promise.resolve(null);
+    }
   }
 }

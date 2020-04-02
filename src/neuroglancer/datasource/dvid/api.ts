@@ -51,6 +51,14 @@ export class DVIDInstance {
     return `${this.getNodeApiUrl()}/${dataName}/key/${key}`;
   }
 
+  getKeyValueRangeUrl(dataName: string, startKey: string, endKey:string) {
+    return `${this.getNodeApiUrl()}/${dataName}/keyrange/${startKey}/${endKey}`;
+  }
+
+  getKeyValuesUrl(dataName: string) {
+    return `${this.getNodeApiUrl()}/${dataName}/keyvalues?jsontar=false`;
+  }
+
   getMergeStatUrl(dataName: string, user: string) {
     let today = new Date();
     let dateString = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
