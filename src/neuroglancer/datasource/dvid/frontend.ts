@@ -529,28 +529,41 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       return makeRequestWithCredentials(
         this.credentialsProvider,
         {
-          method: 'GET',
-          url: dvidInstance.getBodyAnnotationUrl(this.dataInstanceKey, id),
-          responseType: 'json'
-        }).then(response => {
-          let annot = ('instance' in response) ? response['instance'] : '';
-          let type = ('class' in response) ? response['class'] : '';
-          if (annot || type) {
-            annot += ':' + type;
+          method: 'HEAD',
+          url: dvidInstance.getSparsevolUrl(this.dataInstanceKey, id),
+          responseType: ''
+        }).then(
+          () => {
+            return makeRequestWithCredentials(
+              this.credentialsProvider,
+              {
+                method: 'GET',
+                url: dvidInstance.getBodyAnnotationUrl(this.dataInstanceKey, id),
+                responseType: 'json'
+              }).then(response => {
+                let annot = ('instance' in response) ? response['instance'] : '';
+                let type = ('class' in response) ? response['class'] : '';
+                if (annot || type) {
+                  annot += ':' + type;
+                }
+                let status = ('status' in response) ? response['status'] : '';
+      
+                if (status) {
+                  annot += ', ' + status;
+                }
+                return annot;
+              }).catch(
+                e => {
+                  console.log(e);
+                  return '';
+                }
+              );
           }
-          let status = ('status' in response) ? response['status'] : '';
-          
-          if (status) {
-            annot += ', ' + status;
-          }
-          return annot;
-        }).catch(
-          e => {
-            console.log(e);
-            return '';
-          }
-        );
-    };
+        ).catch(e => {
+          console.log(e);
+          return null;
+        });
+      }
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {

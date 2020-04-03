@@ -69,7 +69,7 @@ export class SegmentSetWidget extends RefCounted {
     }));
 
     for (let x of displayState.visibleSegments) {
-      this.addElement(x.toString());
+       this.addElement(x.toString());
     }
     this.updateClearButtonVisibility();
   }
@@ -108,10 +108,15 @@ export class SegmentSetWidget extends RefCounted {
     itemElement.className = 'segment-button';
     itemElement.value = s;
     itemElement.textContent = s;
+    this.setItemColor(itemElement);
     if (this.displayState.segmentAnnotaions) {
       let annot = this.displayState.segmentAnnotaions.get(s);
       if (annot) {
         itemElement.textContent += ' ' + annot;
+      } else if (annot === null) {
+        itemElement.style.textDecoration = 'line-through';
+        itemElement.style.backgroundColor = 'gray';
+        itemElement.style.textDecorationColor = 'white';
       }
     }
     itemElement.title = `Click to remove segment ID ${s}, control+click/right click to copy ID`;
@@ -133,7 +138,6 @@ export class SegmentSetWidget extends RefCounted {
       temp.tryParseString(this.value!);
       widget.segmentSelectionState.set(null);
     });
-    this.setItemColor(itemElement);
 
     return itemElement;
   }
@@ -147,9 +151,13 @@ export class SegmentSetWidget extends RefCounted {
   }
   
   private addElement(s: string) {
-    let itemElement = this.makeElement(s);
-    this.itemContainer.appendChild(itemElement);
-    this.items.set(s, itemElement);
+    if (this.items.has(s)) {
+      this.updateElement(s);
+    } else {
+      let itemElement = this.makeElement(s);
+      this.itemContainer.appendChild(itemElement);
+      this.items.set(s, itemElement);
+    }
   }
 
   private setItemColor(itemElement: ItemElement) {

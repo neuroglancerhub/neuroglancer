@@ -31,7 +31,7 @@ export const credentialsKey = 'DVID';
 // export type DVIDCredentialsProvider = CredentialsProvider<DVIDToken>;
 
 interface HttpCall {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: 'GET' | 'POST' | 'DELETE' | 'HEAD';
   url: string;
   payload?: string;
 }
@@ -67,6 +67,10 @@ export class DVIDInstance {
 
   getBodyAnnotationUrl(segmentationDataName: string, id: string) {
     return this.getKeyValueUrl(segmentationDataName + '_annotations', id);
+  }
+
+  getSparsevolUrl(segmentationDataName: string, id: string) {
+    return `${this.getNodeApiUrl()}/${segmentationDataName}/sparsevol/${id}`;
   }
 }
 

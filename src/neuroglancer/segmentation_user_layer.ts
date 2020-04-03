@@ -94,7 +94,7 @@ export class SegmentationUserLayer extends Base {
     hideSegmentZero: new TrackableBoolean(true, true),
     // groupedSegments: Uint64Map.makeWithCounterpart(this.manager.worker),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
-    segmentAnnotaions: new WatchableMap<string, string>(() => {}),
+    segmentAnnotaions: new WatchableMap<string, string|null>(() => {}),
     highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
     skeletonRenderingOptions: new SkeletonRenderingOptions(),
@@ -108,6 +108,11 @@ export class SegmentationUserLayer extends Base {
     super(managedLayer, specification);
     this.specification = specification;
     this.displayState.visibleSegments.changed.add(this.specificationChanged.dispatch);
+    this.displayState.visibleSegments.changed.add((x, add) => {
+      if (x && add) {
+        this.updateSegmentAnnotation(x);
+      }
+    });
     this.displayState.segmentEquivalences.changed.add(this.specificationChanged.dispatch);
     this.displayState.segmentSelectionState.bindTo(this.manager.layerSelectedValues, this);
     this.displayState.selectedAlpha.changed.add(this.specificationChanged.dispatch);
@@ -124,6 +129,28 @@ export class SegmentationUserLayer extends Base {
     this.tabs.add(
         'rendering', {label: 'Rendering', order: -100, getter: () => new DisplayOptionsTab(this)});
     this.tabs.default = 'rendering';
+  }
+
+  //tmp hack
+  private getSegmentationRenderLayer() {
+    for (let layer of this.renderLayers) {
+      if (layer instanceof SegmentationRenderLayer) {
+        return layer;
+      }
+    }
+
+    return undefined;
+  }
+
+  private updateSegmentAnnotation(s: Uint64) {
+    let layer = this.getSegmentationRenderLayer();
+    if (layer && layer.multiscaleSource.getSegmentAnnotation) {
+      let cs = s.clone();
+      layer.multiscaleSource.getSegmentAnnotation(cs.toString()).then(
+        response => {
+          this.displayState.segmentAnnotaions!.set(cs.toString(), response);
+        });
+    }
   }
 
   get volumeOptions() {
@@ -526,6 +553,10 @@ class DisplayOptionsTab extends Tab {
       if (layer.multiscaleSource.getSegmentAnnotation) {
         if (displayState.visibleSegments.size > 0) {
           for (let segment of displayState.visibleSegments) {
+            displayState.visibleSegments.changed.dispatch(segment, true);
+            // displayState.visibleSegments.delete(segment);
+            // displayState.visibleSegments.add(segment);
+            /*
             let updateSegmentAnnotation = ((s: Uint64) => {
               let cs = s.clone();
               return (response: any) => {
@@ -538,6 +569,7 @@ class DisplayOptionsTab extends Tab {
                 updateSegmentAnnotation(response);
               }
             );
+            */
           }
         }
       }

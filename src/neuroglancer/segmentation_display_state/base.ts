@@ -22,7 +22,7 @@ import {WatchableMap} from 'neuroglancer/util/watchable_map';
 export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
-  segmentAnnotaions?: WatchableMap<string, string>;
+  segmentAnnotaions?: WatchableMap<string, string|null>;
 }
 
 /**

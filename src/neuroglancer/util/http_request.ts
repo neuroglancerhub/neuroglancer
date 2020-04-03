@@ -63,7 +63,7 @@ export async function fetchOk(input: RequestInfo, init?: RequestInit): Promise<R
     }
     throw error;
   }
-  if (!response.ok) throw HttpError.fromResponse(response);
+  if (!response.ok || response.status === 204) throw HttpError.fromResponse(response);
   return response;
 }
 
