@@ -31,7 +31,8 @@ import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
 import {ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
-import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {ElementVisibilityFromTrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {TrackableStringEdit} from 'neuroglancer/trackable_string';
 import {makeCachedLazyDerivedWatchableValue, registerNested, TrackableValue, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
 import {animationFrameDebounce} from 'neuroglancer/util/animation_frame_debounce';
@@ -502,6 +503,18 @@ export class AnnotationLayerView extends Tab {
   private attachedAnnotationStates =
       new Map<AnnotationLayerState, AnnotationLayerViewAttachedState>();
 
+  private invalidateAnnotationSourceCache() {
+    const states = this.annotationStates.states;
+    for (const state of states) {
+      const source = state.source;
+      if (source instanceof MultiscaleAnnotationSource) {
+        if (source.invalidateCache) {
+          source.invalidateCache();
+        }
+      }
+    }
+  }
+
   private updateAttachedAnnotationLayerStates() {
     const states = this.annotationStates.states;
     const {attachedAnnotationStates} = this;
@@ -535,11 +548,13 @@ export class AnnotationLayerView extends Tab {
       sublistContainer.classList.add('neuroglancer-annotation-sublist');
       newAttachedAnnotationStates.set(
           state, {refCounted, listElements: new Map(), sublistContainer});
+      /*
       if (source instanceof MultiscaleAnnotationSource) {
         if (source.invalidateCache) {
           source.invalidateCache();
         }
       }
+      */
     }
     this.attachedAnnotationStates = newAttachedAnnotationStates;
     attachedAnnotationStates.clear();
@@ -606,6 +621,45 @@ export class AnnotationLayerView extends Tab {
   }
 
   private updateNumAnnotationWidget: () => void;
+  private tableFilters = [
+    (annotation: Annotation) => {
+      if (this.displayState.tableFilterByText.value) {
+        if (annotation.description) {
+          return annotation.description.toLowerCase().includes(this.displayState.tableFilterByText.value.toLowerCase());
+        } else {
+          return false;
+        }
+      } else {
+        return true;
+      }
+    },
+    (annotation: Annotation) => {
+      if (this.displayState.tableFilterByToday.value) {
+        if ('prop' in annotation) {
+          let prop = annotation['prop'];
+          if ('timestamp' in prop) {
+            let timestamp = Number(prop['timestamp']);
+            let annotationDate = new Date(timestamp);
+            let today = new Date();
+            return (annotationDate.toDateString() === today.toDateString());
+          }
+        }
+        return false;
+      } else {
+        return true;
+      }
+    }
+  ];
+
+  private filterAnnotationElement(annotation: Annotation, element: HTMLElement, filters: Array<(annotation: Annotation) => Boolean> = this.tableFilters) {
+    element.style.display = "";
+    for (let filter of filters) {
+      if (!filter(annotation)) {
+        element.style.display = "none";
+        break;
+      }
+    }
+  };
 
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
@@ -678,13 +732,20 @@ export class AnnotationLayerView extends Tab {
     ////// tmp hack
     let filterWidget = document.createElement('div');
     filterWidget.appendChild(document.createTextNode('Filter: '));
-    let filterElement = document.createElement('input');
-    filterElement.type = 'text';
-    filterElement.setAttribute('autocomplete', "off");
+    let filterElement =  this.registerDisposer(new TrackableStringEdit(this.displayState.tableFilterByText)).element;
+
+    // let filterElement = document.createElement('input');
+    // filterElement.type = 'text';
+    // filterElement.setAttribute('autocomplete', "off");
     filterWidget.appendChild(filterElement);
 
-    let todayElement = document.createElement('input');
-    todayElement.type = 'checkbox';
+    
+    let todayElement = this.registerDisposer(new TrackableBooleanCheckbox(this.displayState.tableFilterByToday)).element;
+
+    
+    // let todayElement = document.createElement('input');
+    // todayElement.type = 'checkbox';
+    
     todayElement.id = 'show_annotation_today_only';
     let todayElementLabel = document.createElement('label');
     todayElementLabel.innerText = 'Today';
@@ -695,6 +756,7 @@ export class AnnotationLayerView extends Tab {
 
     this.element.appendChild(filterWidget);
     
+    /*
     let filterAnnotation = (annotation: Annotation, element: HTMLElement, filters: Array<(annotation: Annotation) => Boolean>) => {
       element.style.display = "";
       for (let filter of filters) {
@@ -704,6 +766,7 @@ export class AnnotationLayerView extends Tab {
         }
       }
     };
+    */
 
     let filters = [
       (annotation: Annotation) => {
@@ -742,7 +805,7 @@ export class AnnotationLayerView extends Tab {
         for (let [id, element] of listElements) {
           let annotRef = state.source.getReference(id);
           if (annotRef.value) {
-            filterAnnotation(annotRef.value, element, filters);
+            this.filterAnnotationElement(annotRef.value, element, filters);
           } else {
             element.style.display = 'none';
           }
@@ -789,6 +852,7 @@ export class AnnotationLayerView extends Tab {
     }));
     this.updateCoordinateSpace();
     this.updateAttachedAnnotationLayerStates();
+    this.invalidateAnnotationSourceCache();
   }
 
   private clearSelectionClass() {
@@ -1139,6 +1203,8 @@ export class AnnotationLayerView extends Tab {
         setLayerPosition(this.layer, chunkTransform, layerPosition);
       }
     });
+
+    this.filterAnnotationElement(annotation, element);
 
     return element;
   }

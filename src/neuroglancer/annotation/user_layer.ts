@@ -100,6 +100,8 @@ const LINKED_SEGMENTATION_LAYER_JSON_KEY = 'linkedSegmentationLayer';
 const FILTER_BY_SEGMENTATION_JSON_KEY = 'filterBySegmentation';
 const FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY = 'filterBySegmentationAvailable';
 const IGNORE_NULL_SEGMENT_FILTER_JSON_KEY = 'ignoreNullSegmentFilter';
+const TABLE_FILTER_BY_TEXT = 'tableFilterByText';
+const TABLE_FILTER_BY_TODAY = 'tableFilterByToday';
 
 class LinkedSegmentationLayers extends RefCounted {
   changed = new NullarySignal();
@@ -334,6 +336,8 @@ export class AnnotationUserLayer extends Base {
     this.linkedSegmentationLayers.changed.add(this.specificationChanged.dispatch);
     this.annotationDisplayState.ignoreNullSegmentFilter.changed.add(
         this.specificationChanged.dispatch);
+    this.annotationDisplayState.tableFilterByToday.changed.add(this.specificationChanged.dispatch);
+    this.annotationDisplayState.tableFilterByText.changed.add(this.specificationChanged.dispatch);
     this.annotationCrossSectionRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
     this.pointAnnotationsJson = specification[POINTS_JSON_KEY];
@@ -343,6 +347,10 @@ export class AnnotationUserLayer extends Base {
         specification[PROJECTION_RENDER_SCALE_JSON_KEY]);
     this.annotationDisplayState.ignoreNullSegmentFilter.restoreState(
         specification[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY]);
+    this.annotationDisplayState.tableFilterByText.restoreState(
+      specification[TABLE_FILTER_BY_TEXT]);
+    this.annotationDisplayState.tableFilterByToday.restoreState(
+      specification[TABLE_FILTER_BY_TODAY]);
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -514,6 +522,8 @@ export class AnnotationUserLayer extends Base {
     x[FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY] = this.filterBySegmentationAvailable.toJSON();
     x[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY] =
         this.annotationDisplayState.ignoreNullSegmentFilter.toJSON();
+    x[TABLE_FILTER_BY_TODAY] = this.annotationDisplayState.tableFilterByToday.toJSON();
+    x[TABLE_FILTER_BY_TEXT] = this.annotationDisplayState.tableFilterByText.toJSON();    
     Object.assign(x, this.linkedSegmentationLayers.toJSON());
     return x;
   }

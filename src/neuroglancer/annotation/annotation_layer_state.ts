@@ -21,6 +21,7 @@ import {ChunkTransformParameters, getChunkTransformParameters, RenderLayerTransf
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
 import {SegmentationDisplayState} from 'neuroglancer/segmentation_display_state/frontend';
 import {TrackableBoolean} from 'neuroglancer/trackable_boolean';
+import {TrackableString} from 'neuroglancer/trackable_string';
 import {makeCachedLazyDerivedWatchableValue, registerNested, WatchableValue, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {TrackableRGB} from 'neuroglancer/util/color';
 import {Owned, RefCounted} from 'neuroglancer/util/disposable';
@@ -107,6 +108,8 @@ export class AnnotationDisplayState extends RefCounted {
   }, this.relationshipStates, this.ignoreNullSegmentFilter);
   hoverState = new AnnotationHoverState(undefined);
   pointRadius = trackableFiniteFloat(6);
+  tableFilterByText = new TrackableString('');
+  tableFilterByToday = new TrackableBoolean(false);
 }
 
 export class AnnotationLayerState extends RefCounted {
