@@ -32,14 +32,19 @@ export let Env = {
 
 export const lineAnnotationDataName = 'bookmarks';
 
-export interface DVIDPointAnnotation extends Point {
+export interface DVIDAnnotationBase {
   kind?: string;
   prop: {[key: string]: string};
 }
 
-export interface DVIDLineAnnotation extends Line
+export interface DVIDPointAnnotation extends Point, DVIDAnnotationBase {
+};
+
+export interface DVIDLineAnnotation extends Line, DVIDAnnotationBase
 {
 }
+
+export type DVIDAnnotation = DVIDPointAnnotation | DVIDLineAnnotation;
 
 export function typeOfAnnotationId(id: AnnotationId) {
   if (id.match(/^\d+_\d+_\d+$/)) {
@@ -61,25 +66,9 @@ export function isAnnotationIdValid(id: AnnotationId) {
   }
 }
 
-export class DVIDPointAnnotationFacade {
-  constructor(public annotation: DVIDPointAnnotation) {
+class DVIDAnnotationFacade {
+  constructor(public annotation: DVIDAnnotation) {
     this.updateProperties();
-  }
-
-  updateProperties() {
-    this.annotation.properties = [this.renderingAttribute];
-  }
-
-  get kind(): string|undefined {
-    return this.annotation.kind;
-  }
-
-  set kind(kind: string|undefined) {
-    this.annotation.kind = kind;
-  }
-
-  set point(point: Float32Array) {
-    this.annotation.point = point;
   }
 
   get comment() {
@@ -125,25 +114,49 @@ export class DVIDPointAnnotationFacade {
       this.prop.custom = c ? '1' : '0';
     }
   }
-  /*
-  set custom(c) {
-    if (this.prop === undefined) {
-      this.prop = {};
-    }
-    this.prop.custom = c;
-  }
-  */
 
   get prop(): {[key: string]: string} {
+    //Make sure prop exists in annotation
     if (this.annotation.prop === undefined) {
       this.annotation.prop = {};
     }
     return this.annotation.prop;
   }
 
-  set prop(prop: {[key: string]: string}) {
+  set prop(prop: { [key: string]: string }) {
     this.annotation.prop = prop;
     this.updateProperties();
+  }
+
+  updateProperties() {
+  }
+}
+
+export class DVIDLineAnnotationFacade extends DVIDAnnotationFacade {
+  constructor(public annotation: DVIDLineAnnotation) {
+    super(annotation);
+  }
+}
+
+export class DVIDPointAnnotationFacade extends DVIDAnnotationFacade{
+  constructor(public annotation: DVIDPointAnnotation) {
+    super(annotation);
+  }
+
+  updateProperties() {
+    this.annotation.properties = [this.renderingAttribute];
+  }
+
+  get kind(): string|undefined {
+    return this.annotation.kind;
+  }
+
+  set kind(kind: string|undefined) {
+    this.annotation.kind = kind;
+  }
+
+  set point(point: Float32Array) {
+    this.annotation.point = point;
   }
 
   get renderingAttribute() {
@@ -168,9 +181,17 @@ export class DVIDPointAnnotationFacade {
   }
 }
 
-export function getAnnotationDescription(annotation: DVIDPointAnnotation|DVIDLineAnnotation): string {
-
+export function getAnnotationDescription(annotation: DVIDAnnotation): string {
   let description = '';
+  let { prop } = annotation;
+  if (prop) {
+    description = prop.comment || prop.annotation || '';
+    if (prop.type && prop.type !== 'Other') {
+      description += ` (Type: ${prop.type})`;
+    }
+  }
+
+  /*
   if (annotation.type === AnnotationType.LINE) {
     return annotation.description || '';
   } else {
@@ -182,6 +203,7 @@ export function getAnnotationDescription(annotation: DVIDPointAnnotation|DVIDLin
       }
     }
   }
+  */
 
   return description;
 }

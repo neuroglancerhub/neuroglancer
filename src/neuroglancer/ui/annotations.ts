@@ -1387,12 +1387,10 @@ export class AnnotationDetailsTab extends Tab {
 
     let widget = null;
 
-    if (annotation.type === AnnotationType.POINT) {
-      let {source} = annotationLayer;
-      if (source instanceof MultiscaleAnnotationSource) {
-        if (source.makeEditWidget) {
-          widget = source.makeEditWidget(reference);
-        }
+    let { source } = annotationLayer;
+    if (source instanceof MultiscaleAnnotationSource) {
+      if (source.makeEditWidget) {
+        widget = source.makeEditWidget(reference);
       }
     }
 

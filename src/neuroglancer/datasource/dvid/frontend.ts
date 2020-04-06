@@ -39,7 +39,7 @@ import {DVIDInstance, DVIDToken, credentialsKey, makeRequestWithCredentials} fro
 import {MultiscaleAnnotationSource, AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal, NullarySignal} from 'neuroglancer/util/signal';
-import {Env, getUserFromToken, DVIDPointAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade} from 'neuroglancer/datasource/dvid/utils';
+import {Env, getUserFromToken, DVIDPointAnnotation, DVIDLineAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDLineAnnotationFacade, DVIDAnnotation} from 'neuroglancer/datasource/dvid/utils';
 import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider'
@@ -1282,8 +1282,20 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     }
 
     this.makeEditWidget = (reference: AnnotationReference) => {
-      let schema = this.parameters.schema || defaultJsonSchema;
       const annotation = reference.value!;
+      
+      if (annotation.type !== AnnotationType.POINT && annotation.type !== AnnotationType.LINE) {
+        return null;
+      }
+
+      let schema = defaultJsonSchema;
+      if (annotation.type === AnnotationType.POINT) {
+        if (this.parameters.schema) {
+          schema = this.parameters.schema;
+        }
+      }
+      // let schema = this.parameters.schema || defaultJsonSchema;
+
       const prop = (<DVIDPointAnnotation>(annotation)).prop;
 
       let widget = createAnnotationWidget(schema, { 'Prop': prop }, this.readonly);
@@ -1296,16 +1308,25 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         getObjectFromWidget(schema, '', result, 'annotation');
         // alert(JSON.stringify(result));
         const x = result['Prop'];
-        
-        let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
-        let annotFac = new DVIDPointAnnotationFacade(newAnnotation);
-        if (x.checked) {
-          x.checked = annotFac.getBooleanProperty(x.checked);
+        if (annotation.type === AnnotationType.POINT) {
+          let newAnnotation = <DVIDPointAnnotation>annotation;
+          let annotFac = new DVIDPointAnnotationFacade(newAnnotation);
+          if (x.checked) {
+            x.checked = annotFac.getBooleanProperty(x.checked);
+          }
+          annotFac.prop = {...newAnnotation.prop, ...x};
+        } else {
+          let newAnnotation = <DVIDLineAnnotation>annotation;
+          let annotFac = new DVIDLineAnnotationFacade(newAnnotation);
+          if (x) {
+            annotFac.prop = newAnnotation.prop ? {...newAnnotation.prop, ...x} : x;
+          }
         }
-        annotFac.prop = {...newAnnotation.prop, ...x};
+        // let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
+
         
-        newAnnotation.description = getAnnotationDescription(newAnnotation);
-        this.update(reference, newAnnotation);
+        annotation.description = getAnnotationDescription(<DVIDAnnotation>annotation);
+        this.update(reference, annotation);
         this.commit(reference);
       };
       widget.appendChild(button);
@@ -1395,6 +1416,8 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     } else if (annotation.type == AnnotationType.LINE) {
       annotation.pointA = annotation.pointA.map(x => Math.round(x));
       annotation.pointB = annotation.pointB.map(x => Math.round(x));
+      let annotationRef = new DVIDLineAnnotationFacade(<DVIDLineAnnotation>annotation);
+      annotationRef.addTimeStamp();
     }
 
     return super.add(annotation, commit);

@@ -29,7 +29,7 @@ import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {DVIDInstance, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
-import {DVIDPointAnnotation, DVIDPointAnnotationFacade, DVIDLineAnnotation, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, lineAnnotationDataName} from 'neuroglancer/datasource/dvid/utils';
+import {DVIDPointAnnotation, DVIDPointAnnotationFacade, DVIDLineAnnotation, DVIDLineAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, lineAnnotationDataName} from 'neuroglancer/datasource/dvid/utils';
 import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, Line, AnnotationPropertySpec} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk, AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
@@ -263,14 +263,18 @@ function parseLineAnnotation(entry: any): DVIDLineAnnotation
     id: `${pos[0]}_${pos[1]}_${pos[2]}-${pos[3]}_${pos[4]}_${pos[5]}`,
     pointA: new Float32Array([pos[0], pos[1], pos[2]]),
     pointB: new Float32Array([pos[3], pos[4], pos[5]]),
-    properties: [0]
+    properties: [0],
+    prop: {}
   };
 
   if ('Prop' in entry) {
     const propertiesObj = verifyObjectProperty(entry, 'Prop', verifyObject);
-    if ('comment' in propertiesObj) {
-      annotation.description = verifyObjectProperty(propertiesObj, 'comment', verifyString);
-    }
+    annotation.prop = propertiesObj;
+  }
+
+  let description = getAnnotationDescription(annotation);
+  if (description) {
+    annotation.description = description;
   }
 
   return annotation;
@@ -395,53 +399,50 @@ function removeEmptyField(obj: {[key:string]: string})
   }
 }
 
-function annotationToDVID(annotation: DVIDPointAnnotation, user: string|undefined): any {
-  const objectLabels =
+function annotationToDVID(annotation: DVIDPointAnnotation|DVIDLineAnnotation, user?: string): any {
+  if (annotation.type === AnnotationType.POINT) {
+    const objectLabels =
     annotation.relatedSegments && annotation.relatedSegments[0] && annotation.relatedSegments[0].map(x => x.toString());
 
-  let obj: { [key: string]: any } = {
-    Kind: 'Note',
-    Pos: [annotation.point[0], annotation.point[1], annotation.point[2]],
-    Prop: {}
-  };
+    let obj: { [key: string]: any } = {
+      Kind: 'Note',
+      Pos: [annotation.point[0], annotation.point[1], annotation.point[2]],
+      Prop: {}
+    };
 
-  let annotFac = new DVIDPointAnnotationFacade(annotation);
+    let annotFac = new DVIDPointAnnotationFacade(annotation);
 
-  obj.Prop =  {...annotFac.prop};
-  if (annotFac.bookmarkType) {
-    obj.Prop['type'] = annotationToDVIDType(annotFac.bookmarkType);
-  }
-  removeEmptyField(obj.Prop);
-  if ('checked' in obj.Prop) {
-    if (!annotFac.checked) {
-      delete obj.Prop['checked'];
+    obj.Prop = { ...annotFac.prop };
+    if (annotFac.bookmarkType) {
+      obj.Prop['type'] = annotationToDVIDType(annotFac.bookmarkType);
     }
-  }
+    removeEmptyField(obj.Prop);
+    if ('checked' in obj.Prop) {
+      if (!annotFac.checked) {
+        delete obj.Prop['checked'];
+      }
+    }
 
-  /*
-  if (annotFac.comment) {
-    obj.Prop['comment'] = annotFac.comment;
-  }
-  if (annotFac.custom) {
-    obj.Prop['custom'] = "1";
-  }
-  if (annotFac.bookmarkType) {
-    obj.Prop['type'] = annotationToDVIDType(annotFac.bookmarkType);
-  }
-  if (annotFac.checked) {
-    obj.Prop['checked'] = "1";
-  }
-  */
+    if (objectLabels && objectLabels.length > 0) {
+      obj.Prop['body ID'] = objectLabels[0];
+    }
+    if (user) {
+      obj['Tags'] = ['user:' + user];
+      obj.Prop['user'] = user;
+    }
 
-  if (objectLabels && objectLabels.length > 0) {
-    obj.Prop['body ID'] = objectLabels[0];
-  }
-  if (user) {
-    obj['Tags'] = ['user:' + user];
-    obj.Prop['user'] = user;
-  }
+    return obj;
+  } else if (annotation.type === AnnotationType.LINE) {
+    let obj:any = {
+      Kind: 'Line',
+      Pos: [...annotation.pointA, ...annotation.pointB]
+    };
 
-  return obj;
+    let annotFac = new DVIDLineAnnotationFacade(annotation);
+    obj.Prop = { ...annotFac.prop };
+
+    return obj;
+  }
 }
 
 
@@ -707,14 +708,8 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
   private updateLineAnnotation(annotation: DVIDLineAnnotation) {
     const { parameters } = this;
     let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-    let key = this.getLineAnnotationKey(annotation);
-    let dvidAnnotation:any = {
-      Kind: 'Line',
-      Pos: [...annotation.pointA, ...annotation.pointB]
-    };
-    if (annotation.description) {
-      dvidAnnotation.Prop = {comment: annotation.description};
-    }
+    const dvidAnnotation = annotationToDVID(annotation);
+    const key = this.getLineAnnotationKey(annotation);
 
     return makeRequestWithCredentials(
       this.credentialsProvider,
@@ -742,7 +737,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         case AnnotationType.POINT:
           return this.addPointAnnotation(<DVIDPointAnnotation>annotation);
         case AnnotationType.LINE:
-          return this.addLineAnnotation(annotation);
+          return this.addLineAnnotation(<DVIDLineAnnotation>annotation);
       }
       
     } else {
@@ -756,29 +751,11 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         case AnnotationType.POINT:
           return this.updatePointAnnotation(<DVIDPointAnnotation>annotation);
         case AnnotationType.LINE:
-          return this.updateLineAnnotation(annotation);
+          return this.updateLineAnnotation(<DVIDLineAnnotation>annotation);
       }
-      
     } else {
       throw new Error('Cannot update DVID annotation');
     }
-    /*
-    if (this.uploadable(annotation)) {
-      const { parameters } = this;
-      const dvidAnnotation = annotationToDVID(<DVIDPointAnnotation>annotation, parameters.user);
-      let dataInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-      return makeRequestWithCredentials(
-        this.credentialsProvider,
-        {
-          method: 'POST',
-          url: dataInstance.getNodeApiUrl(this.getElementsPath()) + `?app=Neuroglancer` + (parameters.user ? `&u=${parameters.user}` : ''),
-          payload: JSON.stringify([dvidAnnotation]),
-          responseType: '',
-        });
-    } else {
-      return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
-    }
-    */
   }
 
   delete(id: AnnotationId) {

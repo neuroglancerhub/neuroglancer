@@ -96,7 +96,7 @@ function createElement(
 
   for (let node of root) {
     if (!node.isRoot()) {
-      console.log('node properties', node.properties);
+      // console.log('node properties', node.properties);
       if (node.isLeaf()) {
         let value = node.getPropertyValue(assigned);
         let newElement = createBasicElement(
