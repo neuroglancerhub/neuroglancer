@@ -27,6 +27,7 @@ import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_reque
 export type DVIDToken = string;
 
 export const credentialsKey = 'DVID';
+export const defaultMeshService = 'https://meshgen-fdq6debz6a-uk.a.run.app';
 
 // export type DVIDCredentialsProvider = CredentialsProvider<DVIDToken>;
 
@@ -72,6 +73,19 @@ export class DVIDInstance {
   getSparsevolUrl(segmentationDataName: string, id: string) {
     return `${this.getNodeApiUrl()}/${segmentationDataName}/sparsevol/${id}`;
   }
+}
+
+export function appendQueryStringForDvid(url: string, user: string|null|undefined) {
+  if (url.includes('?')) {
+    url += '&';
+  } else {
+    url += '?';
+  }
+  url += 'app=Neuroglancer';
+  if (user) {
+    url += `&u=${user}`;
+  }
+  return url;
 }
 
 export function responseText(response: Response): Promise<any> {

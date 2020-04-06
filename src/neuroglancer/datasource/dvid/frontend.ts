@@ -35,7 +35,7 @@ import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglan
 import {mat4, vec3} from 'neuroglancer/util/geom';
 // import {fetchOk} from 'neuroglancer/util/http_request';
 import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, verifyStringArray, verifyFiniteNonNegativeFloat} from 'neuroglancer/util/json';
-import {DVIDInstance, DVIDToken, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
+import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
 import {MultiscaleAnnotationSource, AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal, NullarySignal} from 'neuroglancer/util/signal';
@@ -576,19 +576,6 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
         volumeSourceOptions,
         this.credentialsProvider);
   }
-
-
-    /*
-    let dvidInstance = new DVIDInstance(this.baseUrl, this.nodeKey);
-    mergeBodiesT(dvidInstance, this.dataInstanceKey, mergingJsonProvider(), this.credentialsProvider, this.info.defaultUser).then(response => {
-      StatusMessage.showTemporaryMessage('Merged: ' + JSON.stringify(response));
-      postUpload();
-    }
-    ).catch(e => {
-      throw e;
-    }
-    );
-    */
 }
 
 // const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)(\?.*)?$/;
@@ -739,8 +726,7 @@ async function getVolumeSource(options: GetDataSourceOptions, sourceParameters: 
       subsource: {
         mesh: options.chunkManager.getChunkSource(DVIDMeshSource, {
           parameters: {
-            'baseUrl': baseUrl,
-            'nodeKey': nodeKey,
+            ...sourceParameters,
             'dataInstanceKey': info.meshSrc
           },
           'credentialsProvider': credentialsProvider
@@ -756,8 +742,7 @@ async function getVolumeSource(options: GetDataSourceOptions, sourceParameters: 
       subsource: {
         mesh: options.chunkManager.getChunkSource(DVIDSkeletonSource, {
           parameters: {
-            'baseUrl': baseUrl,
-            'nodeKey': nodeKey,
+            ...sourceParameters,
             'dataInstanceKey': info.skeletonSrc
           },
           'credentialsProvider': credentialsProvider
@@ -807,7 +792,7 @@ async function uploadMergedMesh(
     let response = await makeRequestWithCredentials(
       credentialsProvider,
       {
-        url: meshUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
+        url: appendQueryStringForDvid(meshUrl, user),
         method: 'POST',
         responseType: '',
         payload: bodyArrayToJson(bodyArray)
@@ -820,7 +805,7 @@ async function uploadMergedMesh(
   }
 }
 
-async function getBodySizes(dataInstanceUrl: string, bodyArray: Array<string>, credentialsProvider: CredentialsProvider<DVIDToken>)
+async function getBodySizes(dataInstanceUrl: string, bodyArray: Array<string>, credentialsProvider: CredentialsProvider<DVIDToken>, user: string|undefined|null)
 {
   let promiseArray = new Array<Promise<number>>();
   for (let body of bodyArray) {
@@ -828,7 +813,7 @@ async function getBodySizes(dataInstanceUrl: string, bodyArray: Array<string>, c
       makeRequestWithCredentials(
         credentialsProvider,
         {
-          url: dataInstanceUrl + `/size/${body}`,
+          url: appendQueryStringForDvid(dataInstanceUrl + `/size/${body}`, user),
           method: 'GET',
           responseType: 'json'
         }
@@ -853,7 +838,7 @@ export async function mergeBodies(dvidInstance: DVIDInstance, dataInstanceKey: s
 
   let dataInstanceUrl = dvidInstance.getNodeApiUrl(`/${dataInstanceKey}`);
 
-  let bodySizes = await getBodySizes(dataInstanceUrl, bodyArray, credentialsProvider);
+  let bodySizes = await getBodySizes(dataInstanceUrl, bodyArray, credentialsProvider, defaultUser);
   let newBodyArray = [...bodyArray];
   newBodyArray.sort((a: string, b: string) => {
     let cmp = bodySizes[bodyArray.indexOf(a)] < bodySizes[bodyArray.indexOf(b)] ? 1 : -1;
@@ -962,6 +947,8 @@ export function getDataSource(options: GetDataSourceOptions, getCredentialsProvi
           throw new Error(`Invalid data instance ${dataInstanceKey}.`);
         }
 
+        sourceParameters.user = getUser(sourceParameters, credentials.credentials);
+
         if (sourceParameters.user) {
           dataInstanceInfo.defaultUser = sourceParameters.user;
         }
@@ -990,8 +977,6 @@ export function getDataSource(options: GetDataSourceOptions, getCredentialsProvi
           }];
 
           annotationSourceParameters.usertag = userTagged(sourceParameters);
-          annotationSourceParameters.user = getUser(sourceParameters, credentials.credentials);
-
 
           // let annotationDataInstanceInfo = await getAnnotationDataInstanceDetails(options.chunkManager, sourceParameters, dataInstanceInfo, credentialsProvider);
           

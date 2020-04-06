@@ -28,7 +28,7 @@ import {Endianness} from 'neuroglancer/util/endian';
 import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {vec3} from 'neuroglancer/util/geom';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {DVIDInstance, DVIDToken, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
+import {DVIDInstance, DVIDToken, makeRequestWithCredentials, defaultMeshService, appendQueryStringForDvid} from 'neuroglancer/datasource/dvid/api';
 import {DVIDPointAnnotation, DVIDPointAnnotationFacade, DVIDLineAnnotation, DVIDLineAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, lineAnnotationDataName} from 'neuroglancer/datasource/dvid/utils';
 import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, Line, AnnotationPropertySpec} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk, AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
@@ -48,7 +48,9 @@ import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base'
     const url = `${parameters.baseUrl}/api/node/${parameters['nodeKey']}` +
         `/${parameters['dataInstanceKey']}/key/` + bodyid + '_swc';
     return makeRequestWithCredentials(this.credentialsProvider, {
-      method: 'GET', url: url, responseType: 'arraybuffer'
+      method: 'GET', 
+      url: appendQueryStringForDvid(url, parameters.user), 
+      responseType: 'arraybuffer'
     }, cancellationToken).then(response => {
       let enc = new TextDecoder('utf-8');
       decodeSwcSkeletonChunk(chunk, enc.decode(response));
@@ -96,7 +98,7 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
     return Promise.resolve(undefined);
   }
 
-  async downloadMergeFragment(keyBaseUrl: string, keys: any, masterKey: any, cancellationToken: CancellationToken) : Promise<Array<ArrayBuffer>>
+  async downloadMergeFragment(keyBaseUrl: string, keys: any, masterKey: any, cancellationToken: CancellationToken, user: string|undefined|null) : Promise<Array<ArrayBuffer>>
   {
     let data = new Array<ArrayBuffer>();
     for (let key of keys) {
@@ -109,27 +111,21 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
       if (String(masterKey) === String(key)) {
         try {
           let response = await /*MeshMemoize.getUncounted(meshUrl, () =>*/ makeRequestWithCredentials(this.credentialsProvider, {
-            method: 'GET', url: meshUrl, responseType: 'arraybuffer'
+            method: 'GET', 
+            url: appendQueryStringForDvid(meshUrl, user), 
+            responseType: 'arraybuffer'
           }, cancellationToken);
 
           data.push(response);
         } catch(e) {
           console.log(e);
         }
-        
-        /*
-        then(
-          response => { data.push(response); }
-        ).catch(e => {
-          throw new Error(e);
-        });
-        */
       } else {
         await makeRequestWithCredentials(this.credentialsProvider, {
           method: 'GET', url: url + '.merge', responseType: 'json'
         }, cancellationToken).then(
           response => this.downloadMergeFragment(
-          keyBaseUrl, response, key, cancellationToken
+          keyBaseUrl, response, key, cancellationToken, user
         )).then(
           result =>  { 
             data.push(...result);
@@ -138,7 +134,9 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
         ).catch(async () => {
           try {
             let response = await /*MeshMemoize.getUncounted(meshUrl, () => */makeRequestWithCredentials(this.credentialsProvider, {
-              method: 'GET', url: meshUrl, responseType: 'arraybuffer'
+              method: 'GET', 
+              url: appendQueryStringForDvid(meshUrl, user), 
+              responseType: 'arraybuffer'
             }, cancellationToken);
 
             data.push(response);
@@ -161,17 +159,36 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
     const mergeUrl = `${keyBaseUrl}/${chunk.fragmentId}.merge`;
 
     return makeRequestWithCredentials(this.credentialsProvider, {
-      method: 'GET', url: mergeUrl, responseType: 'json'
+      method: 'GET', 
+      url: appendQueryStringForDvid(mergeUrl, parameters.user), 
+      responseType: 'json'
     }, cancellationToken)
     .then(
-      response => this.downloadMergeFragment(keyBaseUrl, response, chunk.fragmentId, cancellationToken)
+      response => this.downloadMergeFragment(keyBaseUrl, response, chunk.fragmentId, cancellationToken, parameters.user)
       .then(data => decodeFragmentChunkM(chunk, data)))
     .catch((e) => {
       console.log(e);
       const url = `${keyBaseUrl}/${chunk.fragmentId}.ngmesh`;
       return makeRequestWithCredentials(this.credentialsProvider, {
-          method: 'GET', url: url, responseType: 'arraybuffer'
-        }, cancellationToken).then(response => decodeFragmentChunk(chunk, response));
+          method: 'GET', 
+          url: appendQueryStringForDvid(url, parameters.user), 
+          responseType: 'arraybuffer'
+        }, cancellationToken).then(response => decodeFragmentChunk(chunk, response)).catch(() => {
+          if (defaultMeshService) {
+            const serviceUrl = defaultMeshService + `?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${chunk.fragmentId}` + (parameters.user ? `&u=${parameters.user}` : '');
+            return makeRequestWithCredentials(this.credentialsProvider, {
+              method: 'GET',
+              url: serviceUrl,
+              responseType: 'arraybuffer',
+            }, cancellationToken).then(
+              response => decodeFragmentChunk(chunk, response)
+            ).catch(e => {
+              console.error(e);
+            });
+          } else {
+            return undefined;
+          }
+        });
     });
   }
 
@@ -196,7 +213,7 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
       this.credentialsProvider,
       {
         method: 'GET',
-        url: `${params.baseUrl}${path}`,
+        url: appendQueryStringForDvid(`${params.baseUrl}${path}`, params.user),
         responseType: 'arraybuffer'
       }, cancellationToken
     )
@@ -472,7 +489,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
             this.credentialsProvider,
             {
               method: 'GET',
-              url: dataInstance.getNodeApiUrl(this.getPathByUserTag(parameters.user)),
+              url: appendQueryStringForDvid(dataInstance.getNodeApiUrl(this.getPathByUserTag(parameters.user)), parameters.user),
               payload: undefined,
               responseType: 'json',
             },
@@ -486,7 +503,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
             this.credentialsProvider,
             {
               method: 'GET',
-              url: dataInstance.getKeyValueRangeUrl(lineAnnotationDataName, parameters.user + '--0', parameters.user + '--9'),
+              url: appendQueryStringForDvid(dataInstance.getKeyValueRangeUrl(lineAnnotationDataName, parameters.user + '--0', parameters.user + '--9'), parameters.user),
               payload: undefined,
               responseType: 'json',
             },
@@ -500,7 +517,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
                 this.credentialsProvider,
                 {
                   method: 'GET',
-                  url: dataInstance.getKeyValueUrl(lineAnnotationDataName, key),
+                  url: appendQueryStringForDvid(dataInstance.getKeyValueUrl(lineAnnotationDataName, key), parameters.user),
                   responseType: 'json',
                 },
                 cancellationToken);
@@ -509,20 +526,6 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
               console.log(e);
             }
           }
-
-          /*
-          let lineAnnotationValues = await makeRequestWithCredentials(
-            this.credentialsProvider,
-            {
-              method: 'GET',
-              url: dataInstance.getKeyValuesUrl(lineAnnotationDataName),
-              payload: JSON.stringify(keys),
-              responseType: 'json',
-            },
-            cancellationToken);
-            */
-
-            // values = [...values, ...lineAnnotationValues];
         } catch(e) {
           console.log(e);
         }
@@ -542,7 +545,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         this.credentialsProvider,
         {
           method: 'GET',
-          url: dataInstance.getNodeApiUrl(this.getPath(chunkPosition, chunkDataSize)),
+          url: appendQueryStringForDvid(dataInstance.getNodeApiUrl(this.getPath(chunkPosition, chunkDataSize)), parameters.user),
           payload: undefined,
           responseType: 'json',
         },
@@ -581,7 +584,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         this.credentialsProvider,
         {
           method: 'GET',
-          url: dataInstance.getNodeApiUrl(this.getPathByBodyId(parameters.dataInstanceKey, chunk.objectId)),
+          url: appendQueryStringForDvid(dataInstance.getNodeApiUrl(this.getPathByBodyId(parameters.dataInstanceKey, chunk.objectId)), parameters.user),
           payload: undefined,
           responseType: 'json',
         },
@@ -601,7 +604,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
       this.credentialsProvider,
       {
         method: 'GET',
-        url: dataInstance.getNodeApiUrl(this.getPathByAnnotationId(id)),
+        url: appendQueryStringForDvid(dataInstance.getNodeApiUrl(this.getPathByAnnotationId(id)), parameters.user),
         responseType: 'json',
       },
       cancellationToken).then(
@@ -623,7 +626,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         this.credentialsProvider,
         {
           method: 'GET',
-          url: dataInstance.getKeyValueUrl(lineAnnotationDataName, `${this.parameters.user}--${id}`),
+          url: appendQueryStringForDvid(dataInstance.getKeyValueUrl(lineAnnotationDataName, `${this.parameters.user}--${id}`), parameters.user),
           responseType: 'json',
         },
         cancellationToken);
@@ -673,7 +676,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
       this.credentialsProvider,
       {
         method: 'POST',
-        url: dataInstance.getNodeApiUrl(this.getElementsPath()),
+        url: appendQueryStringForDvid(dataInstance.getNodeApiUrl(this.getElementsPath()), parameters.user),
         payload: JSON.stringify([dvidAnnotation]),
         responseType: '',
       });
@@ -715,7 +718,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
       this.credentialsProvider,
       {
         method: 'POST',
-        url: dataInstance.getKeyValueUrl(lineAnnotationDataName, key),
+        url: appendQueryStringForDvid(dataInstance.getKeyValueUrl(lineAnnotationDataName, key), parameters.user),
         payload: JSON.stringify(dvidAnnotation),
         responseType: '',
       });
@@ -768,7 +771,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
             this.credentialsProvider,
             {
               method: 'DELETE',
-              url: dataInstance.getNodeApiUrl(`/${parameters.dataInstanceKey}/element/${id}`),
+              url: appendQueryStringForDvid(dataInstance.getNodeApiUrl(`/${parameters.dataInstanceKey}/element/${id}`), parameters.user),
               responseType: '',
             });
         case AnnotationType.LINE:
@@ -776,7 +779,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
             this.credentialsProvider,
             {
               method: 'DELETE',
-              url: dataInstance.getKeyValueUrl(lineAnnotationDataName, this.getLineAnnotationKeyFromId(id)),
+              url: appendQueryStringForDvid(dataInstance.getKeyValueUrl(lineAnnotationDataName, this.getLineAnnotationKeyFromId(id)), parameters.user),
               responseType: '',
             });
       }
