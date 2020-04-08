@@ -543,6 +543,10 @@ class DisplayOptionsTab extends Tab {
     element.appendChild(proofreadElement);
 
     let postUpdate = () => {
+      for (let segment of this.layer.displayState.visibleSegments) {
+        this.layer.displayState.segmentAnnotaions.delete(segment.toString());
+        this.layer.displayState.segmentSizeInfo.delete(segment.toString());
+      }
       this.layer.displayState.visibleSegments.clear();
       for (let layer of this.layer.renderLayers) {
         if (layer instanceof SegmentationRenderLayer) {
