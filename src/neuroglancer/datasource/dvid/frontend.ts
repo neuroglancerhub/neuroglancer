@@ -524,6 +524,11 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       postUpload)
     };
 
+    this.getSegmentSizeInfo = (id: string) => {
+      let dvidInstance = new DVIDInstance(this.baseUrl, this.nodeKey);
+      return getBodySizeInfo(dvidInstance.getNodeApiUrl(`/${dataInstanceKey}`), id, this.credentialsProvider, this.info.defaultUser);
+    }
+
     this.getSegmentAnnotation = (id: string) => {
       let dvidInstance = new DVIDInstance(this.baseUrl, this.nodeKey);
       return makeRequestWithCredentials(
@@ -805,6 +810,17 @@ async function uploadMergedMesh(
   }
 }
 
+async function getBodySizeInfo(dataInstanceUrl: string, body: string, credentialsProvider: CredentialsProvider<DVIDToken>, user: string|undefined|null) {
+  return makeRequestWithCredentials(
+    credentialsProvider,
+    {
+      url: appendQueryStringForDvid(dataInstanceUrl + `/sparsevol-size/${body}`, user),
+      method: 'GET',
+      responseType: 'json'
+    }
+  ).catch(() => null);
+}
+
 async function getBodySizes(dataInstanceUrl: string, bodyArray: Array<string>, credentialsProvider: CredentialsProvider<DVIDToken>, user: string|undefined|null)
 {
   let promiseArray = new Array<Promise<number>>();
@@ -888,16 +904,6 @@ export async function mergeBodies(dvidInstance: DVIDInstance, dataInstanceKey: s
       } catch (e) {
         uploadMergedMesh(meshUrl, newBodyArray, user, tokenProvider);
       }
-      
-      // await makeRequestWithCredentials(
-      //   credentialsProvider,
-      //   {
-      //     url: meshUrl + `?app=Neuroglancer` + (user ? `&u=${user}` : ''),
-      //     method: 'POST',
-      //     responseType: 'json',
-      //     payload: bodyArrayToJson(bodyArray)
-      //   }
-      // );
       
       return newBodyArray;
     });

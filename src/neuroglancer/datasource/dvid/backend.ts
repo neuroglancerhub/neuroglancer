@@ -175,7 +175,7 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
           responseType: 'arraybuffer'
         }, cancellationToken).then(response => decodeFragmentChunk(chunk, response)).catch(() => {
           if (defaultMeshService) {
-            const serviceUrl = defaultMeshService + `?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${chunk.fragmentId}` + (parameters.user ? `&u=${parameters.user}` : '');
+            const serviceUrl = defaultMeshService + `?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${chunk.fragmentId}&decimation=1.0` + (parameters.user ? `&u=${parameters.user}` : '');
             return makeRequestWithCredentials(this.credentialsProvider, {
               method: 'GET',
               url: serviceUrl,

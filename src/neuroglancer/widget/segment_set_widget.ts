@@ -19,6 +19,7 @@ import {RefCounted} from 'neuroglancer/util/disposable';
 import {Uint64} from 'neuroglancer/util/uint64';
 import {setClipboard} from 'neuroglancer/util/clipboard';
 import {StatusMessage} from 'neuroglancer/status';
+import {Viewer} from 'neuroglancer/viewer';
 
 import 'neuroglancer/noselect.css';
 import './segment_set_widget.css';
@@ -119,16 +120,40 @@ export class SegmentSetWidget extends RefCounted {
         itemElement.style.textDecorationColor = 'white';
       }
     }
-    itemElement.title = `Click to remove segment ID ${s}, control+click/right click to copy ID`;
+    itemElement.title = `Click to remove segment ID ${s}, control+click/right click to copy ID, shift+right click to locate the body`;
     let widget = this;
     itemElement.addEventListener('click', function(this: ItemElement) {
       temp.tryParseString(this.value!);
       widget.visibleSegments.delete(temp);
     });
-    itemElement.addEventListener('contextmenu', function(this: ItemElement) {
-      const result = setClipboard(this.value!);
-      StatusMessage.showTemporaryMessage(
-        result ? `Segment ID ${this.value} copied to clipboard` : `Failed to copy segment ID to clipboard`);
+
+    const {displayState} = this;
+
+    itemElement.addEventListener('contextmenu', function(this: ItemElement, ev: MouseEvent) {
+      if (ev.shiftKey) {
+        if (displayState.segmentSizeInfo) {
+          let info = displayState.segmentSizeInfo.get(this.value!);
+          if (info) {
+            let minVoxel = info['minvoxel'];
+            let maxVoxel = info['maxvoxel'];
+            if (minVoxel && maxVoxel) {
+              let center = minVoxel.map((v: number, i: number) => (v + maxVoxel[i]) * 0.5);
+              let viewer:Viewer = (<any>window)['viewer'];
+              viewer.navigationState.position.value = center;
+              viewer.perspectiveNavigationState.zoomFactor.value = Math.max(...minVoxel.map((v: number, i: number) => maxVoxel[i] - v));
+            } else {
+              StatusMessage.showTemporaryMessage(`No boundbox information available for body ${this.value!}`);
+            }
+          } else {
+            StatusMessage.showTemporaryMessage(`No position information available for body ${this.value!}`);
+          }
+        }
+
+      } else {
+        const result = setClipboard(this.value!);
+        StatusMessage.showTemporaryMessage(
+          result ? `Segment ID ${this.value} copied to clipboard` : `Failed to copy segment ID to clipboard`);
+      }
     });
     itemElement.addEventListener('mouseenter', function(this: ItemElement) {
       temp.tryParseString(this.value!);

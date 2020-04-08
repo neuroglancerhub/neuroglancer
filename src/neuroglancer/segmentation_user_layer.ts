@@ -95,6 +95,7 @@ export class SegmentationUserLayer extends Base {
     // groupedSegments: Uint64Map.makeWithCounterpart(this.manager.worker),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentAnnotaions: new WatchableMap<string, string|null>(() => {}),
+    segmentSizeInfo: new Map<string, any>(),
     highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
     skeletonRenderingOptions: new SkeletonRenderingOptions(),
@@ -110,7 +111,7 @@ export class SegmentationUserLayer extends Base {
     this.displayState.visibleSegments.changed.add(this.specificationChanged.dispatch);
     this.displayState.visibleSegments.changed.add((x, add) => {
       if (x && add) {
-        this.updateSegmentAnnotation(x);
+        this.updateSegmentInfo(x);
       }
     });
     this.displayState.segmentEquivalences.changed.add(this.specificationChanged.dispatch);
@@ -142,15 +143,24 @@ export class SegmentationUserLayer extends Base {
     return undefined;
   }
 
-  private updateSegmentAnnotation(s: Uint64) {
+  private updateSegmentInfo(s: Uint64) {
     let layer = this.getSegmentationRenderLayer();
-    if (layer && layer.multiscaleSource.getSegmentAnnotation) {
-      let cs = s.clone();
-      layer.multiscaleSource.getSegmentAnnotation(cs.toString()).then(
-        response => {
-          this.displayState.segmentAnnotaions!.set(cs.toString(), response);
-        });
+    let cs = s.clone();
+    if (layer) {
+      if (layer.multiscaleSource.getSegmentAnnotation) {
+        layer.multiscaleSource.getSegmentAnnotation(cs.toString()).then(
+          response => {
+            this.displayState.segmentAnnotaions!.set(cs.toString(), response);
+          });
+      }
+      if (layer.multiscaleSource.getSegmentSizeInfo) {
+        layer.multiscaleSource.getSegmentSizeInfo(cs.toString()).then(
+          response => {
+            this.displayState.segmentSizeInfo!.set(cs.toString(), response);
+          });
+      }
     }
+    
   }
 
   get volumeOptions() {
@@ -400,6 +410,13 @@ export class SegmentationUserLayer extends Base {
             } else {
               visibleSegments.add(segment);
             }
+            if (!(this.displayState.segmentSizeInfo.has(s)) && source && source.getSegmentSizeInfo) {
+              source.getSegmentSizeInfo(s).then(
+                response => {
+                  this.displayState.segmentSizeInfo.set(s, response);
+                }
+              )
+            }
           }
         }
         break;
@@ -554,22 +571,6 @@ class DisplayOptionsTab extends Tab {
         if (displayState.visibleSegments.size > 0) {
           for (let segment of displayState.visibleSegments) {
             displayState.visibleSegments.changed.dispatch(segment, true);
-            // displayState.visibleSegments.delete(segment);
-            // displayState.visibleSegments.add(segment);
-            /*
-            let updateSegmentAnnotation = ((s: Uint64) => {
-              let cs = s.clone();
-              return (response: any) => {
-                displayState.segmentAnnotaions!.set(cs.toString(), response);
-                displayState.visibleSegments.add(cs);
-              }
-            })(segment);
-            layer.multiscaleSource.getSegmentAnnotation(segment.toString()).then(
-              response => {
-                updateSegmentAnnotation(response);
-              }
-            );
-            */
           }
         }
       }
