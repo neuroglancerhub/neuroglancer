@@ -186,7 +186,7 @@ export function getAnnotationDescription(annotation: DVIDAnnotation): string {
   let { prop } = annotation;
   if (prop) {
     description = prop.comment || prop.annotation || '';
-    if (prop.type && prop.type !== 'Other') {
+    if (prop.type && prop.type !== '---') {
       description += ` (Type: ${prop.type})`;
     }
   }

@@ -355,6 +355,8 @@ function annotationToDVIDType(typestr: string): string {
       return 'Split';
     case 'False Split':
       return 'Merge';
+    case '---':
+      return '';
     default:
       return typestr;
   }
@@ -431,7 +433,12 @@ function annotationToDVID(annotation: DVIDPointAnnotation|DVIDLineAnnotation, us
 
     obj.Prop = { ...annotFac.prop };
     if (annotFac.bookmarkType) {
-      obj.Prop['type'] = annotationToDVIDType(annotFac.bookmarkType);
+      let type = annotationToDVIDType(annotFac.bookmarkType);
+      if (type) {
+        obj.Prop['type'] = type;
+      } else {
+        delete obj.Prop['type'];
+      }
     }
     removeEmptyField(obj.Prop);
     if ('checked' in obj.Prop) {
