@@ -95,7 +95,7 @@ export class SegmentationUserLayer extends Base {
     // groupedSegments: Uint64Map.makeWithCounterpart(this.manager.worker),
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentAnnotaions: new WatchableMap<string, string|null>(() => {}),
-    segmentSizeInfo: new Map<string, any>(),
+    segmentGeometryInfo: new Map<string, any>(),
     highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
     skeletonRenderingOptions: new SkeletonRenderingOptions(),
@@ -153,10 +153,10 @@ export class SegmentationUserLayer extends Base {
             this.displayState.segmentAnnotaions!.set(cs.toString(), response);
           });
       }
-      if (layer.multiscaleSource.getSegmentSizeInfo) {
-        layer.multiscaleSource.getSegmentSizeInfo(cs.toString()).then(
+      if (layer.multiscaleSource.getSegmentGeometryInfo) {
+        layer.multiscaleSource.getSegmentGeometryInfo(cs.toString()).then(
           response => {
-            this.displayState.segmentSizeInfo!.set(cs.toString(), response);
+            this.displayState.segmentGeometryInfo!.set(cs.toString(), response);
           });
       }
     }
@@ -410,10 +410,10 @@ export class SegmentationUserLayer extends Base {
             } else {
               visibleSegments.add(segment);
             }
-            if (!(this.displayState.segmentSizeInfo.has(s)) && source && source.getSegmentSizeInfo) {
-              source.getSegmentSizeInfo(s).then(
+            if (!(this.displayState.segmentGeometryInfo.has(s)) && source && source.getSegmentGeometryInfo) {
+              source.getSegmentGeometryInfo(s).then(
                 response => {
-                  this.displayState.segmentSizeInfo.set(s, response);
+                  this.displayState.segmentGeometryInfo.set(s, response);
                 }
               )
             }
@@ -545,7 +545,7 @@ class DisplayOptionsTab extends Tab {
     let postUpdate = () => {
       for (let segment of this.layer.displayState.visibleSegments) {
         this.layer.displayState.segmentAnnotaions.delete(segment.toString());
-        this.layer.displayState.segmentSizeInfo.delete(segment.toString());
+        this.layer.displayState.segmentGeometryInfo.delete(segment.toString());
       }
       this.layer.displayState.visibleSegments.clear();
       for (let layer of this.layer.renderLayers) {

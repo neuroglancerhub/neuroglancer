@@ -27,7 +27,9 @@ import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_reque
 export type DVIDToken = string;
 
 export const credentialsKey = 'DVID';
-export const defaultMeshService = 'https://meshgen-fdq6debz6a-uk.a.run.app';
+export const defaultDvidService = 'https://ngsupport-bmcp5imp6q-uk.a.run.app';
+export const defaultMeshService = `${defaultDvidService}/small-mesh`;
+export const defaultLocateService = `${defaultDvidService}/locate-body`;
 
 // export type DVIDCredentialsProvider = CredentialsProvider<DVIDToken>;
 

@@ -131,21 +131,32 @@ export class SegmentSetWidget extends RefCounted {
 
     itemElement.addEventListener('contextmenu', function(this: ItemElement, ev: MouseEvent) {
       if (ev.shiftKey) {
-        if (displayState.segmentSizeInfo) {
-          let info = displayState.segmentSizeInfo.get(this.value!);
+        if (displayState.segmentGeometryInfo) {
+          let info = displayState.segmentGeometryInfo.get(this.value!);
           if (info) {
+            let location = info['location'];
             let minVoxel = info['minvoxel'];
             let maxVoxel = info['maxvoxel'];
+
+            if (!location) {
+              if (minVoxel && maxVoxel) {
+                location = minVoxel.map((v: number, i: number) => (v + maxVoxel[i]) * 0.5);
+              }
+            }
+            
+            let viewer:Viewer = (<any>window)['viewer'];
+            if (location) {
+              viewer.navigationState.position.value = location;
+            } else {
+              StatusMessage.showTemporaryMessage(`No location information available for body ${this.value!}`);
+            }
             if (minVoxel && maxVoxel) {
-              let center = minVoxel.map((v: number, i: number) => (v + maxVoxel[i]) * 0.5);
-              let viewer:Viewer = (<any>window)['viewer'];
-              viewer.navigationState.position.value = center;
               viewer.perspectiveNavigationState.zoomFactor.value = Math.max(...minVoxel.map((v: number, i: number) => maxVoxel[i] - v));
             } else {
               StatusMessage.showTemporaryMessage(`No boundbox information available for body ${this.value!}`);
             }
           } else {
-            StatusMessage.showTemporaryMessage(`No position information available for body ${this.value!}`);
+            StatusMessage.showTemporaryMessage(`No geometry information available for body ${this.value!}`);
           }
         }
 

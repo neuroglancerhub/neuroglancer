@@ -98,46 +98,66 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
     return Promise.resolve(undefined);
   }
 
-  async downloadMergeFragment(keyBaseUrl: string, keys: any, masterKey: any, cancellationToken: CancellationToken, user: string|undefined|null) : Promise<Array<ArrayBuffer>>
-  {
-    let data = new Array<ArrayBuffer>();
-    for (let key of keys) {
-      let url = `${keyBaseUrl}/${key}`;
-      // if (!String(key).endsWith('.ngmesh')) {
-      //   url += '.ngmesh';
-      // }
+  private fetchMeshDataFromService(fragmentId: string, cancellationToken: CancellationToken) {
+    if (defaultMeshService) {
+      const {parameters} = this;
+      const serviceUrl = defaultMeshService + `?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${fragmentId}&decimation=1.0` + (parameters.user ? `&u=${parameters.user}` : '');
+      // console.log('Fetching mesh from ' + serviceUrl);
+      return makeRequestWithCredentials(this.credentialsProvider, {
+        method: 'GET',
+        url: serviceUrl,
+        responseType: 'arraybuffer',
+      },
+      cancellationToken);
+    } else {
+      throw new Error('No mesh service available');
+    }
+  }
 
-      let meshUrl = url + '.ngmesh';
-      if (String(masterKey) === String(key)) {
+  private fetchMeshData(fragmentId: string, cancellationToken: CancellationToken) {
+    const {parameters} = this;
+    let dvidInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+    let meshUrl = dvidInstance.getKeyValueUrl(parameters.dataInstanceKey, `${fragmentId}.ngmesh`);
+
+    return makeRequestWithCredentials(this.credentialsProvider, {
+      method: 'GET', 
+      url: appendQueryStringForDvid(meshUrl, parameters.user), 
+      responseType: 'arraybuffer'
+    }, cancellationToken).catch(
+      () => this.fetchMeshDataFromService(fragmentId, cancellationToken)
+    );
+  }
+
+  async downloadMergeFragment(masterId: string, idArray: any, cancellationToken: CancellationToken) : Promise<Array<ArrayBuffer>>
+  {
+    const {parameters} = this;
+    let dvidInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+
+    let data = new Array<ArrayBuffer>();
+    for (let id of idArray) {
+      if (String(masterId) === String(id)) { //Download master mesh
         try {
-          let response = await /*MeshMemoize.getUncounted(meshUrl, () =>*/ makeRequestWithCredentials(this.credentialsProvider, {
-            method: 'GET', 
-            url: appendQueryStringForDvid(meshUrl, user), 
-            responseType: 'arraybuffer'
-          }, cancellationToken);
+          let response = await this.fetchMeshData(masterId, cancellationToken);
 
           data.push(response);
         } catch(e) {
           console.log(e);
         }
-      } else {
+      } else { //Download merged meshes
+        let urlPattern = dvidInstance.getKeyValueUrl(parameters.dataInstanceKey, String(id));
         await makeRequestWithCredentials(this.credentialsProvider, {
-          method: 'GET', url: url + '.merge', responseType: 'json'
+          method: 'GET', url: urlPattern + '.merge', responseType: 'json'
         }, cancellationToken).then(
           response => this.downloadMergeFragment(
-          keyBaseUrl, response, key, cancellationToken, user
+          id, response, cancellationToken
         )).then(
           result =>  { 
             data.push(...result);
             console.log(data.length);
           }
-        ).catch(async () => {
+        ).catch(async () => { //Try to download single mesh
           try {
-            let response = await /*MeshMemoize.getUncounted(meshUrl, () => */makeRequestWithCredentials(this.credentialsProvider, {
-              method: 'GET', 
-              url: appendQueryStringForDvid(meshUrl, user), 
-              responseType: 'arraybuffer'
-            }, cancellationToken);
+            let response = await this.fetchMeshData(id, cancellationToken);
 
             data.push(response);
           } catch (e) {
@@ -152,11 +172,8 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
 
   downloadFragment(chunk: FragmentChunk, cancellationToken: CancellationToken) {
     const {parameters} = this;
-
-    const keyBaseUrl = `${parameters.baseUrl}/api/node/${parameters['nodeKey']}/${
-      parameters['dataInstanceKey']}/key`;
-
-    const mergeUrl = `${keyBaseUrl}/${chunk.fragmentId}.merge`;
+    let dvidInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+    const mergeUrl = dvidInstance.getKeyValueUrl(parameters.dataInstanceKey, `${chunk.fragmentId}.merge`);
 
     return makeRequestWithCredentials(this.credentialsProvider, {
       method: 'GET', 
@@ -164,31 +181,16 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
       responseType: 'json'
     }, cancellationToken)
     .then(
-      response => this.downloadMergeFragment(keyBaseUrl, response, chunk.fragmentId, cancellationToken, parameters.user)
+      response => this.downloadMergeFragment(chunk.fragmentId!, response,  cancellationToken)
       .then(data => decodeFragmentChunkM(chunk, data)))
     .catch((e) => {
       console.log(e);
-      const url = `${keyBaseUrl}/${chunk.fragmentId}.ngmesh`;
-      return makeRequestWithCredentials(this.credentialsProvider, {
-          method: 'GET', 
-          url: appendQueryStringForDvid(url, parameters.user), 
-          responseType: 'arraybuffer'
-        }, cancellationToken).then(response => decodeFragmentChunk(chunk, response)).catch(() => {
-          if (defaultMeshService) {
-            const serviceUrl = defaultMeshService + `?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${chunk.fragmentId}&decimation=1.0` + (parameters.user ? `&u=${parameters.user}` : '');
-            return makeRequestWithCredentials(this.credentialsProvider, {
-              method: 'GET',
-              url: serviceUrl,
-              responseType: 'arraybuffer',
-            }, cancellationToken).then(
-              response => decodeFragmentChunk(chunk, response)
-            ).catch(e => {
-              console.error(e);
-            });
-          } else {
-            return undefined;
-          }
-        });
+      // const url = `${keyBaseUrl}/${chunk.fragmentId}.ngmesh`;
+      return this.fetchMeshData(chunk.fragmentId!, cancellationToken).then(
+        response => decodeFragmentChunk(chunk, response)
+      ).catch(e => {
+        console.error(e);
+      });
     });
   }
 

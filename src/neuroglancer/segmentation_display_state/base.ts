@@ -23,7 +23,7 @@ export interface VisibleSegmentsState {
   visibleSegments: Uint64Set;
   segmentEquivalences: SharedDisjointUint64Sets;
   segmentAnnotaions?: WatchableMap<string, string|null>;
-  segmentSizeInfo?: Map<string, any>;
+  segmentGeometryInfo?: Map<string, any>;
 }
 
 /**

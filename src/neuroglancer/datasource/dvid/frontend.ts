@@ -35,7 +35,7 @@ import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglan
 import {mat4, vec3} from 'neuroglancer/util/geom';
 // import {fetchOk} from 'neuroglancer/util/http_request';
 import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, verifyStringArray, verifyFiniteNonNegativeFloat} from 'neuroglancer/util/json';
-import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/dvid/api';
+import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials, defaultLocateService} from 'neuroglancer/datasource/dvid/api';
 import {MultiscaleAnnotationSource, AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal, NullarySignal} from 'neuroglancer/util/signal';
@@ -524,9 +524,20 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       postUpload)
     };
 
-    this.getSegmentSizeInfo = (id: string) => {
+    this.getSegmentGeometryInfo = async (id: string) => {
       let dvidInstance = new DVIDInstance(this.baseUrl, this.nodeKey);
-      return getBodySizeInfo(dvidInstance.getNodeApiUrl(`/${dataInstanceKey}`), id, this.credentialsProvider, this.info.defaultUser);
+      let bodySizeInfo = await getBodySizeInfo(dvidInstance.getNodeApiUrl(`/${dataInstanceKey}`), id, this.credentialsProvider, this.info.defaultUser);
+
+      try {
+        let bodyLocation = await (getBodyLocation(dvidInstance, id, this.credentialsProvider, this.info.defaultUser));
+        if (bodyLocation) {
+          bodySizeInfo['location'] = bodyLocation;
+        }
+      } catch {
+        (e:Error) => console.log(e);
+      }
+
+      return bodySizeInfo;
     }
 
     this.getSegmentAnnotation = (id: string) => {
@@ -819,6 +830,20 @@ async function getBodySizeInfo(dataInstanceUrl: string, body: string, credential
       responseType: 'json'
     }
   ).catch(() => null);
+}
+
+async function getBodyLocation(dvidInstance: DVIDInstance, body: string, credentialsProvider: CredentialsProvider<DVIDToken>, user: string|undefined|null) {
+  if (defaultLocateService) {
+    const serviceUrl = defaultLocateService + `?dvid=${dvidInstance.baseUrl}&uuid=${dvidInstance.nodeKey}&body=${body}` + (user ? `&u=${user}` : '');
+
+    return makeRequestWithCredentials(credentialsProvider, {
+      method: 'GET',
+      url: serviceUrl,
+      responseType: 'json',
+    });
+  } else {
+    throw new Error('No mesh service available');
+  }
 }
 
 async function getBodySizes(dataInstanceUrl: string, bodyArray: Array<string>, credentialsProvider: CredentialsProvider<DVIDToken>, user: string|undefined|null)
