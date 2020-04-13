@@ -254,6 +254,9 @@ export function defineVectorArrayVertexShaderInput(
     const locations: AttributeIndex[] = [];
     for (let attributeIndex = 0; attributeIndex < numAttributes; ++attributeIndex) {
       locations[attributeIndex] = shader.attribute(`a${name}${attributeIndex}`);
+      if (locations[attributeIndex] < 0) {
+        console.error(`Invalid vertex attr location: a${name}${attributeIndex}`, locations[attributeIndex]);
+      }
     }
     shader.vertexShaderInputBinders[name] = {
       enable(divisor: number) {

@@ -24,6 +24,9 @@ import {GL} from 'neuroglancer/webgl/context';
 import {QuadRenderHelper} from 'neuroglancer/webgl/quad';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {getSquareCornersBuffer} from 'neuroglancer/webgl/square_corners_buffer';
+import {SphereRenderHelper} from 'neuroglancer/webgl/spheres';
+import {AnnotationRenderContext} from 'neuroglancer/annotation/type_handler';
+import {mat4} from 'neuroglancer/util/geom';
 
 export const VERTICES_PER_CIRCLE = 4;
 
@@ -99,5 +102,54 @@ vec4 getCircleColor(vec4 interiorColor, vec4 borderColor) {
         1 / projectionParameters.height, Math.max(1e-6, options.featherWidthInPixels));
     this.quadHelper.draw(gl, count);
     shader.gl.disableVertexAttribArray(aCircleCornerOffset);
+  }
+}
+
+export class SphereShader extends RefCounted {
+  // private squareCornersBuffer: Buffer;
+  private sphereHelper: SphereRenderHelper;
+
+  private lightDirection = new Float32Array([1, 0, 0, 0]);
+
+  constructor(gl: GL) {
+    super();
+    // this.squareCornersBuffer = getSquareCornersBuffer(
+        // gl, -1, -1, 1, 1, /*minorTiles=*/circlesPerInstance, /*majorTiles=*/1);
+    this.sphereHelper = this.registerDisposer(new SphereRenderHelper(gl, 20, 20));
+  }
+
+  defineShader(builder: ShaderBuilder) {
+    builder.addUniform('highp vec4', 'uLightDirection');
+    builder.addUniform('highp mat4', 'uNormalTransform');
+
+    builder.addVertexCode(`
+float getRadiusAdjustment(vec3 vertex, float r) {
+  float radiusAdjustment = 1.0;
+  for (int i = 0; i < 3; ++i) {
+    if (r != 0.0) {
+      float d = vertex[i] - uModelClipBounds[i];
+      radiusAdjustment -= d * d / (r * r);
+    }
+  }
+
+  return sqrt(max(0.1, radiusAdjustment));
+}
+    `);
+
+    this.sphereHelper.defineShader(builder);
+  }
+
+  draw(
+      shader: ShaderProgram, context: AnnotationRenderContext, count: number) {
+    const {gl} = shader;
+    // const aCircleCornerOffset = shader.attribute('aCircleCornerOffset');
+    // this.squareCornersBuffer.bindToVertexAttrib(aCircleCornerOffset, /*components=*/ 2);
+    gl.uniformMatrix4fv(
+      shader.uniform('uNormalTransform'), /*transpose=*/ false,
+      mat4.transpose(mat4.create(), context.renderSubspaceInvModelMatrix));
+
+    gl.uniform4f(shader.uniform('uLightDirection'), this.lightDirection[0], this.lightDirection[1], this.lightDirection[2], this.lightDirection[3]);
+    this.sphereHelper.draw(shader, count);
+    // shader.gl.disableVertexAttribArray(aCircleCornerOffset);
   }
 }

@@ -23,10 +23,14 @@ import {AnnotationRenderContext, AnnotationRenderHelper, AnnotationShaderGetter,
 import {tile2dArray} from 'neuroglancer/util/array';
 import {projectPointToLineSegment} from 'neuroglancer/util/geom';
 import {getMemoizedBuffer} from 'neuroglancer/webgl/buffer';
-import {CircleShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
+import {CircleShader, SphereShader, VERTICES_PER_CIRCLE} from 'neuroglancer/webgl/circles';
 import {LineShader} from 'neuroglancer/webgl/lines';
 import {ShaderBuilder, ShaderProgram} from 'neuroglancer/webgl/shader';
 import {defineVectorArrayVertexShaderInput} from 'neuroglancer/webgl/shader_lib';
+
+//tmp hack
+// import {SphereRenderHelper} from 'neuroglancer/webgl/spheres';
+// import {mat4} from 'neuroglancer/util/geom';
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const ENDPOINTS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
@@ -57,6 +61,9 @@ void setLineColor(vec4 startColor, vec4 endColor) {}
 class RenderHelper extends AnnotationRenderHelper {
   private lineShader = this.registerDisposer(new LineShader(this.gl, 1));
   private circleShader = this.registerDisposer(new CircleShader(this.gl, 2));
+  //tmp hack
+  // private sphereRenderHelper = this.registerDisposer(new SphereRenderHelper(this.gl, 10, 10));
+  private sphereShader = this.registerDisposer(new SphereShader(this.gl));
 
   defineShader(builder: ShaderBuilder) {
     // Position of endpoints in model coordinates.
@@ -172,6 +179,64 @@ emitAnnotation(color);
     });
   }
 
+  //tmp hack
+  private sphereShadeGetter =
+  this.getDependentShader('annotation/line/sphere', (builder: ShaderBuilder) => {
+    const {rank} = this;
+    this.defineShader(builder);
+    this.sphereShader.defineShader(builder);
+    // builder.addAttribute('highp uint', 'aEndpointIndex');
+    builder.addVarying('highp float', 'vClipCoefficient');
+    // builder.addVarying('highp vec4', 'vBorderColor');
+
+    defineNoOpLineSetters(builder);
+    defineNoOpEndpointMarkerSetters(builder);
+
+    builder.setVertexMain(`
+float modelPosition[${rank}] = getVertexPosition0();
+float modelPositionB[${rank}] = getVertexPosition1();
+float diameter = 0.0;
+for (int i = 0; i < ${rank}; ++i) {
+  float dx = modelPosition[i] - modelPositionB[i];
+  diameter += dx * dx;
+  modelPosition[i] = (modelPosition[i] + modelPositionB[i]) * 0.5;
+}
+float radius = sqrt(diameter) * 0.5;
+if (radius > 0.0) {
+  vClipCoefficient = getRadiusAdjustment(vec3(modelPosition[0], modelPosition[1], modelPosition[2]), radius);
+} else {
+  vClipCoefficient = 1.0;
+}
+
+// vClipCoefficient = getSubspaceClipCoefficient(modelPosition);
+vColor = vec4(1.0, 0.0, 0.0, 0.5);
+
+// float radius = diameter * 0.5;
+emitSphere(uModelViewProjection, uNormalTransform, projectModelVectorToSubspace(modelPosition), vec3(radius, radius, radius), uLightDirection);
+${this.setPartIndex(builder)};
+`);
+    builder.setFragmentMain(`
+    vec4 color = vColor;
+    color.a *= vClipCoefficient;
+    emitAnnotation(color);
+`);
+  });
+
+  drawSphere(context: AnnotationRenderContext) {
+    this.enable(this.sphereShadeGetter, context, shader => {
+      // const aEndpointIndex = shader.attribute('aEndpointIndex');
+      // this.endpointIndexBuffer.bindToVertexAttribI(
+      //     aEndpointIndex, /*components=*/ 1,
+      //     /*attributeType=*/ WebGL2RenderingContext.UNSIGNED_BYTE);
+
+      this.sphereShader.draw(shader, context, context.count);
+
+      // shader.gl.disableVertexAttribArray(aEndpointIndex);
+          // shader, context.renderContext.projectionParameters, {featherWidthInPixels: 0.5},
+          // context.count);
+    });
+  }
+
   drawEdges(context: AnnotationRenderContext) {
     this.enable(this.edgeShaderGetter, context, shader => {
       this.lineShader.enableAndDraw(
@@ -196,6 +261,7 @@ emitAnnotation(color);
   draw(context: AnnotationRenderContext) {
     this.drawEdges(context);
     this.drawEndpoints(context);
+    this.drawSphere(context);
   }
 }
 
