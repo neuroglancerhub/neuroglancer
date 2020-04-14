@@ -20,6 +20,7 @@
 
 import './annotations.css';
 
+import debounce from 'lodash/debounce';
 import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line, annotationToJson} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
@@ -814,8 +815,11 @@ export class AnnotationLayerView extends Tab {
       this.updateNumAnnotationWidget();
     };
 
-    filterElement.onkeyup = updateTable;
-    todayElement.onclick = updateTable;
+    const throttledUpdateTable = debounce(updateTable, 50)
+    filterElement.onkeyup = throttledUpdateTable;
+    todayElement.onclick = throttledUpdateTable;
+    this.registerDisposer(() => throttledUpdateTable.cancel());
+    
 
     /*
     let { source } = this.layer;
