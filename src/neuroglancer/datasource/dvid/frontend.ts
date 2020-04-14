@@ -1053,24 +1053,30 @@ export function completeNodeAndInstance(serverInfo: ServerInfo, prefix: string):
 }
 
 export async function completeUrl(options: CompleteUrlOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<CompletionResult> {
-  let parameters = parseSourceUrl(options.providerUrl);
+  const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\?]*).*$/;
+  let url = options.providerUrl;
+  let auth:string|undefined = undefined;
 
-  /*
-  const curUrlPattern = /^((?:http|https):\/\/[^\/]+)\/(.*)$/;
-  let match = options.providerUrl.match(curUrlPattern);
+  const firstMatch = options.providerUrl.match(/^([^\?]*)\?[^\?]*auth=([^&]*)/);
+
+  if (firstMatch) {
+    url = firstMatch[1];
+    auth = firstMatch[2];
+  }
+
+  let match = url.match(curUrlPattern);
   if (match === null) {
     // We don't yet have a full hostname.
     throw null;
   }
   let baseUrl = match[1];
   let path = match[2];
-  let auth: string|undefined = undefined;
-  if (baseUrl.startsWith('https')) {
+  if (!auth && baseUrl.startsWith('https')) {
     auth = `${baseUrl}/api/server/token`;
   }
-  */
-  const serverInfo = await getServerInfo(options.chunkManager, parameters.baseUrl, getCredentialsProvider(parameters.authServer));
-  return applyCompletionOffset(parameters.baseUrl.length + 1, completeNodeAndInstance(serverInfo, `${parameters.nodeKey}/${parameters.dataInstanceKey}`));
+
+  const serverInfo = await getServerInfo(options.chunkManager, baseUrl, getCredentialsProvider(auth));
+  return applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path));
 }
 
 export class VolumeInfo {
