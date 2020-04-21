@@ -782,9 +782,9 @@ function bodyArrayToJson(bodyArray: Array<string>)
 
 function getCredentialsProvider(authServer: AuthType) {
   if (authServer) {
-    return defaultCredentialsManager.getCredentialsProvider<DVIDToken>(authServer, authServer);
+    return defaultCredentialsManager.getCredentialsProvider<DVIDToken>(dvidCredentailsKey(authServer), authServer);
   } else {
-    return defaultCredentialsManager.getCredentialsProvider<DVIDToken>(credentialsKey, authServer);
+    return defaultCredentialsManager.getCredentialsProvider<DVIDToken>(dvidCredentailsKey(credentialsKey), authServer);
   }
 }
 

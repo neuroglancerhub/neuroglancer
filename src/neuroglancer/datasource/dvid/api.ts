@@ -153,6 +153,7 @@ function  applyCredentials(input: string) {
       } else {
         //DVID https without credentials provided expects credentials stored in the browser
         newInit.credentials = 'include';
+        newInit.headers = {};
       }
     }
     return newInit;
