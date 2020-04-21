@@ -135,6 +135,7 @@ export function parameterizedContextDependentShaderGetter<
         shaderError.value = null;
       }
     } catch (e) {
+      console.log(e);
       if (shaderError !== undefined) {
         shaderError.value = e;
       }

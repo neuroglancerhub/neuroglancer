@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import {Point, Line, AnnotationType, AnnotationId} from 'neuroglancer/annotation/index';
+import {Point, Sphere, AnnotationType, AnnotationId} from 'neuroglancer/annotation/index';
 import {StringMemoize} from 'neuroglancer/util/memoize';
 
 let EnvMemoize = new StringMemoize();
@@ -31,6 +31,7 @@ export let Env = {
 };
 
 export const lineAnnotationDataName = 'bookmarks';
+export const sphereAnnotationDataName = 'bookmarks';
 
 export interface DVIDAnnotationBase {
   kind?: string;
@@ -40,17 +41,22 @@ export interface DVIDAnnotationBase {
 export interface DVIDPointAnnotation extends Point, DVIDAnnotationBase {
 };
 
+/*
 export interface DVIDLineAnnotation extends Line, DVIDAnnotationBase
 {
 }
+*/
 
-export type DVIDAnnotation = DVIDPointAnnotation | DVIDLineAnnotation;
+export interface DVIDSphereAnnotation extends Sphere, DVIDAnnotationBase {
+};
+
+export type DVIDAnnotation = DVIDPointAnnotation | DVIDSphereAnnotation;
 
 export function typeOfAnnotationId(id: AnnotationId) {
   if (id.match(/^\d+_\d+_\d+$/)) {
     return AnnotationType.POINT;
   } else if (id.match(/^\d+_\d+_\d+-\d+_\d+_\d+$/)) {
-    return AnnotationType.LINE;
+    return AnnotationType.SPHERE;
   } else {
     console.log(id);
     throw new Error(`Invalid annotation ID for DVID: ${id}`)
@@ -132,8 +138,16 @@ class DVIDAnnotationFacade {
   }
 }
 
+/*
 export class DVIDLineAnnotationFacade extends DVIDAnnotationFacade {
   constructor(public annotation: DVIDLineAnnotation) {
+    super(annotation);
+  }
+}
+*/
+
+export class DVIDSphereAnnotationFacade extends DVIDAnnotationFacade {
+  constructor(public annotation: DVIDSphereAnnotation) {
     super(annotation);
   }
 }

@@ -2,6 +2,10 @@ import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/defau
 import {credentialsKey} from 'neuroglancer/datasource/dvid/api';
 import {DVIDCredentialsProvider} from 'neuroglancer/datasource/dvid/credentials_provider';
 
+export function dvidCredentailsKey(authServer: string) {
+  return credentialsKey + authServer;
+}
+
 export function registerDVIDCredentialsProvider(key: string) {
   defaultCredentialsManager.register(
     key, (authServer) => new DVIDCredentialsProvider(authServer));
@@ -11,4 +15,4 @@ export function isDVIDCredentialsProviderRegistered(key: string) {
   return defaultCredentialsManager.base.providers.has(key);
 }
 
-registerDVIDCredentialsProvider(credentialsKey);
+registerDVIDCredentialsProvider(dvidCredentailsKey(''));

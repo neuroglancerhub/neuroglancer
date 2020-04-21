@@ -34,24 +34,23 @@ import {transposeNestedArrays} from 'neuroglancer/util/array';
 import {applyCompletionOffset, getPrefixMatchesWithDescriptions} from 'neuroglancer/util/completion';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 // import {fetchOk} from 'neuroglancer/util/http_request';
-import {parseQueryStringParameters, parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, verifyStringArray, verifyFiniteNonNegativeFloat} from 'neuroglancer/util/json';
-import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials, defaultLocateService} from 'neuroglancer/datasource/dvid/api';
+import {parseArray, parseFixedLengthArray, parseIntVec, verifyFinitePositiveFloat, verifyMapKey, verifyObject, verifyObjectAsMap, verifyObjectProperty, verifyPositiveInt, verifyString, verifyStringArray, verifyFiniteNonNegativeFloat, parseQueryStringParameters} from 'neuroglancer/util/json';
 import {MultiscaleAnnotationSource, AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal, NullarySignal} from 'neuroglancer/util/signal';
-import {Env, getUserFromToken, DVIDPointAnnotation, DVIDLineAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDLineAnnotationFacade, DVIDAnnotation} from 'neuroglancer/datasource/dvid/utils';
-import { registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
-import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider'
 import { makeSliceViewChunkSpecification } from 'neuroglancer/sliceview/base';
 import {createAnnotationWidget, getObjectFromWidget, createProofreadWidget, createBasicElement} from 'neuroglancer/datasource/dvid/widgets';
-import {defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
-import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 // import {Uint64} from 'neuroglancer/util/uint64';
 // import { DVIDAnnotationGeometryChunkSource } from './backend';
 import {TrackableValue} from 'neuroglancer/trackable_value';
 import {verifyInt} from 'neuroglancer/util/json';
 import {Borrowed} from 'neuroglancer/util/disposable';
+import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
+import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
+import {Env, getUserFromToken, DVIDPointAnnotation, DVIDSphereAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDSphereAnnotationFacade, DVIDAnnotation, defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
+import { dvidCredentailsKey, registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
+import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials, defaultLocateService} from 'neuroglancer/datasource/dvid/api';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -294,22 +293,6 @@ export function parseDataInstanceFromRepoInfo(
   }
 }
 
-/*
-function parseDataInstances(obj: any, name: string, instanceNames: Array<string>): DataInstanceInfo {
-  verifyObject(obj);
-  let dataObj = verifyObjectProperty(obj, name, verifyObject);
-  let baseInfo = verifyObjectProperty(obj, 'Base', x => new DataInstanceBaseInfo(x));
-  if (baseInfo.typeName === 'annotation') {
-    let syncedLabel = getSyncedLabel(baseInfo);
-    if (syncedLabel) {
-      dataObj = verifyObjectProperty(obj, syncedLabel, verifyObject);
-      baseInfo = verifyObjectProperty(obj, 'Base', x => new DataInstanceBaseInfo(x));
-    }
-  }
-
-}
-*/
-
 export function parseDataInstance(
     obj: any, name: string, instanceNames: Array<string>): DataInstanceInfo {
   verifyObject(obj);
@@ -425,13 +408,8 @@ type AuthType = string|undefined|null;
 
 export function getServerInfo(chunkManager: ChunkManager, baseUrl: string, credentialsProvider: CredentialsProvider<DVIDToken>) {
   return chunkManager.memoize.getUncounted({type: 'dvid:getServerInfo', baseUrl}, () => {
-    const result = makeRequestWithCredentials(credentialsProvider, {url: `${baseUrl}/api/repos/info`, method: 'GET', responseType: "json"})
+    const result = makeRequestWithCredentials(credentialsProvider, {url: `${baseUrl}/api/repos/info`, method: 'GET', responseType: 'json'})
     .then(response => new ServerInfo(response));
-    /*
-    const result = fetchOk(`${parameters.baseUrl}/api/repos/info`)
-                       .then(response => response.json())
-                       .then(response => new ServerInfo(response));
-                       */
     const description = `repository info for DVID server ${baseUrl}`;
     StatusMessage.forPromise(result, {
       initialMessage: `Retrieving ${description}.`,
@@ -597,6 +575,14 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
 // const urlPattern = /^((?:http|https):\/\/[^\/]+)\/([^\/]+)\/([^\/]+)(\?.*)?$/;
 const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/;
 
+function getDefaultAuthServer(baseUrl: string) {
+  if (baseUrl.startsWith('https')) {
+    return baseUrl + '/api/server/token';
+  } else {
+    return undefined;
+  }
+}
+
 function parseSourceUrl(url: string): DVIDSourceParameters {
   let match = url.match(urlPattern);
   if (match === null) {
@@ -619,6 +605,8 @@ function parseSourceUrl(url: string): DVIDSourceParameters {
     }
     if (parameters.user) {
       sourceParameters.user = parameters.user;
+    } else {
+      sourceParameters.authServer = getDefaultAuthServer(sourceParameters.baseUrl);
     }
   }
 
@@ -706,7 +694,6 @@ async function getVolumeSource(options: GetDataSourceOptions, sourceParameters: 
   const dataInstanceKey = sourceParameters.dataInstanceKey;
 
   const info = <VolumeDataInstanceInfo>dataInstanceInfo;
-    // await getDataInstanceDetails(options.chunkManager, sourceParameters, <VolumeDataInstanceInfo>dataInstanceInfo, credentialsProvider);
 
   const box: BoundingBox = {
     lowerBounds: new Float64Array(info.lowerVoxelBound),
@@ -945,7 +932,7 @@ export async function mergeBodies(sourceUrl: string, bodyArray: Array<string>)
 }
 */
 
-export function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<DataSource> {
+function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<DVIDToken>): Promise<DataSource> {
   // let match = options.providerUrl.match(urlPattern);
   // if (match === null) {
   //   throw new Error(`Invalid DVID URL: ${JSON.stringify(options.providerUrl)}.`);
@@ -953,9 +940,7 @@ export function getDataSource(options: GetDataSourceOptions, getCredentialsProvi
 
   let sourceParameters = parseSourceUrl(options.providerUrl);
 
-  const baseUrl = sourceParameters.baseUrl;
-  const nodeKey = sourceParameters.nodeKey;
-  const dataInstanceKey = sourceParameters.dataInstanceKey;
+  const {baseUrl, nodeKey, dataInstanceKey} = sourceParameters;
   
   return options.chunkManager.memoize.getUncounted(
       {
@@ -1180,13 +1165,14 @@ export class DVIDDataSource extends DataSourceProvider {
 
   getCredentialsProvider(authServer: AuthType) {
     if (authServer) {
-      if (!isDVIDCredentialsProviderRegistered(authServer)) {
-        registerDVIDCredentialsProvider(authServer);
+      const key = dvidCredentailsKey(authServer);
+      if (!isDVIDCredentialsProviderRegistered(key)) {
+        registerDVIDCredentialsProvider(key);
       }
 
-      return this.credentialsManager.getCredentialsProvider<DVIDToken>(authServer, authServer);
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(key, authServer);
     } else {
-      return this.credentialsManager.getCredentialsProvider<DVIDToken>(credentialsKey, authServer);
+      return this.credentialsManager.getCredentialsProvider<DVIDToken>(dvidCredentailsKey(''));
     }
   }
 
@@ -1306,7 +1292,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.makeEditWidget = (reference: AnnotationReference) => {
       const annotation = reference.value!;
       
-      if (annotation.type !== AnnotationType.POINT && annotation.type !== AnnotationType.LINE) {
+      if (annotation.type !== AnnotationType.POINT && annotation.type !== AnnotationType.SPHERE) {
         return null;
       }
 
@@ -1338,8 +1324,8 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
           }
           annotFac.prop = {...newAnnotation.prop, ...x};
         } else {
-          let newAnnotation = <DVIDLineAnnotation>annotation;
-          let annotFac = new DVIDLineAnnotationFacade(newAnnotation);
+          let newAnnotation = <DVIDSphereAnnotation>annotation;
+          let annotFac = new DVIDSphereAnnotationFacade(newAnnotation);
           if (x) {
             annotFac.prop = newAnnotation.prop ? {...newAnnotation.prop, ...x} : x;
           }
@@ -1413,7 +1399,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   }
 
   commit(reference: Borrowed<AnnotationReference>) {
-    if (reference.value && reference.value.type === AnnotationType.LINE) {
+    if (reference.value && reference.value.type === AnnotationType.SPHERE) {
       reference.value.pointA = reference.value.pointA.map(x => Math.round(x));
       reference.value.pointB = reference.value.pointB.map(x => Math.round(x));
     }
@@ -1435,10 +1421,10 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       annotation.point = annotation.point.map(x => Math.round(x));
       annotationRef.setCustom(true);
       annotationRef.addTimeStamp();
-    } else if (annotation.type == AnnotationType.LINE) {
+    } else if (annotation.type == AnnotationType.SPHERE) {
       annotation.pointA = annotation.pointA.map(x => Math.round(x));
       annotation.pointB = annotation.pointB.map(x => Math.round(x));
-      let annotationRef = new DVIDLineAnnotationFacade(<DVIDLineAnnotation>annotation);
+      let annotationRef = new DVIDSphereAnnotationFacade(<DVIDSphereAnnotation>annotation);
       annotationRef.addTimeStamp();
     }
 

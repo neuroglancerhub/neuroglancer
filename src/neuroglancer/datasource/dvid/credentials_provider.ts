@@ -34,11 +34,11 @@ function getAuthToken(
   } else if (authServer.startsWith('token:')) {
     return Promise.resolve(authServer.substring(6));
   } else {
-    const headers = new Headers();
+    // const headers = new Headers();
     // headers.set('Access-Control-Allow-Origin', '*');
     return cancellableFetchOk(
       authServer, 
-      {'method': 'GET', credentials: 'include', headers}, 
+      {'method': 'GET', credentials: 'include'/*, headers*/}, 
       responseText, 
       cancellationToken);
   }

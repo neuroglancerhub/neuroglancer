@@ -145,16 +145,15 @@ export function makeRequestWithCredentials(
 
 function  applyCredentials(input: string) {
   return (credentials: DVIDToken, init: RequestInit) => {
-  const headers:any = {};
-    let newInit:RequestInit = {...init};
-  
-    if (input.startsWith('https')) {
+    let newInit: RequestInit = { ...init };
+
+    if (input.startsWith('https')) { //Credentials are only available for DVID https server
       if (credentials.length > 0) {
-        headers.Authorization = `Bearer ${credentials}`;
+        newInit.headers = { ...newInit.headers, Authorization: `Bearer ${credentials}` }
       } else {
+        //DVID https without credentials provided expects credentials stored in the browser
         newInit.credentials = 'include';
       }
-      newInit.headers = headers;
     }
     return newInit;
   } 
@@ -182,30 +181,4 @@ export function fetchWithDVIDCredentials<T>(
       throw error;
     },
     cancellationToken);
-}
-
-
-export function fetchWithReadyDVIDCredentials<T>(
-  credentials: DVIDToken,
-  input: string,
-  init: RequestInit,
-  transformResponse: ResponseTransform<T>,
-  cancellationToken: CancellationToken = uncancelableToken) {
-
-  return cancellableFetchOk(
-    input, applyCredentials(input)(credentials, init), transformResponse,
-    cancellationToken);
-}
-
-export function makeRequestWithReadyCredentials(
-  credentials: DVIDToken,
-  httpCall: HttpCall & { responseType: XMLHttpRequestResponseType },
-  cancellationToken: CancellationToken = uncancelableToken): Promise<any> {
-    return fetchWithReadyDVIDCredentials(
-      credentials, 
-      `${httpCall.url}`, 
-      { method: httpCall.method, body: httpCall.payload }, 
-      httpCall.responseType === '' ? responseText : (httpCall.responseType === 'json' ? responseJson : responseArrayBuffer),
-      cancellationToken
-    );
 }
