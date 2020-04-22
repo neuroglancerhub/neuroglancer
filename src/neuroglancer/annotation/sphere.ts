@@ -42,24 +42,28 @@ function getEndpointIndexArray() {
       /*majorTiles=*/ VERTICES_PER_CIRCLE);
 }
 
-/*
 function defineNoOpEndpointMarkerSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
-void setEndpointMarkerSize(float startSize, float endSize) {}
-void setEndpointMarkerBorderWidth(float startSize, float endSize) {}
-void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
-void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
+void setAxisEndpointMarkerSize(float startSize, float endSize) {}
+void setAxisEndpointMarkerBorderWidth(float startSize, float endSize) {}
+void setAxisEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
+void setAxisEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
 `);
 }
-*/
 
+function defineNoOpLineSetters(builder: ShaderBuilder) {
+  builder.addVertexCode(`
+void setAxisWidth(float width) {}
+void setAxisColor(vec4 startColor, vec4 endColor) {}
+`);
+}
 
 function defineNoOpSphereSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
-//void setLineWidth(float width) {}
-//void setLineColor(vec4 startColor, vec4 endColor) {}
+void setSphereColor(vec4 color) {}
 `);
 }
+
 class RenderHelper extends AnnotationRenderHelper {
   private lineShader = this.registerDisposer(new LineShader(this.gl, 1));
   private circleShader = this.registerDisposer(new CircleShader(this.gl, 2));
@@ -84,17 +88,17 @@ class RenderHelper extends AnnotationRenderHelper {
         builder.addVertexCode(`
 float ng_LineWidth;
 `);
-        // defineNoOpEndpointMarkerSetters(builder);
-        /*
+        defineNoOpEndpointMarkerSetters(builder);
+        defineNoOpSphereSetters(builder);
+
         builder.addVertexCode(`
-void setLineWidth(float width) {
+void setAxisWidth(float width) {
   ng_LineWidth = width;
 }
-void setLineColor(vec4 startColor, vec4 endColor) {
+void setAxisColor(vec4 startColor, vec4 endColor) {
   vColor = mix(startColor, endColor, getLineEndpointCoefficient());
 }
 `);
-*/
 
         builder.setVertexMain(`
 float modelPositionA[${rank}] = getVertexPosition0();
@@ -132,25 +136,26 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() *
         builder.addAttribute('highp uint', 'aEndpointIndex');
         builder.addVarying('highp float', 'vClipCoefficient');
         builder.addVarying('highp vec4', 'vBorderColor');
-        // defineNoOpLineSetters(builder);
+        defineNoOpLineSetters(builder);
+        defineNoOpSphereSetters(builder);
         
         builder.addVertexCode(`
 float ng_markerDiameter;
 float ng_markerBorderWidth;
-/*
-void setEndpointMarkerSize(float startSize, float endSize) {
+
+//addede by sphere
+void setAxisEndpointMarkerSize(float startSize, float endSize) {
   ng_markerDiameter = mix(startSize, endSize, float(aEndpointIndex));
 }
-void setEndpointMarkerBorderWidth(float startSize, float endSize) {
+void setAxisEndpointMarkerBorderWidth(float startSize, float endSize) {
   ng_markerBorderWidth = mix(startSize, endSize, float(aEndpointIndex));
 }
-void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {
+void setAxisEndpointMarkerColor(vec4 startColor, vec4 endColor) {
   vColor = mix(startColor, endColor, float(aEndpointIndex));
 }
-void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
+void setAxisEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {
   vBorderColor = mix(startColor, endColor, float(aEndpointIndex));
 }
-*/
 `);
 
         builder.setVertexMain(`
@@ -198,8 +203,14 @@ emitAnnotation(color);
     builder.addVarying('highp float', 'vClipCoefficient');
     // builder.addVarying('highp vec4', 'vBorderColor');
 
-    // defineNoOpLineSetters(builder);
-    // defineNoOpEndpointMarkerSetters(builder);
+    defineNoOpLineSetters(builder);
+    defineNoOpEndpointMarkerSetters(builder);
+
+    builder.addVertexCode(`
+void setSphereColor(vec4 color) {
+  vColor = color;
+}
+`);
 
     builder.setVertexMain(`
 float modelPosition[${rank}] = getVertexPosition0();
@@ -219,7 +230,8 @@ if (radius > 0.0) {
 
 // vClipCoefficient = getSubspaceClipCoefficient(modelPosition);
 vColor = vec4(1.0, 0.0, 0.0, 0.5);
-
+// vColor = vec4(defaultColor(), 0.5);
+${this.invokeUserMain}
 // float radius = diameter * 0.5;
 emitSphere(uModelViewProjection, uNormalTransform, projectModelVectorToSubspace(modelPosition), vec3(radius, radius, radius), uLightDirection);
 ${this.setPartIndex(builder)};
@@ -293,7 +305,8 @@ registerAnnotationTypeRenderHandler<Sphere>(AnnotationType.SPHERE, {
   sliceViewRenderHelper: RenderHelper,
   perspectiveViewRenderHelper: RenderHelper,
   defineShaderNoOpSetters(builder) {
-    // defineNoOpEndpointMarkerSetters(builder);
+    defineNoOpEndpointMarkerSetters(builder);
+    defineNoOpLineSetters(builder);
     defineNoOpSphereSetters(builder);
   },
   pickIdsPerInstance: PICK_IDS_PER_INSTANCE,

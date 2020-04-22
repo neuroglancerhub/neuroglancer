@@ -40,6 +40,7 @@ function getEndpointIndexArray() {
 
 function defineNoOpEndpointMarkerSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
+  //Added by line
 void setEndpointMarkerSize(float startSize, float endSize) {}
 void setEndpointMarkerBorderWidth(float startSize, float endSize) {}
 void setEndpointMarkerColor(vec4 startColor, vec4 endColor) {}

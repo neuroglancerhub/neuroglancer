@@ -268,6 +268,10 @@ void ng_discard() {
 void setLineColor(vec4 startColor, vec4 endColor);
 void setLineWidth(float width);
 
+void setAxisColor(vec4 startColor, vec4 endColor);
+void setAxisWidth(float width);
+void setSphereColor(vec4 color);
+
 void setEndpointMarkerColor(vec4 startColor, vec4 endColor);
 void setEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
 void setEndpointMarkerSize(float startSize, float endSize);
@@ -277,6 +281,16 @@ void setPointMarkerColor(vec4 color);
 void setPointMarkerBorderColor(vec4 color);
 void setPointMarkerSize(float size);
 void setPointMarkerBorderWidth(float size);
+
+void setAxisEndpointMarkerColor(vec4 startColor, vec4 endColor);
+void setAxisEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
+void setAxisEndpointMarkerSize(float startSize, float endSize);
+void setAxisEndpointMarkerBorderWidth(float startSize, float endSize);
+
+void setAxisPointMarkerColor(vec4 color);
+void setAxisPointMarkerBorderColor(vec4 color);
+void setAxisPointMarkerSize(float size);
+void setAxisPointMarkerBorderWidth(float size);
 
 void setEllipsoidFillColor(vec4 color);
 
@@ -299,12 +313,30 @@ void setEndpointMarkerBorderWidth(float size) { setEndpointMarkerBorderWidth(siz
 void setLineColor(vec4 color) { setLineColor(color, color); }
 void setLineColor(vec3 color) { setLineColor(vec4(color, 1.0)); }
 void setLineColor(vec3 startColor, vec3 endColor) { setLineColor(vec4(startColor, 1.0), vec4(endColor, 1.0)); }
+void setAxisColor(vec4 color) { setAxisColor(color, color); }
+void setAxisColor(vec3 color) { setAxisColor(vec4(color, 1.0)); }
+void setAxisColor(vec3 startColor, vec3 endColor) { setAxisColor(vec4(startColor, 1.0), vec4(endColor, 1.0)); }
+void setAxisEndpointMarkerColor(vec3 startColor, vec3 endColor) {
+  setAxisEndpointMarkerColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setAxisEndpointMarkerBorderColor(vec3 startColor, vec3 endColor) {
+  setAxisEndpointMarkerBorderColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setAxisEndpointMarkerColor(vec3 color) { setAxisEndpointMarkerColor(color, color); }
+void setAxisEndpointMarkerColor(vec4 color) { setAxisEndpointMarkerColor(color, color); }
+void setAxisEndpointMarkerBorderColor(vec3 color) { setAxisEndpointMarkerBorderColor(color, color); }
+void setAxisEndpointMarkerBorderColor(vec4 color) { setAxisEndpointMarkerBorderColor(color, color); }
+void setAxisEndpointMarkerSize(float size) { setAxisEndpointMarkerSize(size, size); }
+void setAxisEndpointMarkerBorderWidth(float size) { setAxisEndpointMarkerBorderWidth(size, size); }
 void setColor(vec4 color) {
   setPointMarkerColor(color);
   setLineColor(color);
   setEndpointMarkerColor(color);
   setBoundingBoxBorderColor(color);
   setEllipsoidFillColor(vec4(color.rgb, color.a * (PROJECTION_VIEW ? 1.0 : 0.5)));
+  setAxisColor(color);
+  setAxisEndpointMarkerColor(color);
+  setSphereColor(color);
 }
 void setEllipsoidFillColor(vec3 color) { setEllipsoidFillColor(vec4(color, 1.0)); }
 

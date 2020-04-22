@@ -110,6 +110,8 @@ export function getShader(gl: WebGL2RenderingContext, source: string, shaderType
           w.document.write(s);
         } catch (writeError) {
         }
+      } else {
+        console.log(s);
       }
     }
 
@@ -157,7 +159,7 @@ export class ShaderProgram extends RefCounted {
       //   let combinedSource = 'VERTEX SHADER\n\n' + vertexSource + '\n\n\nFRAGMENT SHADER\n\n' +
       //   fragmentSource + '\n';
       //   let w = window.open("about:blank", "_blank");
-      //   w.document.write('<pre>' + combinedSource.replace('<', '&lt;').replace('>', '&gt;') +
+      //   w!.document.write('<pre>' + combinedSource.replace('<', '&lt;').replace('>', '&gt;') +
       //   '</pre>');
       // }
 

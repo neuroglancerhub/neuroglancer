@@ -35,7 +35,7 @@ function getAuthToken(
     return Promise.resolve(authServer.substring(6));
   } else {
     const headers = new Headers();
-    headers.set('Access-Control-Allow-Origin', '*');
+    // headers.set('Access-Control-Allow-Origin', '*');
     return cancellableFetchOk(
       authServer, 
       {'method': 'GET', credentials: 'include', headers}, 
