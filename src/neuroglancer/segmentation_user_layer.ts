@@ -96,6 +96,7 @@ export class SegmentationUserLayer extends Base {
     visibleSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentAnnotaions: new WatchableMap<string, string|null>(() => {}),
     segmentGeometryInfo: new Map<string, any>(),
+    meshUpdateSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     highlightedSegments: Uint64Set.makeWithCounterpart(this.manager.worker),
     segmentEquivalences: SharedDisjointUint64Sets.makeWithCounterpart(this.manager.worker),
     skeletonRenderingOptions: new SkeletonRenderingOptions(),
@@ -112,6 +113,12 @@ export class SegmentationUserLayer extends Base {
     this.displayState.visibleSegments.changed.add((x, add) => {
       if (x && add) {
         this.updateSegmentInfo(x);
+      }
+    });
+    this.displayState.meshUpdateSegments.changed.add((x, add) => {
+      if (x && add) {
+        this.updateMesh(x);
+        this.displayState.meshUpdateSegments.delete(x);
       }
     });
     this.displayState.segmentEquivalences.changed.add(this.specificationChanged.dispatch);
@@ -143,6 +150,16 @@ export class SegmentationUserLayer extends Base {
     return undefined;
   }
 
+  private getMeshRenderLayer() {
+    for (let layer of this.renderLayers) {
+      if (layer instanceof MeshLayer) {
+        return layer;
+      }
+    }
+
+    return undefined;
+  }
+
   private updateSegmentInfo(s: Uint64) {
     let layer = this.getSegmentationRenderLayer();
     let cs = s.clone();
@@ -160,7 +177,14 @@ export class SegmentationUserLayer extends Base {
           });
       }
     }
-    
+  }
+
+  private updateMesh(s: Uint64) {
+    let layer = this.getMeshRenderLayer();
+    if (layer) {
+      let cs = s.clone();
+      layer.source.updateMesh(cs.toString());
+    }
   }
 
   get volumeOptions() {

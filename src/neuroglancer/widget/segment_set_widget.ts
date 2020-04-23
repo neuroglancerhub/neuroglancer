@@ -122,12 +122,16 @@ export class SegmentSetWidget extends RefCounted {
     }
     itemElement.title = `Click to remove segment ID ${s}, control+click/right click to copy ID, shift+right click to locate the body`;
     let widget = this;
-    itemElement.addEventListener('click', function(this: ItemElement) {
-      temp.tryParseString(this.value!);
-      widget.visibleSegments.delete(temp);
-    });
-
     const {displayState} = this;
+
+    itemElement.addEventListener('click', function(this: ItemElement, ev: MouseEvent) {
+      temp.tryParseString(this.value!);
+      if (ev.shiftKey) {
+        displayState.meshUpdateSegments?.add(temp);
+      } else {
+        widget.visibleSegments.delete(temp);
+      }
+    });
 
     itemElement.addEventListener('contextmenu', function(this: ItemElement, ev: MouseEvent) {
       if (ev.shiftKey) {

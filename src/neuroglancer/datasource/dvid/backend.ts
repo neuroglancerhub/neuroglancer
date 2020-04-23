@@ -34,7 +34,7 @@ import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neu
 import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {DVIDInstance, DVIDToken, makeRequestWithCredentials, defaultMeshService, appendQueryStringForDvid} from 'neuroglancer/datasource/dvid/api';
+import {DVIDInstance, DVIDToken, makeRequestWithCredentials, appendQueryStringForDvid, fetchMeshDataFromService} from 'neuroglancer/datasource/dvid/api';
 import {DVIDPointAnnotation, DVIDPointAnnotationFacade, DVIDSphereAnnotation, DVIDSphereAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, sphereAnnotationDataName, DVIDAnnotation} from 'neuroglancer/datasource/dvid/utils';
 // import {StringMemoize} from 'neuroglancer/util/memoize';
 
@@ -104,6 +104,7 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
     return Promise.resolve(undefined);
   }
 
+  /*
   private fetchMeshDataFromService(fragmentId: string, cancellationToken: CancellationToken) {
     if (defaultMeshService) {
       const {parameters} = this;
@@ -119,6 +120,7 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
       throw new Error('No mesh service available');
     }
   }
+  */
 
   private fetchMeshData(fragmentId: string, cancellationToken: CancellationToken) {
     const {parameters} = this;
@@ -130,7 +132,7 @@ export function decodeFragmentChunkM(chunk: FragmentChunk, responses: Array<Arra
       url: appendQueryStringForDvid(meshUrl, parameters.user), 
       responseType: 'arraybuffer'
     }, cancellationToken).catch(
-      () => this.fetchMeshDataFromService(fragmentId, cancellationToken)
+      () => fetchMeshDataFromService(parameters, fragmentId, this.credentialsProvider, cancellationToken)
     );
   }
 

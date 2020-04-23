@@ -90,6 +90,7 @@ export interface SegmentationDisplayState extends VisibleSegmentsState {
   saturation: TrackableAlphaValue;
   hoverSaturation?: TrackableAlphaValue;
   highlightedSegments: Uint64Set;
+  meshUpdateSegments?: Uint64Set;
 }
 
 export interface SegmentationDisplayStateWithAlpha extends SegmentationDisplayState {

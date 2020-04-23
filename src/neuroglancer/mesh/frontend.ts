@@ -462,6 +462,8 @@ export class MeshSource extends ChunkSource {
     super.invalidateCache();
     this.fragmentSource.invalidateCache();
   }
+  updateMesh(_: string) {
+  }
 }
 
 @registerSharedObjectOwner(FRAGMENT_SOURCE_RPC_ID)

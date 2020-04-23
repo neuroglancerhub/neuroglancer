@@ -50,7 +50,7 @@ import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_s
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
 import {Env, getUserFromToken, DVIDPointAnnotation, DVIDSphereAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDSphereAnnotationFacade, DVIDAnnotation, defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
 import { dvidCredentailsKey, registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
-import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials, defaultLocateService} from 'neuroglancer/datasource/dvid/api';
+import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials, defaultLocateService, defaultMeshService} from 'neuroglancer/datasource/dvid/api';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -89,7 +89,58 @@ class DVIDSkeletonSource extends
 (WithParameters(WithCredentialsProvider<DVIDToken>()(SkeletonSource), SkeletonSourceParameters)) {}
 
 class DVIDMeshSource extends
-(WithParameters(WithCredentialsProvider<DVIDToken>()(MeshSource), MeshSourceParameters)) {}
+(WithParameters(WithCredentialsProvider<DVIDToken>()(MeshSource), MeshSourceParameters)) {
+  async updateMesh(id: string) {
+    if (defaultMeshService) {
+      let { parameters } = this;
+      let dvidInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
+      
+      try {
+        try {
+          let mergedUrl = dvidInstance.getKeyValueUrl(parameters.dataInstanceKey, id + '.merge');
+          await makeRequestWithCredentials(
+            this.credentialsProvider,
+            {
+              method: 'HEAD',
+              url: mergedUrl,
+              responseType: ''
+            });
+  
+          await makeRequestWithCredentials(
+            this.credentialsProvider,
+            {
+              method: 'DELETE',
+              url: mergedUrl,
+              responseType: ''
+            }
+          );
+        } finally {
+          let meshUrl = dvidInstance.getKeyValueUrl(parameters.dataInstanceKey, id + '.ngmesh');
+          await makeRequestWithCredentials(
+            this.credentialsProvider,
+            {
+              method: 'HEAD',
+              url: meshUrl,
+              responseType: ''
+            });
+  
+          await makeRequestWithCredentials(
+            this.credentialsProvider,
+            {
+              method: 'DELETE',
+              url: meshUrl,
+              responseType: ''
+            }
+          );
+        }
+      } finally {
+        this.invalidateCache();
+      }
+    } else {
+      throw new Error('No mesh generation service is available.');
+    }
+  }
+}
 
 class DVIDAnnotationChunkSource extends
 (WithParameters(WithCredentialsProvider<DVIDToken>()(AnnotationGeometryChunkSource), AnnotationChunkSourceParameters)) {}

@@ -22,6 +22,7 @@ import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellati
 import {responseJson, cancellableFetchOk, responseArrayBuffer, ResponseTransform} from 'neuroglancer/util/http_request';
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
+import {DVIDSourceParameters} from 'neuroglancer/datasource/dvid/base';
 // import {DVIDCredentialsProvider} from 'neuroglancer/datasource/dvid/credentials_provider';
 
 export type DVIDToken = string;
@@ -153,7 +154,7 @@ function  applyCredentials(input: string) {
       } else {
         //DVID https without credentials provided expects credentials stored in the browser
         newInit.credentials = 'include';
-        newInit.headers = {};
+        // newInit.headers = {};
       }
     }
     return newInit;
@@ -182,4 +183,19 @@ export function fetchWithDVIDCredentials<T>(
       throw error;
     },
     cancellationToken);
+}
+
+export function fetchMeshDataFromService(parameters: DVIDSourceParameters,fragmentId: string, credentialsProvider: CredentialsProvider<DVIDToken>, cancellationToken?: CancellationToken) {
+  if (defaultMeshService) {
+    const serviceUrl = defaultMeshService + `?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${fragmentId}&decimation=0.1` + (parameters.user ? `&u=${parameters.user}` : '');
+    // console.log('Fetching mesh from ' + serviceUrl);
+    return makeRequestWithCredentials(credentialsProvider, {
+      method: 'GET',
+      url: serviceUrl,
+      responseType: 'arraybuffer',
+    },
+    cancellationToken);
+  } else {
+    throw new Error('No mesh service available');
+  }
 }
