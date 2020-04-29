@@ -127,7 +127,7 @@ export class SegmentSetWidget extends RefCounted {
     itemElement.addEventListener('click', function(this: ItemElement, ev: MouseEvent) {
       temp.tryParseString(this.value!);
       if (ev.shiftKey) {
-        displayState.meshUpdateSegments?.add(temp);
+        // displayState.meshUpdateSegments?.add(temp);
       } else {
         widget.visibleSegments.delete(temp);
       }

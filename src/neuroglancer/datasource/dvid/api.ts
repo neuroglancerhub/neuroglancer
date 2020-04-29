@@ -187,7 +187,7 @@ export function fetchWithDVIDCredentials<T>(
 
 export function fetchMeshDataFromService(parameters: DVIDSourceParameters,fragmentId: string, credentialsProvider: CredentialsProvider<DVIDToken>, cancellationToken?: CancellationToken) {
   if (defaultMeshService) {
-    const serviceUrl = defaultMeshService + `?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${fragmentId}&decimation=0.1` + (parameters.user ? `&u=${parameters.user}` : '');
+    const serviceUrl = defaultMeshService + `?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${fragmentId}&decimation=0.5` + (parameters.user ? `&u=${parameters.user}` : '');
     // console.log('Fetching mesh from ' + serviceUrl);
     return makeRequestWithCredentials(credentialsProvider, {
       method: 'GET',

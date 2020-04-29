@@ -212,8 +212,8 @@ export class SegmentationUserLayer extends Base {
       if (this.addStaticAnnotations(loadedSubsource)) continue;
       const {volume, mesh} = loadedSubsource.subsourceEntry.subsource;
       if (volume instanceof MultiscaleVolumeChunkSource) {
-        switch (volume.dataType) {
-          case DataType.FLOAT32:
+        if (volume.dataType === DataType.FLOAT32) {
+          // case DataType.FLOAT32:
             loadedSubsource.deactivate('Data type not compatible with segmentation layer');
             continue;
         }
