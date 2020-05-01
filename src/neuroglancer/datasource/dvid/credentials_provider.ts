@@ -24,6 +24,8 @@ import {CANCELED, CancellationTokenSource, uncancelableToken} from 'neuroglancer
 import {cancellableFetchOk} from 'neuroglancer/util/http_request';
 import {DVIDToken, responseText} from 'neuroglancer/datasource/dvid/api';
 
+export let includeRequired = true;
+
 function getAuthToken(
   authServer: string,
   cancellationToken = uncancelableToken) {
@@ -40,7 +42,16 @@ function getAuthToken(
       authServer, 
       {'method': 'GET', credentials: 'include', headers}, 
       responseText, 
-      cancellationToken);
+      cancellationToken).catch(
+        () => {
+          includeRequired = false;
+          return cancellableFetchOk(
+            authServer,
+            {'method': 'GET'},
+            responseText,
+            cancellationToken)
+        }
+      );
   }
 }
 

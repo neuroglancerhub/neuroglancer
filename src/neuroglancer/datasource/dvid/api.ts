@@ -23,6 +23,7 @@ import {responseJson, cancellableFetchOk, responseArrayBuffer, ResponseTransform
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
 import {DVIDSourceParameters} from 'neuroglancer/datasource/dvid/base';
+import {includeRequired} from 'neuroglancer/datasource/dvid/credentials_provider';
 // import {DVIDCredentialsProvider} from 'neuroglancer/datasource/dvid/credentials_provider';
 
 export type DVIDToken = string;
@@ -151,7 +152,7 @@ function  applyCredentials(input: string) {
     if (input.startsWith('https')) { //Credentials are only available for DVID https server
       if (credentials.length > 0) {
         newInit.headers = { ...newInit.headers, Authorization: `Bearer ${credentials}` }
-      } else {
+      } else if (includeRequired) {
         //DVID https without credentials provided expects credentials stored in the browser
         newInit.credentials = 'include';
         // newInit.headers = {};
