@@ -656,10 +656,12 @@ function parseSourceUrl(url: string): DVIDSourceParameters {
     }
     if (parameters.user) {
       sourceParameters.user = parameters.user;
-    } else {
+    } /*else {
       sourceParameters.authServer = getDefaultAuthServer(sourceParameters.baseUrl);
-    }
+    }*/
   }
+
+
 
   let auth = parameters.auth;
   /*
@@ -672,6 +674,8 @@ function parseSourceUrl(url: string): DVIDSourceParameters {
 
   if (auth) {
     sourceParameters.authServer = auth;
+  } else {
+    sourceParameters.authServer = getDefaultAuthServer(sourceParameters.baseUrl);
   }
 
   return sourceParameters;

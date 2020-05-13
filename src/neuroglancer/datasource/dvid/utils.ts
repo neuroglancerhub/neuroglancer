@@ -251,7 +251,6 @@ export function getUserFromToken(token: string, defaultUser?: string) {
     }
   }
 
-  // const tokenUser = getUserFromToken(token);
   if (tokenUser) {
     if (defaultUser && (defaultUser !== tokenUser)) {
       return undefined;
