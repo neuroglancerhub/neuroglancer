@@ -638,6 +638,10 @@ export class AnnotationSource extends RefCounted implements AnnotationSourceSign
     this.pending.delete(id);
   }
 
+  setReferenceValue(annotation: Annotation) {
+    this.annotationMap.set(annotation.id, annotation);
+  }
+
   update(reference: AnnotationReference, annotation: Annotation) {
     this.ensureUpdated();
     if (reference.value === null) {

@@ -22,7 +22,7 @@ import './annotations.css';
 
 import debounce from 'lodash/debounce';
 import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line, Sphere, annotationToJson} from 'neuroglancer/annotation';
-import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
+import {AnnotationDisplayState, AnnotationLayerState, FilterAnnotationByTimeType} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {SpatiallyIndexedPerspectiveViewAnnotationLayer, SpatiallyIndexedSliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -32,7 +32,7 @@ import {LoadedDataSubsource} from 'neuroglancer/layer_data_source';
 import {ChunkTransformParameters, getChunkPositionFromCombinedGlobalLocalPositions} from 'neuroglancer/render_coordinate_transform';
 import {RenderScaleHistogram, trackableRenderScaleTarget} from 'neuroglancer/render_scale_statistics';
 import {RenderLayerRole} from 'neuroglancer/renderlayer';
-import {ElementVisibilityFromTrackableBoolean, TrackableBooleanCheckbox} from 'neuroglancer/trackable_boolean';
+import {ElementVisibilityFromTrackableBoolean} from 'neuroglancer/trackable_boolean';
 import {TrackableStringEdit} from 'neuroglancer/trackable_string';
 import {makeCachedLazyDerivedWatchableValue, registerNested, TrackableValue, TrackableValueInterface, WatchableValueInterface} from 'neuroglancer/trackable_value';
 import {registerTool, Tool} from 'neuroglancer/ui/tool';
@@ -56,6 +56,8 @@ import {makeIcon} from 'neuroglancer/widget/icon';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
 import {StatusMessage} from 'neuroglancer/status';
+import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
+import {verifyEnumString} from 'neuroglancer/util/json';
 
 interface AnnotationIdAndPart {
   id: string, sourceIndex: number;
@@ -500,6 +502,8 @@ export class AnnotationLayerView extends Tab {
   private mutableControls = document.createElement('div');
   private headerRow = document.createElement('div');
 
+  private throttledUpdateTable:any = undefined;
+
   get annotationStates() {
     return this.state.annotationStates;
   }
@@ -539,14 +543,13 @@ export class AnnotationLayerView extends Tab {
       }
       const source = state.source;
       const refCounted = new RefCounted();
-      // if (source instanceof AnnotationSource) {
-        refCounted.registerDisposer(
-            source.childAdded.add((annotation) => this.addAnnotationElement(annotation, state)));
-        refCounted.registerDisposer(source.childUpdated.add(
-            (annotation) => this.updateAnnotationElement(annotation, state)));
-        refCounted.registerDisposer(source.childDeleted.add(
-            (annotationId) => this.deleteAnnotationElement(annotationId, state)));
-      // }
+      refCounted.registerDisposer(
+        source.childAdded.add((annotation) => this.addAnnotationElement(annotation, state)));
+      refCounted.registerDisposer(source.childUpdated.add(
+        (annotation) => this.updateAnnotationElement(annotation, state)));
+      refCounted.registerDisposer(source.childDeleted.add(
+        (annotationId) => this.deleteAnnotationElement(annotationId, state)));
+
       refCounted.registerDisposer(state.transform.changed.add(this.forceUpdateView));
       const sublistContainer = document.createElement('div');
       sublistContainer.classList.add('neuroglancer-annotation-sublist');
@@ -625,19 +628,43 @@ export class AnnotationLayerView extends Tab {
   }
 
   private updateNumAnnotationWidget: () => void;
+  private filterByDescription(annotation: Annotation, descriptionFilter: string) {
+    if (descriptionFilter) {
+      if (annotation.description) {
+        return annotation.description.toLowerCase().includes(descriptionFilter.toLowerCase());
+      } else {
+        return false;
+      }
+    } else {
+      return true;
+    }
+  }
+
+  private filterByTime(annotation: Annotation, timeFilter: FilterAnnotationByTimeType) {
+    if (timeFilter === FilterAnnotationByTimeType.TODAY) {
+      let passed = false;
+      if ('prop' in annotation) {
+        let prop = annotation['prop'];
+        if ('timestamp' in prop) {
+          let timestamp = Number(prop['timestamp']);
+          let annotationDate = new Date(timestamp);
+          let today = new Date();
+          passed = (annotationDate.toDateString() === today.toDateString());
+        }
+      }
+      return passed;
+    } else {
+      return true;
+    }
+  }
+
   private tableFilters = [
     (annotation: Annotation) => {
-      if (this.displayState.tableFilterByText.value) {
-        if (annotation.description) {
-          return annotation.description.toLowerCase().includes(this.displayState.tableFilterByText.value.toLowerCase());
-        } else {
-          return false;
-        }
-      } else {
-        return true;
-      }
+      return this.filterByDescription(annotation, this.displayState.tableFilterByText.value);
     },
     (annotation: Annotation) => {
+      return this.filterByTime(annotation, this.displayState.tableFilterByTime.value);
+      /*
       if (this.displayState.tableFilterByToday.value) {
         if ('prop' in annotation) {
           let prop = annotation['prop'];
@@ -652,6 +679,7 @@ export class AnnotationLayerView extends Tab {
       } else {
         return true;
       }
+      */
     }
   ];
 
@@ -663,7 +691,66 @@ export class AnnotationLayerView extends Tab {
         break;
       }
     }
-  };
+  }
+
+  private updateAnnotationTable(filters: Array<(annotation: Annotation) => Boolean> = this.tableFilters) {
+    const self = this;
+    let getAnnotationTimestamp = (annotation: Annotation) => {
+      if ('prop' in annotation) {
+        let prop = annotation['prop'];
+        if ('timestamp' in prop) {
+          return Number(prop['timestamp']);
+        }
+      }
+
+      return 0;
+    };
+
+    for (const [state, { listElements }] of self.attachedAnnotationStates) {
+      // console.log(sublistContainer);
+      let listElementArray = [];
+      for (let [id, element] of listElements) {
+        listElementArray.push({ id: id, element: element });
+      }
+
+      let maxCount = -1;
+      if (this.displayState.tableFilterByTime.value == FilterAnnotationByTimeType.RECENT) {
+        listElementArray.sort((a, b) => {
+          let annotRef1 = state.source.getReference(a.id);
+          let annotRef2 = state.source.getReference(b.id);
+          if (annotRef1.value && !annotRef2.value) {
+            return -1;
+          } else if (!annotRef2.value && annotRef1.value) {
+            return 1;
+          } else if (annotRef1.value && annotRef2.value) {
+            let t1 = getAnnotationTimestamp(annotRef1.value);
+            let t2 = getAnnotationTimestamp(annotRef2.value);
+            return t2 - t1;
+          } else {
+            return 0;
+          }
+        });
+        maxCount = 20;
+      }
+
+      let count = 0;
+      for (let e of listElementArray) {
+        if (maxCount > 0 && count >= maxCount) {
+          e.element.style.display = 'none';
+        } else {
+          let annotRef = state.source.getReference(e.id);
+          if (annotRef.value) {
+            this.filterAnnotationElement(annotRef.value, e.element, filters);
+          } else {
+            e.element.style.display = 'none';
+          }
+        }
+        if (e.element.style.display !== 'none') {
+          count += 1;
+        }
+      }
+    }
+  }
 
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
@@ -754,20 +841,22 @@ export class AnnotationLayerView extends Tab {
     // filterElement.setAttribute('autocomplete', "off");
     filterWidget.appendChild(filterElement);
 
+    let timeElement = this.registerDisposer(new EnumSelectWidget(this.displayState.tableFilterByTime)).element;
+    filterWidget.appendChild(timeElement);
     
-    let todayElement = this.registerDisposer(new TrackableBooleanCheckbox(this.displayState.tableFilterByToday)).element;
 
-    
-    // let todayElement = document.createElement('input');
-    // todayElement.type = 'checkbox';
+    /*
+    let todayElement = this.registerDisposer(new TrackableBooleanCheckbox(this.displayState.tableFilterByToday)).element;
     
     todayElement.id = 'show_annotation_today_only';
     let todayElementLabel = document.createElement('label');
     todayElementLabel.innerText = 'Today';
     todayElementLabel.htmlFor = todayElement.id;
+    */
 
-    filterWidget.appendChild(todayElement);
-    filterWidget.appendChild(todayElementLabel);
+    // filterWidget.appendChild(todayElement);
+    // filterWidget.appendChild(todayElementLabel);
+
 
     this.element.appendChild(filterWidget);
     
@@ -783,6 +872,16 @@ export class AnnotationLayerView extends Tab {
     };
     */
 
+    let filters = [
+      (annotation: Annotation) => {
+        return this.filterByDescription(annotation, filterElement.value);
+      },
+      (annotation: Annotation) => {
+        return this.filterByTime(annotation, <FilterAnnotationByTimeType>verifyEnumString(timeElement.value, this.displayState.tableFilterByTime.enumType));
+      }
+    ]
+
+    /*
     let filters = [
       (annotation: Annotation) => {
         if (filterElement.value) {
@@ -812,27 +911,19 @@ export class AnnotationLayerView extends Tab {
         }
       }
     ];
+    */
 
     let updateTable = () => {
-      const self = this;
-      for (const [state, { listElements }] of self.attachedAnnotationStates) {
-        // console.log(sublistContainer);
-        for (let [id, element] of listElements) {
-          let annotRef = state.source.getReference(id);
-          if (annotRef.value) {
-            this.filterAnnotationElement(annotRef.value, element, filters);
-          } else {
-            element.style.display = 'none';
-          }
-        }
-      }
-      this.updateNumAnnotationWidget();
+      this.updateAnnotationTable(filters);
+      this.resetOnUpdate();
+      // this.updateNumAnnotationWidget();
     };
 
-    const throttledUpdateTable = debounce(updateTable, 50)
-    filterElement.onkeyup = throttledUpdateTable;
-    todayElement.onclick = throttledUpdateTable;
-    this.registerDisposer(() => throttledUpdateTable.cancel());
+    this.throttledUpdateTable = debounce(updateTable, 50);
+    filterElement.onkeyup = this.throttledUpdateTable;
+    // timeElement.onchange = this.throttledUpdateTable;
+    this.registerDisposer(this.displayState.tableFilterByTime.changed.add(this.throttledUpdateTable));
+    this.registerDisposer(() => this.throttledUpdateTable.cancel());
     
 
     /*
@@ -1019,7 +1110,7 @@ export class AnnotationLayerView extends Tab {
     this.resetOnUpdate();
   }
 
-  private addAnnotationElement(annotation: Annotation, state: AnnotationLayerState) {
+  private addAnnotationElement(annotation: Annotation, state: AnnotationLayerState, updatingTable: Boolean = true) {
     if (!this.visible) {
       this.updated = false;
       return;
@@ -1032,7 +1123,23 @@ export class AnnotationLayerView extends Tab {
     if (info !== undefined) {
       info.sublistContainer.appendChild(this.makeAnnotationListElement(annotation, state));
     }
-    this.resetOnUpdate();
+
+    if (!state.source.getReference(annotation.id).value) {
+      state.source.setReferenceValue(annotation);
+    }
+
+    if (updatingTable) {
+      if (state.source.getReference(annotation.id).value) {
+        this.throttledUpdateTable();
+      } else {
+        this.resetOnUpdate();
+      }
+      
+      // this.updateAnnotationTable();
+      // this.resetOnUpdate();
+    } else {
+      this.resetOnUpdate();
+    } 
   }
 
   private updateAnnotationElement(annotation: Annotation, state: AnnotationLayerState) {
@@ -1054,7 +1161,8 @@ export class AnnotationLayerView extends Tab {
         listElements.set(annotation.id, newElement);
       }
     }
-    this.resetOnUpdate();
+    this.throttledUpdateTable();
+    // this.resetOnUpdate();
   }
 
   private deleteAnnotationElement(annotationId: string, state: AnnotationLayerState) {
@@ -1074,7 +1182,8 @@ export class AnnotationLayerView extends Tab {
         attached.listElements.delete(annotationId);
       }
     }
-    this.resetOnUpdate();
+    this.throttledUpdateTable();
+    // this.resetOnUpdate();
   }
 
   clearAnnotationListElements() {

@@ -17,7 +17,7 @@
 import './user_layer.css';
 
 import {AnnotationPropertySpec, AnnotationType, LocalAnnotationSource} from 'neuroglancer/annotation';
-import {AnnotationDisplayState, AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
+import {AnnotationDisplayState, AnnotationLayerState, FilterAnnotationByTimeType} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {CoordinateTransformSpecification, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {DataSourceSpecification, localAnnotationsUrl, LocalDataSource} from 'neuroglancer/datasource';
@@ -101,7 +101,8 @@ const FILTER_BY_SEGMENTATION_JSON_KEY = 'filterBySegmentation';
 const FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY = 'filterBySegmentationAvailable';
 const IGNORE_NULL_SEGMENT_FILTER_JSON_KEY = 'ignoreNullSegmentFilter';
 const TABLE_FILTER_BY_TEXT = 'tableFilterByText';
-const TABLE_FILTER_BY_TODAY = 'tableFilterByToday';
+// const TABLE_FILTER_BY_TODAY = 'tableFilterByToday';
+const TABLE_FILTER_BY_TIME = 'tableFilterByTime';
 
 class LinkedSegmentationLayers extends RefCounted {
   changed = new NullarySignal();
@@ -336,7 +337,8 @@ export class AnnotationUserLayer extends Base {
     this.linkedSegmentationLayers.changed.add(this.specificationChanged.dispatch);
     this.annotationDisplayState.ignoreNullSegmentFilter.changed.add(
         this.specificationChanged.dispatch);
-    this.annotationDisplayState.tableFilterByToday.changed.add(this.specificationChanged.dispatch);
+    // this.annotationDisplayState.tableFilterByToday.changed.add(this.specificationChanged.dispatch);
+    this.annotationDisplayState.tableFilterByTime.changed.add(this.specificationChanged.dispatch);
     this.annotationDisplayState.tableFilterByText.changed.add(this.specificationChanged.dispatch);
     this.annotationCrossSectionRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
@@ -349,8 +351,14 @@ export class AnnotationUserLayer extends Base {
         specification[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY]);
     this.annotationDisplayState.tableFilterByText.restoreState(
       specification[TABLE_FILTER_BY_TEXT]);
-    this.annotationDisplayState.tableFilterByToday.restoreState(
-      specification[TABLE_FILTER_BY_TODAY]);
+    // this.annotationDisplayState.tableFilterByToday.restoreState(specification[TABLE_FILTER_BY_TODAY]);
+    if (TABLE_FILTER_BY_TIME in specification) {
+      this.annotationDisplayState.tableFilterByTime.restoreState(
+        specification[TABLE_FILTER_BY_TIME]);
+    } else {
+      this.annotationDisplayState.tableFilterByTime.value = FilterAnnotationByTimeType.ALL;
+    }
+    
     this.tabs.add(
         'rendering',
         {label: 'Rendering', order: -100, getter: () => new RenderingOptionsTab(this)});
@@ -522,7 +530,8 @@ export class AnnotationUserLayer extends Base {
     x[FILTER_BY_SEGMENTATION_AVAILABLE_JSON_KEY] = this.filterBySegmentationAvailable.toJSON();
     x[IGNORE_NULL_SEGMENT_FILTER_JSON_KEY] =
         this.annotationDisplayState.ignoreNullSegmentFilter.toJSON();
-    x[TABLE_FILTER_BY_TODAY] = this.annotationDisplayState.tableFilterByToday.toJSON();
+    // x[TABLE_FILTER_BY_TODAY] = this.annotationDisplayState.tableFilterByToday.toJSON();
+    x[TABLE_FILTER_BY_TIME] = this.annotationDisplayState.tableFilterByTime.toJSON();
     x[TABLE_FILTER_BY_TEXT] = this.annotationDisplayState.tableFilterByText.toJSON();    
     Object.assign(x, this.linkedSegmentationLayers.toJSON());
     return x;

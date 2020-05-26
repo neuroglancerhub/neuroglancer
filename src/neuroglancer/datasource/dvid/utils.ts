@@ -53,9 +53,9 @@ export interface DVIDSphereAnnotation extends Sphere, DVIDAnnotationBase {
 export type DVIDAnnotation = DVIDPointAnnotation | DVIDSphereAnnotation;
 
 export function typeOfAnnotationId(id: AnnotationId) {
-  if (id.match(/^\d+_\d+_\d+$/)) {
+  if (id.match(/^-?\d+_-?\d+_-?\d+$/)) {
     return AnnotationType.POINT;
-  } else if (id.match(/^\d+_\d+_\d+-\d+_\d+_\d+$/)) {
+  } else if (id.match(/^-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+$/)) {
     return AnnotationType.SPHERE;
   } else {
     console.log(id);

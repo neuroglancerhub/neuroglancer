@@ -508,6 +508,13 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     this.applyLocalUpdate(reference, /*existing=*/ true, /*commit=*/ true, reference.value!);
   }
 
+  setReferenceValue(annotation: Annotation) {
+    let existing = this.references.get(annotation.id);
+    if (existing !== undefined) {
+      existing.value = annotation;
+    }
+  }
+
   getReference(id: AnnotationId): Owned<AnnotationReference> {
     let existing = this.references.get(id);
     if (existing !== undefined) {

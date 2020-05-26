@@ -31,6 +31,7 @@ import {trackableFiniteFloat} from 'neuroglancer/trackable_finite_float';
 import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {makeTrackableFragmentMain, makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {parseShaderUiControls, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
+import { TrackableEnum } from '../util/trackable_enum';
 
 export class AnnotationHoverState extends WatchableValue<
     {id: string, partIndex: number, annotationLayerState: AnnotationLayerState}|undefined> {}
@@ -84,6 +85,19 @@ void main() {
 }
 `;
 
+export enum FilterAnnotationByTimeType {
+  ALL = 0,
+  TODAY = 1,
+  RECENT = 2
+};
+
+export class TrackableFilterAnnotationByTime extends TrackableEnum<FilterAnnotationByTimeType>
+{
+  constructor(value = FilterAnnotationByTimeType.ALL) {
+    super(FilterAnnotationByTimeType, value);
+  }
+}
+
 export class AnnotationDisplayState extends RefCounted {
   shader = makeTrackableFragmentMain(DEFAULT_FRAGMENT_MAIN);
   shaderControls = new ShaderControlState(this.shader);
@@ -109,7 +123,8 @@ export class AnnotationDisplayState extends RefCounted {
   hoverState = new AnnotationHoverState(undefined);
   pointRadius = trackableFiniteFloat(6);
   tableFilterByText = new TrackableString('');
-  tableFilterByToday = new TrackableBoolean(false);
+  tableFilterByTime = new TrackableFilterAnnotationByTime();
+  // tableFilterByToday = new TrackableBoolean(false);
 }
 
 export class AnnotationLayerState extends RefCounted {
