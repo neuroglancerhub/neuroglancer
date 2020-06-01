@@ -48,7 +48,7 @@ import {verifyInt} from 'neuroglancer/util/json';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
-import {Env, getUserFromToken, DVIDPointAnnotation, DVIDSphereAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDSphereAnnotationFacade, DVIDAnnotation, defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
+import {Env, getUserFromToken, DVIDPointAnnotation, DVIDSphereAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDSphereAnnotationFacade, DVIDAnnotation, defaultJsonSchema, parseDescription} from 'neuroglancer/datasource/dvid/utils';
 import { dvidCredentailsKey, registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
 import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials, defaultLocateService, defaultMeshService} from 'neuroglancer/datasource/dvid/api';
 
@@ -1476,6 +1476,14 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       annotation.point = annotation.point.map(x => Math.round(x));
       annotationRef.setCustom(true);
       annotationRef.addTimeStamp();
+
+      if (annotation.description) {
+        let defaultProp = parseDescription(annotation.description);
+        if (defaultProp) {
+          annotationRef.addProp(defaultProp);
+          annotation.description = undefined;
+        }
+      }
     } else if (annotation.type == AnnotationType.SPHERE) {
       annotation.pointA = annotation.pointA.map(x => Math.round(x));
       annotation.pointB = annotation.pointB.map(x => Math.round(x));

@@ -32,6 +32,7 @@ import {WatchableMap} from 'neuroglancer/util/watchable_map';
 import {makeTrackableFragmentMain, makeWatchableShaderError} from 'neuroglancer/webgl/dynamic_shader';
 import {parseShaderUiControls, ShaderControlState} from 'neuroglancer/webgl/shader_ui_controls';
 import { TrackableEnum } from '../util/trackable_enum';
+import {CompoundTrackable, Trackable} from 'neuroglancer/util/trackable';
 
 export class AnnotationHoverState extends WatchableValue<
     {id: string, partIndex: number, annotationLayerState: AnnotationLayerState}|undefined> {}
@@ -127,6 +128,66 @@ export class AnnotationDisplayState extends RefCounted {
   // tableFilterByToday = new TrackableBoolean(false);
 }
 
+class AnnotationToolDefaultProperty implements Trackable {
+  private compound = new CompoundTrackable();
+  get changed() {
+    return this.compound.changed;
+  }
+
+  type = new TrackableString("");
+  hint = new TrackableString("");
+
+  constructor() {
+    const {compound} = this;
+    compound.add('type', this.type);
+    compound.add('hint', this.hint);
+  }
+
+  reset() {
+    this.compound.reset();
+  }
+
+  restoreState(obj: any) {
+    if (obj === undefined) return;
+    this.compound.restoreState(obj);
+  }
+
+  toJSON(): any {
+    const obj = this.compound.toJSON();
+    for (const _ in obj) return obj;
+    return undefined;
+  }
+}
+
+export class AnnotationDefaultProperty implements Trackable {
+  private compound = new CompoundTrackable();
+  get changed() {
+    return this.compound.changed;
+  }
+
+  point = new AnnotationToolDefaultProperty;
+
+  constructor() {
+    const {compound} = this;
+    compound.add('point', this.point);
+  }
+
+  reset() {
+    this.compound.reset();
+  }
+
+  restoreState(obj: any) {
+    if (obj === undefined) return;
+    this.compound.restoreState(obj);
+  }
+
+  toJSON(): any {
+    const obj = this.compound.toJSON();
+    for (const _ in obj) return obj;
+    return undefined;
+  }
+}
+
 export class AnnotationLayerState extends RefCounted {
   transform: WatchableValueInterface<RenderLayerTransformOrError>;
   localPosition: WatchableValueInterface<Float32Array>;
@@ -136,6 +197,7 @@ export class AnnotationLayerState extends RefCounted {
   subsourceId: string;
   subsourceIndex: number;
   displayState: AnnotationDisplayState;
+  defaultProperty: AnnotationDefaultProperty;
 
   readonly chunkTransform: WatchableValueInterface<ValueOrError<ChunkTransformParameters>>;
 
@@ -147,7 +209,8 @@ export class AnnotationLayerState extends RefCounted {
     dataSource: LayerDataSource,
     subsourceId: string,
     subsourceIndex: number,
-    role?: RenderLayerRole,
+    defaultProperty: AnnotationDefaultProperty,
+    role?: RenderLayerRole
   }) {
     super();
     const {
@@ -168,6 +231,7 @@ export class AnnotationLayerState extends RefCounted {
     this.dataSource = options.dataSource;
     this.subsourceId = options.subsourceId;
     this.subsourceIndex = options.subsourceIndex;
+    this.defaultProperty = options.defaultProperty;
   }
 
   get sourceIndex() {

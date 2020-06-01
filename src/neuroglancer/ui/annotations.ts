@@ -22,7 +22,7 @@ import './annotations.css';
 
 import debounce from 'lodash/debounce';
 import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line, Sphere, annotationToJson} from 'neuroglancer/annotation';
-import {AnnotationDisplayState, AnnotationLayerState, FilterAnnotationByTimeType} from 'neuroglancer/annotation/annotation_layer_state';
+import {AnnotationDisplayState, AnnotationLayerState, FilterAnnotationByTimeType, AnnotationDefaultProperty} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {SpatiallyIndexedPerspectiveViewAnnotationLayer, SpatiallyIndexedSliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -664,22 +664,6 @@ export class AnnotationLayerView extends Tab {
     },
     (annotation: Annotation) => {
       return this.filterByTime(annotation, this.displayState.tableFilterByTime.value);
-      /*
-      if (this.displayState.tableFilterByToday.value) {
-        if ('prop' in annotation) {
-          let prop = annotation['prop'];
-          if ('timestamp' in prop) {
-            let timestamp = Number(prop['timestamp']);
-            let annotationDate = new Date(timestamp);
-            let today = new Date();
-            return (annotationDate.toDateString() === today.toDateString());
-          }
-        }
-        return false;
-      } else {
-        return true;
-      }
-      */
     }
   ];
 
@@ -1110,7 +1094,7 @@ export class AnnotationLayerView extends Tab {
     this.resetOnUpdate();
   }
 
-  private addAnnotationElement(annotation: Annotation, state: AnnotationLayerState, updatingTable: Boolean = true) {
+  private addAnnotationElement(annotation: Annotation, state: AnnotationLayerState) {
     if (!this.visible) {
       this.updated = false;
       return;
@@ -1128,15 +1112,13 @@ export class AnnotationLayerView extends Tab {
       state.source.setReferenceValue(annotation);
     }
 
-    if (updatingTable) {
+    if (this.displayState.tableFilterByTime.value === 
+      FilterAnnotationByTimeType.RECENT) {
       if (state.source.getReference(annotation.id).value) {
         this.throttledUpdateTable();
       } else {
         this.resetOnUpdate();
       }
-      
-      // this.updateAnnotationTable();
-      // this.resetOnUpdate();
     } else {
       this.resetOnUpdate();
     } 
@@ -1161,8 +1143,12 @@ export class AnnotationLayerView extends Tab {
         listElements.set(annotation.id, newElement);
       }
     }
-    this.throttledUpdateTable();
-    // this.resetOnUpdate();
+    if (this.displayState.tableFilterByTime.value ===
+      FilterAnnotationByTimeType.RECENT) {
+      this.throttledUpdateTable();
+    } else {
+      this.resetOnUpdate();
+    }
   }
 
   private deleteAnnotationElement(annotationId: string, state: AnnotationLayerState) {
@@ -1182,8 +1168,12 @@ export class AnnotationLayerView extends Tab {
         attached.listElements.delete(annotationId);
       }
     }
-    this.throttledUpdateTable();
-    // this.resetOnUpdate();
+    if (this.displayState.tableFilterByTime.value ===
+      FilterAnnotationByTimeType.RECENT) {
+      this.throttledUpdateTable();
+    } else {
+      this.resetOnUpdate();
+    }
   }
 
   clearAnnotationListElements() {
@@ -1666,9 +1656,15 @@ export class PlacePointTool extends PlaceAnnotationTool {
     if (mouseState.active) {
       const point = getMousePositionInAnnotationCoordinates(mouseState, annotationLayer);
       if (point === undefined) return;
+      const defaultProp = annotationLayer.defaultProperty.point.toJSON();
+      Object.keys(defaultProp).forEach(key => !defaultProp[key] && delete defaultProp[key]);
+      let description = '';
+      if (defaultProp && Object.keys(defaultProp).length > 0) {
+        description = `\${${JSON.stringify(defaultProp)}:JSON}`
+      }
       const annotation: Annotation = {
         id: '',
-        description: '',
+        description,
         relatedSegments: getSelectedAssociatedSegments(annotationLayer),
         point,
         type: AnnotationType.POINT,
@@ -1979,6 +1975,7 @@ export interface UserLayerWithAnnotations extends UserLayer {
 
 const SELECTED_ANNOTATION_JSON_KEY = 'selectedAnnotation';
 const ANNOTATION_COLOR_JSON_KEY = 'annotationColor';
+const ANNOTATION_DEFAULT_PROPERTY_JSON_KEY = 'defaultProperties';
 export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]): UserLayer}>(
     Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {
@@ -1989,6 +1986,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
     annotationCrossSectionRenderScaleTarget = trackableRenderScaleTarget(8);
     annotationProjectionRenderScaleHistogram = new RenderScaleHistogram();
     annotationProjectionRenderScaleTarget = trackableRenderScaleTarget(8);
+    annotationDefaultProperty = new AnnotationDefaultProperty();
 
     constructor(...args: any[]) {
       super(...args);
@@ -1996,6 +1994,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       this.annotationDisplayState.color.changed.add(this.specificationChanged.dispatch);
       this.annotationDisplayState.shader.changed.add(this.specificationChanged.dispatch);
       this.annotationDisplayState.shaderControls.changed.add(this.specificationChanged.dispatch);
+      this.annotationDefaultProperty.changed.add(this.specificationChanged.dispatch);
       this.tabs.add('annotations', {
         label: 'Annotations',
         order: 10,
@@ -2050,6 +2049,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       this.annotationDisplayState.shader.restoreState(specification[SHADER_JSON_KEY]);
       this.annotationDisplayState.shaderControls.restoreState(
           specification[SHADER_CONTROLS_JSON_KEY]);
+      this.annotationDefaultProperty.restoreState(specification[ANNOTATION_DEFAULT_PROPERTY_JSON_KEY]);
     }
 
     addLocalAnnotations(
@@ -2063,7 +2063,8 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
         dataSource: loadedSubsource.loadedDataSource.layerDataSource,
         subsourceIndex: loadedSubsource.subsourceIndex,
         subsourceId: subsourceEntry.id,
-        role,
+        defaultProperty: this.annotationDefaultProperty,
+        role
       });
       this.addAnnotationLayerState(state, loadedSubsource);
     }
@@ -2124,6 +2125,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
     toJSON() {
       const x = super.toJSON();
       x[SELECTED_ANNOTATION_JSON_KEY] = this.selectedAnnotation.toJSON();
+      x[ANNOTATION_DEFAULT_PROPERTY_JSON_KEY] = this.annotationDefaultProperty.toJSON();
       x[ANNOTATION_COLOR_JSON_KEY] = this.annotationDisplayState.color.toJSON();
       x[SHADER_JSON_KEY] = this.annotationDisplayState.shader.toJSON();
       x[SHADER_CONTROLS_JSON_KEY] = this.annotationDisplayState.shaderControls.toJSON();

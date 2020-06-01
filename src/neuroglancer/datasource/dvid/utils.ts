@@ -97,6 +97,10 @@ class DVIDAnnotationFacade {
     }
   }
 
+  addProp(prop: {[key:string]: string}) {
+    this.prop = {...this.prop, ...prop};
+  }
+
   get bookmarkType() {
     return this.prop && this.prop.type;
   }
@@ -135,6 +139,16 @@ class DVIDAnnotationFacade {
   }
 
   updateProperties() {
+  }
+}
+
+export function parseDescription(description: string)
+{
+  let match = description.match(/^\${(.*):JSON}$/);
+  if (match) {
+    return JSON.parse(match[1]);
+  } else {
+    return null;
   }
 }
 

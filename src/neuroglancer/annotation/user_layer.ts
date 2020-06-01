@@ -442,7 +442,8 @@ export class AnnotationUserLayer extends Base {
             dataSource: loadedSubsource.loadedDataSource.layerDataSource,
             subsourceIndex: loadedSubsource.subsourceIndex,
             subsourceId: subsourceEntry.id,
-            role: RenderLayerRole.ANNOTATION,
+            defaultProperty: this.annotationDefaultProperty,
+            role: RenderLayerRole.ANNOTATION
           });
           this.addAnnotationLayerState(state, loadedSubsource);
         });
@@ -466,6 +467,7 @@ export class AnnotationUserLayer extends Base {
             subsourceIndex: loadedSubsource.subsourceIndex,
             subsourceId: subsourceEntry.id,
             role: RenderLayerRole.ANNOTATION,
+            defaultProperty: this.annotationDefaultProperty
           });
           this.addAnnotationLayerState(state, loadedSubsource);
         });
