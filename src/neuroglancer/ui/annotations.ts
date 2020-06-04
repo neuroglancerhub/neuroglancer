@@ -1658,7 +1658,7 @@ export class PlacePointTool extends PlaceAnnotationTool {
       const point = getMousePositionInAnnotationCoordinates(mouseState, annotationLayer);
       if (point === undefined) return;
       const defaultProp = annotationLayer.defaultProperty.point.toJSON();
-      Object.keys(defaultProp).forEach(key => !defaultProp[key] && delete defaultProp[key]);
+      // Object.keys(defaultProp).forEach(key => !defaultProp[key] && delete defaultProp[key]);
       let description = '';
       if (defaultProp && Object.keys(defaultProp).length > 0) {
         description = `\${${JSON.stringify(defaultProp)}:JSON}`
@@ -1976,7 +1976,7 @@ export interface UserLayerWithAnnotations extends UserLayer {
 
 const SELECTED_ANNOTATION_JSON_KEY = 'selectedAnnotation';
 const ANNOTATION_COLOR_JSON_KEY = 'annotationColor';
-const ANNOTATION_DEFAULT_PROPERTY_JSON_KEY = 'defaultProperties';
+const ANNOTATION_DEFAULT_PROPERTY_JSON_KEY = 'defaultAnnotationProperties';
 export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]): UserLayer}>(
     Base: TBase) {
   abstract class C extends Base implements UserLayerWithAnnotations {

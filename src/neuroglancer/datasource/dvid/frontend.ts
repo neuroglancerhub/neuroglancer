@@ -1481,7 +1481,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         let defaultProp = parseDescription(annotation.description);
         if (defaultProp) {
           annotationRef.addProp(defaultProp);
-          annotation.description = undefined;
+          annotation.description = getAnnotationDescription(<DVIDPointAnnotation>annotation);
         }
       }
     } else if (annotation.type == AnnotationType.SPHERE) {
