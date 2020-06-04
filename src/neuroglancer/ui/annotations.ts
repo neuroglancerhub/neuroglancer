@@ -1283,6 +1283,7 @@ export class AnnotationLayerView extends Tab {
       description.classList.add('neuroglancer-annotation-description');
       description.classList.add('neuroglancer-annotation-list-entry-highlight');
       description.textContent = annotation.description;
+      description.style.whiteSpace = 'pre-wrap';
       element.appendChild(description);
     }
     icon.style.gridRow = `span ${numRows}`;

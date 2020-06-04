@@ -217,6 +217,10 @@ export function getAnnotationDescription(annotation: DVIDAnnotation): string {
     if (prop.type && prop.type !== '---') {
       description += ` (Type: ${prop.type})`;
     }
+
+    if (prop.hint) {
+      description += ` ⓘ ${prop.hint}`;
+    }
   }
 
   /*
