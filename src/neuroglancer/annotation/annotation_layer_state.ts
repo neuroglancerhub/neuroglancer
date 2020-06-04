@@ -154,6 +154,9 @@ class AnnotationToolDefaultProperty implements Trackable {
 
   toJSON(): any {
     const obj = this.compound.toJSON();
+    for (const key in obj){
+      if (obj[key] === undefined) delete obj[key];
+    }
     for (const _ in obj) return obj;
     return undefined;
   }
@@ -183,6 +186,9 @@ export class AnnotationDefaultProperty implements Trackable {
 
   toJSON(): any {
     const obj = this.compound.toJSON();
+    for (const key in obj){
+      if (obj[key] === undefined) delete obj[key];
+    }
     for (const _ in obj) return obj;
     return undefined;
   }
