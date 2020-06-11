@@ -812,7 +812,7 @@ export class AnnotationLayerView extends Tab {
 
     let separator = document.createElement('hr');
     separator.style.border = '1px solid #505050';
-    separator.setAttribute('width', '300px');
+    separator.setAttribute('width', '100%');
     this.element.appendChild(separator);
 
     ////// tmp hack
