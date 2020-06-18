@@ -315,9 +315,10 @@ function parseSphereAnnotation(entry: any): DVIDSphereAnnotation
     prop: {}
   };
 
+  let annotationRef = new DVIDSphereAnnotationFacade(annotation);
   if ('Prop' in entry) {
     const propertiesObj = verifyObjectProperty(entry, 'Prop', verifyObject);
-    annotation.prop = propertiesObj;
+    annotationRef.prop = propertiesObj;
   }
 
   let description = getAnnotationDescription(annotation);

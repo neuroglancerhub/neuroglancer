@@ -164,6 +164,14 @@ export class DVIDSphereAnnotationFacade extends DVIDAnnotationFacade {
   constructor(public annotation: DVIDSphereAnnotation) {
     super(annotation);
   }
+
+  get renderingAttribute() {
+    return this.timestamp > 0 ? 11 : 0;
+  }
+
+  updateProperties() {
+    this.annotation.properties = [this.renderingAttribute];
+  }
 }
 
 export class DVIDPointAnnotationFacade extends DVIDAnnotationFacade{
