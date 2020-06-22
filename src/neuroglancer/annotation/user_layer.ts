@@ -365,6 +365,24 @@ export class AnnotationUserLayer extends Base {
     this.tabs.default = 'annotations';
   }
 
+  handleAction(action: string) {
+    switch (action) {
+      case 'toggle-sphere-annotation': {
+        console.log('toggle sphere annotation');
+        let state = this.annotationDisplayState.shaderControls.state;
+        // let {controls} = this.annotationDisplayState.shaderControls;
+        const controlKey = 'sphereAnnotationOpacity';
+        if (state.has(controlKey)) {
+          let controlState = state.get(controlKey);
+          if (controlState) {
+            controlState.trackable.value = Math.round(1.0 - controlState.trackable.value);
+          }
+        }
+        break;
+      }
+    }
+  }
+
   getLegacyDataSourceSpecifications(
       sourceSpec: any, layerSpec: any,
       legacyTransform: CoordinateTransformSpecification|undefined): DataSourceSpecification[] {

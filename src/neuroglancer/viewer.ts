@@ -647,6 +647,18 @@ export class Viewer extends RefCounted implements ViewerState {
       userLayer.tool.value.trigger(this.mouseState);
     });
 
+    for (const action of ['toggle-sphere-annotation']) {
+      this.bindAction(action, () => {
+        const selectedLayer = this.selectedLayer.layer;
+        if (selectedLayer) {
+          const userLayer = selectedLayer.layer;
+          if (userLayer) {
+            userLayer.handleAction(action);
+          }
+        }
+      });
+    }
+
     this.bindAction('toggle-axis-lines', () => this.showAxisLines.toggle());
     this.bindAction('toggle-scale-bar', () => this.showScaleBar.toggle());
     this.bindAction('toggle-default-annotations', () => this.showDefaultAnnotations.toggle());
