@@ -46,6 +46,7 @@ export class RenderLayer extends RefCounted {
   messages = new MessageList();
   layerChanged = new NullarySignal();
   redrawNeeded = new NullarySignal();
+  pickEnabled = true;
 
   handleAction(_action: string) {
     // Do nothing by default.

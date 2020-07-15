@@ -1739,6 +1739,11 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
         };
       };
 
+      let enablePicking = (enabled: boolean) => {
+        for (let layer of annotationLayer.dataSource.layer.renderLayers) {
+          layer.pickEnabled = enabled;
+        }
+      }
       if (this.inProgressAnnotation === undefined) {
         const reference = annotationLayer.source.add(
             this.getInitialAnnotation(mouseState, annotationLayer), /*commit=*/ false);
@@ -1757,8 +1762,10 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
           reference,
           disposer,
         };
+        enablePicking(false);
       } else {
         updatePointB();
+        enablePicking(true);
         this.inProgressAnnotation.annotationLayer.source.commit(
             this.inProgressAnnotation.reference);
         this.inProgressAnnotation.disposer();

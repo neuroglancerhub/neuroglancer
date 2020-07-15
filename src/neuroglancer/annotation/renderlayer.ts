@@ -476,6 +476,9 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
 
     updateMouseState(
         mouseState: MouseSelectionState, _pickedValue: Uint64, pickedOffset: number, data: any) {
+      if (!this.pickEnabled) {
+        return;
+      }
       const chunk = data as AnnotationGeometryDataInterface;
       const {serializedAnnotations} = chunk;
       const {typeToIds, typeToOffset} = serializedAnnotations;
@@ -510,9 +513,10 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
                   combinedGlobalLocalToChunkTransform)) {
             return;
           }
-          renderHandler.snapPosition(
-              chunkPosition, mouseState.pickedAnnotationBuffer,
-              mouseState.pickedAnnotationBufferOffset, partIndex);
+          // Disabled temporary to control annotation position more precisely. In fact, it might be preferred to disable the snapping featue here in practice.
+          // renderHandler.snapPosition(
+          //     chunkPosition, mouseState.pickedAnnotationBuffer,
+          //     mouseState.pickedAnnotationBufferOffset, partIndex);
           const globalRank = globalToRenderLayerDimensions.length;
           for (let globalDim = 0; globalDim < globalRank; ++globalDim) {
             const layerDim = globalToRenderLayerDimensions[globalDim];
