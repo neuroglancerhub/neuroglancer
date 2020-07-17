@@ -1741,7 +1741,9 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
 
       let enablePicking = (enabled: boolean) => {
         for (let layer of annotationLayer.dataSource.layer.renderLayers) {
-          layer.pickEnabled = enabled;
+          if (layer.pickEnabled !== undefined) {
+            layer.pickEnabled = enabled;
+          }
         }
       }
       if (this.inProgressAnnotation === undefined) {

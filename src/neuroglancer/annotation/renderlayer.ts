@@ -338,6 +338,7 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
     constructor(
         public base: Owned<AnnotationLayer>, public renderScaleHistogram: RenderScaleHistogram) {
       super();
+      this.pickEnabled = true;
       const baseVisibility = base.visibility;
       if (baseVisibility !== undefined) {
         this.registerDisposer(baseVisibility.add(this.visibility));
@@ -476,7 +477,7 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
 
     updateMouseState(
         mouseState: MouseSelectionState, _pickedValue: Uint64, pickedOffset: number, data: any) {
-      if (!this.pickEnabled) {
+      if (this.pickEnabled !== undefined && !this.pickEnabled) {
         return;
       }
       const chunk = data as AnnotationGeometryDataInterface;
