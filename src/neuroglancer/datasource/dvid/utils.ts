@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import {Point, Sphere, AnnotationType, AnnotationId} from 'neuroglancer/annotation/index';
+import {Point, Sphere, Line, AnnotationType, AnnotationId} from 'neuroglancer/annotation/index';
 import {StringMemoize} from 'neuroglancer/util/memoize';
 
 let EnvMemoize = new StringMemoize();
@@ -41,35 +41,38 @@ export interface DVIDAnnotationBase {
 export interface DVIDPointAnnotation extends Point, DVIDAnnotationBase {
 };
 
-/*
 export interface DVIDLineAnnotation extends Line, DVIDAnnotationBase
 {
 }
-*/
 
 export interface DVIDSphereAnnotation extends Sphere, DVIDAnnotationBase {
 };
 
-export type DVIDAnnotation = DVIDPointAnnotation | DVIDSphereAnnotation;
+export type DVIDAnnotation = DVIDPointAnnotation |  DVIDLineAnnotation | DVIDSphereAnnotation;
 
+// const twoPointAnnotationIdPattern = '-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+';
 export function typeOfAnnotationId(id: AnnotationId) {
   if (id.match(/^-?\d+_-?\d+_-?\d+$/)) {
     return AnnotationType.POINT;
   } else if (id.match(/^-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+$/)) {
     return AnnotationType.SPHERE;
+  } else if (id.match(/^-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+-Line$/)) {
+    return AnnotationType.LINE;
   } else {
-    console.log(id);
-    throw new Error(`Invalid annotation ID for DVID: ${id}`)
+    console.log(`Invalid annotation ID for DVID: ${id}`);
+    return null;
+    // throw new Error(`Invalid annotation ID for DVID: ${id}`)
   }
 }
 
+export const DVIDAnnotationKindMap = {
+  [AnnotationType.POINT]: 'Note',
+  [AnnotationType.LINE]: 'PureLine', 
+  [AnnotationType.SPHERE]: 'Line' //for back compatibility
+};
+
 export function isAnnotationIdValid(id: AnnotationId) {
-  try {
-    typeOfAnnotationId(id);
-    return true;
-  } catch {
-    return false;
-  }
+  return typeOfAnnotationId(id) !== null;
 }
 
 class DVIDAnnotationFacade {
@@ -152,13 +155,11 @@ export function parseDescription(description: string)
   }
 }
 
-/*
 export class DVIDLineAnnotationFacade extends DVIDAnnotationFacade {
   constructor(public annotation: DVIDLineAnnotation) {
     super(annotation);
   }
 }
-*/
 
 export class DVIDSphereAnnotationFacade extends DVIDAnnotationFacade {
   constructor(public annotation: DVIDSphereAnnotation) {

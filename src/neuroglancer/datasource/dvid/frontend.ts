@@ -48,7 +48,7 @@ import {verifyInt} from 'neuroglancer/util/json';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
-import {Env, getUserFromToken, DVIDPointAnnotation, DVIDSphereAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDSphereAnnotationFacade, DVIDAnnotation, defaultJsonSchema, parseDescription} from 'neuroglancer/datasource/dvid/utils';
+import {Env, getUserFromToken, DVIDPointAnnotation, DVIDLineAnnotation, DVIDSphereAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDSphereAnnotationFacade, DVIDLineAnnotationFacade, DVIDAnnotation, defaultJsonSchema, parseDescription} from 'neuroglancer/datasource/dvid/utils';
 import { dvidCredentailsKey, registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
 import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials, defaultLocateService, defaultMeshService} from 'neuroglancer/datasource/dvid/api';
 
@@ -1347,7 +1347,8 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.makeEditWidget = (reference: AnnotationReference) => {
       const annotation = reference.value!;
       
-      if (annotation.type !== AnnotationType.POINT && annotation.type !== AnnotationType.SPHERE) {
+      if (annotation.type !== AnnotationType.POINT && annotation.type !== AnnotationType.SPHERE &&
+      annotation.type !== AnnotationType.LINE) {
         return null;
       }
 
@@ -1454,7 +1455,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   }
 
   commit(reference: Borrowed<AnnotationReference>) {
-    if (reference.value && reference.value.type === AnnotationType.SPHERE) {
+    if (reference.value && (reference.value.type === AnnotationType.SPHERE || reference.value.type === AnnotationType.LINE)) {
       reference.value.pointA = reference.value.pointA.map(x => Math.round(x));
       reference.value.pointB = reference.value.pointB.map(x => Math.round(x));
     }
@@ -1488,6 +1489,11 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       annotation.pointA = annotation.pointA.map(x => Math.round(x));
       annotation.pointB = annotation.pointB.map(x => Math.round(x));
       let annotationRef = new DVIDSphereAnnotationFacade(<DVIDSphereAnnotation>annotation);
+      annotationRef.addTimeStamp();
+    } else if (annotation.type == AnnotationType.LINE) {
+      annotation.pointA = annotation.pointA.map(x => Math.round(x));
+      annotation.pointB = annotation.pointB.map(x => Math.round(x));
+      let annotationRef = new DVIDLineAnnotationFacade(<DVIDLineAnnotation>annotation);
       annotationRef.addTimeStamp();
     }
 

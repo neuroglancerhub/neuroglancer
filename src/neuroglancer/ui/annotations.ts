@@ -55,7 +55,7 @@ import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
-import {StatusMessage} from 'neuroglancer/status';
+// import {StatusMessage} from 'neuroglancer/status';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {verifyEnumString} from 'neuroglancer/util/json';
 
@@ -779,7 +779,6 @@ export class AnnotationLayerView extends Tab {
     });
     mutableControls.appendChild(boundingBoxButton);
 
-    /*
     const lineButton = makeIcon({
       text: getAnnotationTypeHandler(AnnotationType.LINE).icon,
       title: 'Annotate line',
@@ -788,7 +787,6 @@ export class AnnotationLayerView extends Tab {
       },
     });
     mutableControls.appendChild(lineButton);
-    */
 
     const sphereButton = makeIcon({
       text: getAnnotationTypeHandler(AnnotationType.SPHERE).icon,
@@ -1828,6 +1826,7 @@ export class PlaceBoundingBoxTool extends PlaceTwoCornerAnnotationTool {
 PlaceBoundingBoxTool.prototype.annotationType = AnnotationType.AXIS_ALIGNED_BOUNDING_BOX;
 
 export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
+  /*
   constructor(public layer: UserLayerWithAnnotations, options: any) {
     super(layer, options);
     //tmp hack
@@ -1835,6 +1834,7 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
     status.setErrorMessage('WARNING: The line annotation tool is deperacated! Please switch to the sphere tool (⌽).');
     status.setVisible(true);
   }
+  */
 
   get description() {
     return `annotate line`;
