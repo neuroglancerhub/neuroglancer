@@ -62,8 +62,16 @@ ng_markerDiameter = 5.0;
 ng_markerBorderWidth = 1.0;
 vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
 ${this.invokeUserMain}
-emitCircle(uModelViewProjection *
-           vec4(projectModelVectorToSubspace(modelPosition), 1.0), ng_markerDiameter, ng_markerBorderWidth);
+float fadingFactor = 1.0 / ng_markerDiameter;
+vec4 pos = uModelViewProjection * vec4(projectModelVectorToSubspace(modelPosition), 1.0);
+if (abs(pos.z) < 1.0) {
+  pos.z *= fadingFactor;
+} else if (abs(pos.z) < ng_markerDiameter * 0.5) {
+  float b = pos.z > 0.0 ? 1.0 : -1.0;
+  pos.z = (pos.z * fadingFactor * 2.0 + b) * 0.5;
+}
+
+emitCircle(pos, ng_markerDiameter, ng_markerBorderWidth);
 ${this.setPartIndex(builder)};
 `);
     builder.setFragmentMain(`
