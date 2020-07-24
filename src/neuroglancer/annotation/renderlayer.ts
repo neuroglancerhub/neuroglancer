@@ -514,10 +514,12 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
                   combinedGlobalLocalToChunkTransform)) {
             return;
           }
-          // Disabled temporary to control annotation position more precisely. In fact, it might be preferred to disable the snapping featue here in practice.
-          // renderHandler.snapPosition(
-          //     chunkPosition, mouseState.pickedAnnotationBuffer,
-          //     mouseState.pickedAnnotationBufferOffset, partIndex);
+          // Disabled for slice view to control annotation position more precisely. In fact, it might be preferred to disable the snapping featue here in practice.
+          if (this instanceof PerspectiveViewRenderLayer) {
+            renderHandler.snapPosition(
+              chunkPosition, mouseState.pickedAnnotationBuffer,
+              mouseState.pickedAnnotationBufferOffset, partIndex);
+          }
           const globalRank = globalToRenderLayerDimensions.length;
           for (let globalDim = 0; globalDim < globalRank; ++globalDim) {
             const layerDim = globalToRenderLayerDimensions[globalDim];
