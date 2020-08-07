@@ -548,7 +548,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
             this.credentialsProvider,
             {
               method: 'GET',
-              url: appendQueryStringForDvid(dataInstance.getKeyValueRangeUrl(sphereAnnotationDataName, parameters.user + '--0', parameters.user + '--9'), parameters.user),
+              url: appendQueryStringForDvid(dataInstance.getKeyValueRangeUrl(sphereAnnotationDataName, parameters.user + '--0', parameters.user + '--z'), parameters.user),
               payload: undefined,
               responseType: 'json',
             },
