@@ -40,7 +40,7 @@ import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/an
 import {Signal, NullarySignal} from 'neuroglancer/util/signal';
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider'
 import { makeSliceViewChunkSpecification } from 'neuroglancer/sliceview/base';
-import {createAnnotationWidget, getObjectFromWidget, createProofreadWidget, createBasicElement} from 'neuroglancer/datasource/dvid/widgets';
+import {createProofreadWidget, createBasicElement} from 'neuroglancer/datasource/dvid/widgets';
 // import {Uint64} from 'neuroglancer/util/uint64';
 // import { DVIDAnnotationGeometryChunkSource } from './backend';
 import {TrackableValue} from 'neuroglancer/trackable_value';
@@ -48,9 +48,12 @@ import {verifyInt} from 'neuroglancer/util/json';
 import {Borrowed} from 'neuroglancer/util/disposable';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend'
 import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/default_manager';
-import {Env, getUserFromToken, DVIDPointAnnotation, DVIDLineAnnotation, DVIDSphereAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDSphereAnnotationFacade, DVIDLineAnnotationFacade, DVIDAnnotation, defaultJsonSchema, parseDescription} from 'neuroglancer/datasource/dvid/utils';
+import {Env, getUserFromToken, DVIDPointAnnotation, DVIDLineAnnotation, DVIDSphereAnnotation, getAnnotationDescription, DVIDPointAnnotationFacade, DVIDSphereAnnotationFacade, DVIDLineAnnotationFacade, parseDescription} from 'neuroglancer/datasource/dvid/utils';
 import { dvidCredentailsKey, registerDVIDCredentialsProvider, isDVIDCredentialsProviderRegistered } from 'neuroglancer/datasource/dvid/register_credentials_provider';
 import {DVIDInstance, DVIDToken, appendQueryStringForDvid, credentialsKey, makeRequestWithCredentials, defaultLocateService, defaultMeshService} from 'neuroglancer/datasource/dvid/api';
+import {makeAnnotationEditWidget} from 'neuroglancer/datasource/dvid/widgets';
+// import {getObjectFromWidget, createAnnotationWidget} from 'neuroglancer/datasource/dvid/widgets';
+// import {defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
 
 let serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set('uint8', DataType.UINT8);
@@ -1345,6 +1348,11 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     }
 
     this.makeEditWidget = (reference: AnnotationReference) => {
+      return makeAnnotationEditWidget(reference, this.parameters.schema, this);
+    };
+    
+    /*
+    this.makeEditWidget = (reference: AnnotationReference) => {
       const annotation = reference.value!;
       
       if (annotation.type !== AnnotationType.POINT && annotation.type !== AnnotationType.SPHERE &&
@@ -1397,7 +1405,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
 
       return widget;
     }
-
+*/
     this.makeFilterWidget = () => {
       let element = createBasicElement(
         {title: 'Filter', type: 'string'}, 'annotationFilter', '');

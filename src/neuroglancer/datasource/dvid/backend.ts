@@ -276,7 +276,6 @@ export function parseUint64ToArray(out: Uint64[], v: string): Uint64[] {
   return out;
 }
 
-
 function parseLineAnnotation(entry: any): DVIDLineAnnotation
 {
   const pos = verifyObjectProperty(entry, 'Pos', x => parseIntVec(new Float32Array(6), x));
@@ -365,7 +364,7 @@ function parsePointAnnotation(entry: any, kind: string): DVIDPointAnnotation
   return annotation;
 }
 
-function parseAnnotation(entry: any): DVIDAnnotation|null {
+export function parseAnnotation(entry: any): DVIDAnnotation|null {
   if (entry) {
     const kind = verifyObjectProperty(entry, 'Kind', verifyString);
     if (kind !== 'Unknown') {
@@ -382,7 +381,7 @@ function parseAnnotation(entry: any): DVIDAnnotation|null {
   return null;
 }
 
-function annotationToDVIDType(typestr: string): string {
+export function annotationToDVIDType(typestr: string): string {
   switch (typestr) {
     case 'False Merge':
       return 'Split';
@@ -395,7 +394,7 @@ function annotationToDVIDType(typestr: string): string {
   }
 }
 
-function DVIDToAnnotationType(typestr: string): string {
+export function DVIDToAnnotationType(typestr: string): string {
   switch (typestr) {
     case 'Split':
       return 'False Merge';
@@ -451,7 +450,7 @@ function removeEmptyField(obj: {[key:string]: string})
   }
 }
 
-function annotationToDVID(annotation: DVIDAnnotation, user?: string): any {
+export function annotationToDVID(annotation: DVIDAnnotation, user?: string): any {
   if (annotation.type === AnnotationType.POINT) {
     const objectLabels =
     annotation.relatedSegments && annotation.relatedSegments[0] && annotation.relatedSegments[0].map(x => x.toString());

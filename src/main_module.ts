@@ -10,6 +10,7 @@ import {AnnotationUserLayer} from 'neuroglancer/annotation/user_layer';
 // import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 
 import {DVIDDataSource} from 'neuroglancer/datasource/dvid/frontend';
+import {ClioDataSource} from 'neuroglancer/datasource/clio/frontend';
 import {PrecomputedDataSource} from 'neuroglancer/datasource/precomputed/frontend';
 import {BrainmapsDataSource, productionInstance} from 'neuroglancer/datasource/brainmaps/frontend';
 import {registerProvider} from 'neuroglancer/datasource/default_provider';
@@ -51,6 +52,7 @@ export function setupDefaultViewer(options: {
   registerLayerType('pointAnnotation', AnnotationUserLayer);
 
   registerProvider('dvid', (options) => new DVIDDataSource(options.credentialsManager));
+  registerProvider('clio', (options) => new ClioDataSource(options.credentialsManager));
   registerProvider('precomputed', () => new PrecomputedDataSource());
 
   // register_brainmaps

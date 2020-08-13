@@ -65,6 +65,17 @@ export function typeOfAnnotationId(id: AnnotationId) {
   }
 }
 
+export function getAnnotationId(annotation: DVIDAnnotation) {
+  switch (annotation.type) {
+    case AnnotationType.POINT:
+      return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
+    case AnnotationType.LINE:
+      return `${annotation.pointA[0]}_${annotation.pointA[1]}_${annotation.pointA[2]}-${annotation.pointB[0]}_${annotation.pointB[1]}_${annotation.pointB[2]}-Line`;
+    case AnnotationType.SPHERE:
+      return `${annotation.pointA[0]}_${annotation.pointA[1]}_${annotation.pointA[2]}-${annotation.pointB[0]}_${annotation.pointB[1]}_${annotation.pointB[2]}`;
+  }
+}
+
 export const DVIDAnnotationKindMap = {
   [AnnotationType.POINT]: 'Note',
   [AnnotationType.LINE]: 'PureLine', 

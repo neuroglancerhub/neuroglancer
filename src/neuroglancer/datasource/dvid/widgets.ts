@@ -1,10 +1,31 @@
-// export let document = new JSDOM(html).window.document;
-
-const ANNOTATION_ROOT_ID = 'annotation';
+/**
+ * @license
+ * This work is a derivative of the Google Neuroglancer project,
+ * Copyright 2016 Google Inc.
+ * The Derivative Work is covered by
+ * Copyright 2019 Howard Hughes Medical Institute
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 import {JsonObject, getJsonSchemaProperties, PropertyTreeNode} from './jsonschema';
 import {proofreadingStats} from 'neuroglancer/datasource/dvid/frontend';
 import {StatusMessage} from 'neuroglancer/status';
+import {AnnotationType, AnnotationReference, Annotation} from 'neuroglancer/annotation/index';
+import {Borrowed} from 'neuroglancer/util/disposable';
+import {DVIDAnnotation, DVIDPointAnnotation, getAnnotationDescription,defaultJsonSchema, DVIDPointAnnotationFacade, DVIDSphereAnnotation, DVIDSphereAnnotationFacade} from 'neuroglancer/datasource/dvid/utils';
+
+const ANNOTATION_ROOT_ID = 'annotation';
 
 export function createTitleElement(title: string)
 {
@@ -342,6 +363,63 @@ export class AnnotationWidgetFactory implements WidgetFactory
       setWidgetFromObject(this.widget, obj, ANNOTATION_ROOT_ID);
     }
   }
+}
+
+export interface FrontendAnnotationSource {
+  readonly: boolean | undefined;
+  update: (reference: AnnotationReference, newAnnotation: Annotation) => void;
+  commit: (reference: Borrowed<AnnotationReference>) => void;
+};
+
+
+export function makeAnnotationEditWidget(reference: AnnotationReference, schema: JsonObject|null|undefined, source: FrontendAnnotationSource) {
+  const annotation = reference.value!;
+
+  if (annotation.type !== AnnotationType.POINT && annotation.type !== AnnotationType.SPHERE &&
+  annotation.type !== AnnotationType.LINE) {
+    return null;
+  }
+
+  if (!schema || annotation.type !== AnnotationType.POINT) {
+    schema = defaultJsonSchema;
+  }
+
+  const prop = (<DVIDPointAnnotation>(annotation)).prop;
+  let widget = createAnnotationWidget(schema, { 'Prop': prop }, source.readonly);
+
+  // console.log(annotation);
+  // setWidgetFromObject(widget, annotation.property, 'annotation\\Prop');
+  let button = document.createElement('button');
+  button.textContent = 'update';
+  button.onclick = () => {
+    let result: any = {};
+    getObjectFromWidget(schema, '', result, 'annotation');
+    // alert(JSON.stringify(result));
+    const x = result['Prop'];
+    if (annotation.type === AnnotationType.POINT) {
+      let newAnnotation = <DVIDPointAnnotation>annotation;
+      let annotFac = new DVIDPointAnnotationFacade(newAnnotation);
+      if (x.checked) {
+        x.checked = annotFac.getBooleanProperty(x.checked);
+      }
+      annotFac.prop = {...newAnnotation.prop, ...x};
+    } else {
+      let newAnnotation = <DVIDSphereAnnotation>annotation;
+      let annotFac = new DVIDSphereAnnotationFacade(newAnnotation);
+      if (x) {
+        annotFac.prop = newAnnotation.prop ? {...newAnnotation.prop, ...x} : x;
+      }
+    }
+    // let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
+
+    annotation.description = getAnnotationDescription(<DVIDAnnotation>annotation);
+    source.update(reference, annotation);
+    source.commit(reference);
+
+  };
+  
+  widget.appendChild(button);
+  return widget;
 }
 
 let jsonData = `

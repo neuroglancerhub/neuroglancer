@@ -541,17 +541,19 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     const {relatedSegments} = annotation;
     if (relatedSegments !== undefined) {
       const numRelationships = relatedSegments.length;
-      const {segmentFilteredSources} = this;
-      for (let i = 0; i < numRelationships; ++i) {
-        const segments = relatedSegments[i];
-        if (segments === undefined) return;
-        const source = segmentFilteredSources[i];
-        for (const segment of segments) {
-          const chunk = source.chunks.get(getObjectKey(segment));
-          if (chunk === undefined) {
-            continue;
+      const { segmentFilteredSources } = this;
+      if (segmentFilteredSources.length === numRelationships) {
+        for (let i = 0; i < numRelationships; ++i) {
+          const segments = relatedSegments[i];
+          if (segments === undefined) return;
+          const source = segmentFilteredSources[i];
+          for (const segment of segments) {
+            const chunk = source.chunks.get(getObjectKey(segment));
+            if (chunk === undefined) {
+              continue;
+            }
+            callback(chunk);
           }
-          callback(chunk);
         }
       }
     }
