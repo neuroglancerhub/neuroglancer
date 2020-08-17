@@ -44,6 +44,27 @@ interface NeurohubWindow {
   neurohub: ClioNeurohub
 }
 
+const DEBUG_NEUROHUB_CREDENTIALS = false;
+
+const mockWindow: NeurohubWindow = {
+  neurohub: {
+    clio: {
+        auth: {
+          getAuthResponse: () => {
+            return {id_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiZW1haWwiOiJndWVzdEB0ZXN0LmNvbSJ9.TQVXqy_0z-cYXQnBXk_R1djE7VRbRZvOOwE5jl-vLXM"};
+          }
+        }
+    }
+  }
+};
+
+function getNeurohubToken(w: any) {
+  if ('neurohub' in w) {
+    return Promise.resolve((<NeurohubWindow><unknown>w).neurohub.clio.auth.getAuthResponse().id_token);
+  } else {
+    return Promise.resolve('');
+  }
+}
 
 export class ClioCredentialsProvider extends CredentialsProvider<ClioToken> {
   constructor(public authServer: string) {
@@ -60,11 +81,7 @@ export class ClioCredentialsProvider extends CredentialsProvider<ClioToken> {
     } else if (authServer.startsWith('token:')) {
       return Promise.resolve(authServer.substring(6));
     } else if (authServer == 'neurohub') {
-      if ('neurohub' in window) {
-        return Promise.resolve((<NeurohubWindow><unknown>window).neurohub.clio.auth.getAuthResponse().id_token);
-      } else {
-        return Promise.resolve('');
-      }
+      return getNeurohubToken(DEBUG_NEUROHUB_CREDENTIALS? mockWindow : window);
     } else {
       const headers = new Headers();
       // headers.set('Access-Control-Allow-Origin', '*');
