@@ -1795,6 +1795,8 @@ abstract class PlaceTwoCornerAnnotationTool extends TwoStepAnnotationTool {
   getInitialAnnotation(mouseState: MouseSelectionState, annotationLayer: AnnotationLayerState):
       Annotation {
     const point = getMousePositionInAnnotationCoordinates(mouseState, annotationLayer);
+    mouseState.activePicking = false;
+    // console.log('mouseState.activePicking', mouseState.activePicking);
     return <AxisAlignedBoundingBox|Line|Sphere>{
       id: '',
       type: this.annotationType,

@@ -18,97 +18,133 @@
  * limitations under the License.
  */
 
-import {CredentialsProvider, makeCredentialsGetter} from 'neuroglancer/credentials_provider';
-import {StatusMessage} from 'neuroglancer/status';
-import {CANCELED, CancellationTokenSource, uncancelableToken} from 'neuroglancer/util/cancellation';
+import {CredentialsProvider/*, makeCredentialsGetter*/} from 'neuroglancer/credentials_provider';
+// import {StatusMessage} from 'neuroglancer/status';
+import {/*CANCELED, CancellationTokenSource,*/ uncancelableToken} from 'neuroglancer/util/cancellation';
 import {cancellableFetchOk} from 'neuroglancer/util/http_request';
 import {ClioToken, responseText} from 'neuroglancer/datasource/clio/api';
 
-function getAuthToken(
-  authServer: string,
-  cancellationToken = uncancelableToken) {
-  // console.log('getAuthToken:', authServer);
-  if (!authServer) {
-    // throw Error('token failure test');
-    return Promise.resolve('');
-  } else if (authServer.startsWith('token:')) {
-    return Promise.resolve(authServer.substring(6));
-  } else {
-    const headers = new Headers();
-    // headers.set('Access-Control-Allow-Origin', '*');
-    return cancellableFetchOk(
-      authServer, 
-      {'method': 'GET', credentials: 'include', headers}, 
-      responseText, 
-      cancellationToken).catch(
-        () => {
-          return cancellableFetchOk(
-            authServer,
-            {'method': 'GET'},
-            responseText,
-            cancellationToken)/*.then(
-              response => 'noinclude:' + response
-            )*/;
-        }
-      );
-  }
+interface AuthResponse {
+  id_token: ClioToken
 }
+
+interface AuthResponseProvider {
+  getAuthResponse: () => AuthResponse
+}
+
+interface AuthClient {
+  auth: AuthResponseProvider
+}
+
+interface ClioNeurohub {
+  clio: AuthClient
+}
+
+interface NeurohubWindow {
+  neurohub: ClioNeurohub
+}
+
 
 export class ClioCredentialsProvider extends CredentialsProvider<ClioToken> {
   constructor(public authServer: string) {
     super();
   }
 
-  get = makeCredentialsGetter(cancellationToken => {
-    const status = new StatusMessage(/*delay=*/true);
-    let cancellationSource: CancellationTokenSource|undefined;
-    return new Promise<ClioToken>((resolve, reject) => {
-      const dispose = () => {
-        cancellationSource = undefined;
-        status.dispose();
+  private getAuthToken(
+    authServer: string,
+    cancellationToken = uncancelableToken) {
+    // console.log('getAuthToken:', authServer);
+    if (!authServer) {
+      // throw Error('token failure test');
+      return Promise.resolve('');
+    } else if (authServer.startsWith('token:')) {
+      return Promise.resolve(authServer.substring(6));
+    } else if (authServer == 'neurohub') {
+      if ('neurohub' in window) {
+        return Promise.resolve((<NeurohubWindow><unknown>window).neurohub.clio.auth.getAuthResponse().id_token);
+      } else {
+        return Promise.resolve('');
+      }
+    } else {
+      const headers = new Headers();
+      // headers.set('Access-Control-Allow-Origin', '*');
+      return cancellableFetchOk(
+        authServer,
+        {'method': 'GET', credentials: 'include', headers},
+        responseText,
+        cancellationToken).catch(
+          () => {
+            return cancellableFetchOk(
+              authServer,
+              {'method': 'GET'},
+              responseText,
+              cancellationToken)/*.then(
+                response => 'noinclude:' + response
+              )*/;
+          }
+        );
+    }
+  }
+
+  get = () => {
+    return this.getAuthToken(this.authServer).then(token => {
+      return {
+        credentials: token,
+        generation: 0
       };
-      cancellationToken.add(() => {
-        if (cancellationSource !== undefined) {
-          cancellationSource.cancel();
-          cancellationSource = undefined;
-          status.dispose();
-          reject(CANCELED);
-        }
-      });
-      function writeLoginStatus(
-          msg = 'Clio authorization required.', linkMessage = 'Request authorization.') {
-        status.setText(msg + ' ');
-        let button = document.createElement('button');
-        button.textContent = linkMessage;
-        status.element.appendChild(button);
-        button.addEventListener('click', () => {
-          window.alert('Please make sure you are an authorized user.');
-        });
-        status.setVisible(true);
-      }
-      let authServer = this.authServer;
-      function login() {
-        if (cancellationSource !== undefined) {
-          cancellationSource.cancel();
-        }
-        cancellationSource = new CancellationTokenSource();
-        writeLoginStatus('Waiting for Clio authorization...', 'Retry');
-        getAuthToken(authServer, cancellationSource)
-            .then(
-                token => {
-                  if (cancellationSource !== undefined) {
-                    dispose();
-                    resolve(token);
-                  }
-                },
-                reason => {
-                  if (cancellationSource !== undefined) {
-                    cancellationSource = undefined;
-                    writeLoginStatus(`Clio authorization failed: ${reason}.`, 'Retry');
-                  }
-                });
-      }
-      login();
     });
-  });
+  }
+
+  // get = makeCredentialsGetter(cancellationToken => {
+  //   const status = new StatusMessage(/*delay=*/true);
+  //   let cancellationSource: CancellationTokenSource|undefined;
+  //   return new Promise<ClioToken>((resolve, reject) => {
+  //     const dispose = () => {
+  //       cancellationSource = undefined;
+  //       status.dispose();
+  //     };
+  //     cancellationToken.add(() => {
+  //       if (cancellationSource !== undefined) {
+  //         cancellationSource.cancel();
+  //         cancellationSource = undefined;
+  //         status.dispose();
+  //         reject(CANCELED);
+  //       }
+  //     });
+  //     function writeLoginStatus(
+  //         msg = 'Clio authorization required.', linkMessage = 'Request authorization.') {
+  //       status.setText(msg + ' ');
+  //       let button = document.createElement('button');
+  //       button.textContent = linkMessage;
+  //       status.element.appendChild(button);
+  //       button.addEventListener('click', () => {
+  //         window.alert('Please make sure you are an authorized user.');
+  //       });
+  //       status.setVisible(true);
+  //     }
+  //     let authServer = this.authServer;
+  //     function login() {
+  //       if (cancellationSource !== undefined) {
+  //         cancellationSource.cancel();
+  //       }
+  //       cancellationSource = new CancellationTokenSource();
+  //       writeLoginStatus('Waiting for Clio authorization...', 'Retry');
+  //       getAuthToken(authServer, cancellationSource)
+  //           .then(
+  //               token => {
+  //                 if (cancellationSource !== undefined) {
+  //                   dispose();
+  //                   resolve(token);
+  //                 }
+  //               },
+  //               reason => {
+  //                 if (cancellationSource !== undefined) {
+  //                   cancellationSource = undefined;
+  //                   writeLoginStatus(`Clio authorization failed: ${reason}.`, 'Retry');
+  //                 }
+  //               });
+  //     }
+  //     login();
+  //   });
+  // });
 }

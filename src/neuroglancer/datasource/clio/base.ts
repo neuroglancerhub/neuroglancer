@@ -28,6 +28,7 @@ export class ClioSourceParameters {
   dataset: string;
   user?: string;
   grayscale?: string;
+  authServer?: string;
   authToken?: string;
 }
 

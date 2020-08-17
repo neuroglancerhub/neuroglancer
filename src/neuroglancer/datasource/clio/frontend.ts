@@ -298,25 +298,7 @@ async function getAnnotationSource(options: GetDataSourceOptions, sourceParamete
 //https://us-east4-flyem-private.cloudfunctions.net/mb20?query=value
 const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/\?]+)(\?.*)?$/;
 
-interface AuthResponse {
-  id_token: ClioToken
-}
 
-interface AuthResponseProvider {
-  getAuthResponse: () => AuthResponse
-}
-
-interface AuthClient {
-  auth: AuthResponseProvider
-}
-
-interface ClioNeurohub {
-  clio: AuthClient
-}
-
-interface NeurohubWindow {
-  neurohub: ClioNeurohub
-}
 
 function parseSourceUrl(url: string): ClioSourceParameters {
   let match = url.match(urlPattern);
@@ -335,9 +317,11 @@ function parseSourceUrl(url: string): ClioSourceParameters {
     let parameters = parseQueryStringParameters(queryString.substring(1));
     if (parameters.token) {
       sourceParameters.authToken = parameters.token;
-    } else if ('neurohub' in window) {
-      sourceParameters.authToken = (<NeurohubWindow><unknown>window).neurohub.clio.auth.getAuthResponse().id_token;
+      sourceParameters.authServer = 'token:' + parameters.token;
+    } else if (parameters.auth) {
+      sourceParameters.authServer = parameters.auth;
     }
+
     if (parameters.user) {
       sourceParameters.user = parameters.user;
     } else if (sourceParameters.authToken) {
@@ -350,7 +334,7 @@ function parseSourceUrl(url: string): ClioSourceParameters {
 
 async function completeSourceParameters(sourceParameters: ClioSourceParameters, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<ClioToken>): Promise<ClioSourceParameters> {
   // let credentials = await getCredentialsProvider(sourceParameters.authToken).get();
-  return makeRequestWithCredentials(getCredentialsProvider(sourceParameters.authToken), {url: `${sourceParameters.baseUrl}/clio_toplevel/datasets`, method: 'GET', responseType: 'json'}).then(response => {
+  return makeRequestWithCredentials(getCredentialsProvider(sourceParameters.authServer), {url: `${sourceParameters.baseUrl}/clio_toplevel/datasets`, method: 'GET', responseType: 'json'}).then(response => {
     const grayscaleInfo = verifyObjectProperty(response, sourceParameters.dataset, verifyObject);
     sourceParameters.grayscale = verifyObjectProperty(grayscaleInfo, "location", verifyString);
     return sourceParameters;
@@ -366,6 +350,12 @@ async function getDataSource(options: GetDataSourceOptions, getCredentialsProvid
   // }
 
   let sourceParameters = parseSourceUrl(options.providerUrl);
+
+  if (!sourceParameters.user && sourceParameters.authServer) {
+    let credentials = getCredentialsProvider(sourceParameters.authServer).get();
+    sourceParameters.authToken = (await credentials).credentials;
+    sourceParameters.user = getUserFromToken(sourceParameters.authToken);
+  }
   
   return options.chunkManager.memoize.getUncounted(
       {
@@ -392,8 +382,8 @@ async function getDataSource(options: GetDataSourceOptions, getCredentialsProvid
           step: 1
         }];
 
-        let credentials = sourceParameters.authToken;
-        const credentialsProvider = getCredentialsProvider(credentials);
+        // let credentials = sourceParameters.authToken;
+        const credentialsProvider = getCredentialsProvider(sourceParameters.authServer);
         return getAnnotationSource(options, annotationSourceParameters, credentialsProvider);
       });
 }
@@ -405,6 +395,7 @@ async function completeHttpPath(_1: string) {
   });
 }
 
+//Clio data source provider
 export class ClioDataSource extends DataSourceProvider {
   constructor(public credentialsManager: CredentialsManager) {
     super();
@@ -415,7 +406,12 @@ export class ClioDataSource extends DataSourceProvider {
   }
 
   getCredentialsProvider(authServer: AuthType) {
-    return this.credentialsManager.getCredentialsProvider<ClioToken>(credentialsKey, 'token:' + authServer);
+    let parameters = '';
+    if (authServer) {
+      parameters = authServer;
+    }
+
+    return this.credentialsManager.getCredentialsProvider<ClioToken>(credentialsKey, parameters);
   }
 
   get(options: GetDataSourceOptions): Promise<DataSource> {

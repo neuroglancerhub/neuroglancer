@@ -23,7 +23,7 @@ import {AnnotationSourceParameters, AnnotationChunkSourceParameters, ClioSourceP
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, Sphere, Line, AnnotationPropertySpec} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, /*Sphere, Line,*/ AnnotationPropertySpec} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk, AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
@@ -203,12 +203,12 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     )
   }
 
-  private uploadable(annotation: Annotation): annotation is Point | Sphere | Line {
+  private uploadable(annotation: Annotation): annotation is Point /*| Sphere | Line*/ {
     const { parameters } = this;
 
     if (parameters.user && parameters.user !== '') {
-      return annotation.type === AnnotationType.POINT || annotation.type === AnnotationType.SPHERE ||
-      annotation.type === AnnotationType.LINE;
+      return annotation.type === AnnotationType.POINT/* || annotation.type === AnnotationType.SPHERE ||
+      annotation.type === AnnotationType.LINE*/;
     }
 
     return false;

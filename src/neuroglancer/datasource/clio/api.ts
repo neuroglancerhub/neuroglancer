@@ -66,12 +66,14 @@ export function makeRequestWithCredentials(
 
 function  applyCredentials(input?: string) {
   return (credentials: ClioToken, init: RequestInit) => {
+    if (credentials === undefined || credentials === null) {
+      throw Error(`No credentials provided ${input ? 'for input' : ''}`)
+    }
+
     let newInit: RequestInit = { ...init };
 
-    if (credentials.length > 0) {
+    if (credentials) {
       newInit.headers = { ...newInit.headers, Authorization: `Bearer ${credentials}` };
-    } else {
-      throw Error(`No credentials provided ${input ? 'for input' : ''}`)
     }
     return newInit;
   } 

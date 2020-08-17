@@ -486,6 +486,7 @@ function AnnotationRenderLayer<TBase extends AnyConstructor<VisibilityTrackedRen
       const rank = this.curRank;
       const chunkTransform = this.chunkTransform;
       if (chunkTransform.error !== undefined) return;
+      mouseState.activePicking = true;
       for (const annotationType of annotationTypes) {
         const ids = typeToIds[annotationType];
         const renderHandler = getAnnotationTypeRenderHandler(annotationType);

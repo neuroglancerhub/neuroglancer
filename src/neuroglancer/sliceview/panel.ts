@@ -339,13 +339,19 @@ export class SliceViewPanel extends RenderedDataPanel {
     const {viewportWidth, viewportHeight} = pickingData;
     const numOffsets = pickOffsetSequence.length;
     const setStateFromOffset = (offset: number, pickId: number) => {
-      const relativeX = offset % pickDiameter;
-      const relativeY = (offset - relativeX) / pickDiameter;
+      let relativeX = 0;
+      let relativeY = 0;
+      if (mouseState.activePicking) {
+        relativeX = offset % pickDiameter;
+        relativeY = (offset - relativeX) / pickDiameter;
+      }
+      // console.log('relative', relativeX, relativeY)
       const y = pickingData.viewportHeight - (glWindowY + relativeY - pickRadius);
       vec3.set(
           tempVec3, (glWindowX + relativeX - pickRadius) - viewportWidth / 2,
           y - viewportHeight / 2, 0);
       vec3.transformMat4(tempVec3, tempVec3, pickingData.invTransform);
+      // console.log(mouseState.position);
       let {position: mousePosition} = mouseState;
       const {value: voxelCoordinates} = this.navigationState.position;
       const rank = voxelCoordinates.length;
@@ -360,6 +366,7 @@ export class SliceViewPanel extends RenderedDataPanel {
       }
       this.pickIDs.setMouseState(mouseState, pickId);
       mouseState.displayDimensions = displayDimensions;
+      // console.log(mouseState.position);
       mouseState.setActive(true);
     };
     for (let i = 0; i < numOffsets; ++i) {
