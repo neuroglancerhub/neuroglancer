@@ -21,7 +21,7 @@
 import './annotations.css';
 
 import debounce from 'lodash/debounce';
-import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Line, Sphere, annotationToJson} from 'neuroglancer/annotation';
+import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Point, Line, Sphere, annotationToJson} from 'neuroglancer/annotation';
 import {AnnotationDisplayState, AnnotationLayerState, FilterAnnotationByTimeType, AnnotationDefaultProperty} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -736,6 +736,28 @@ export class AnnotationLayerView extends Tab {
     }
   }
 
+  private hasLocalAnnotationLayer(): boolean {
+    for (const source of this.layer.dataSources) {
+      if (source.spec.url === "local://annotations") {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private getLocalAnnotationSource(): AnnotationSource | undefined {
+    const states = this.annotationStates.states;
+    for (const state of states) {
+      const source = state.source;
+      if (source instanceof AnnotationSource) {
+        return source;
+      }
+    }
+
+    return undefined;
+  }
+
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
       public state: Owned<SelectedAnnotationState>, public displayState: AnnotationDisplayState) {
@@ -814,6 +836,46 @@ export class AnnotationLayerView extends Tab {
     this.element.appendChild(separator);
 
     ////// tmp hack
+
+    if (this.hasLocalAnnotationLayer()) {
+      let fileUploadWidget = document.createElement('input');
+      fileUploadWidget.type = 'file';
+      fileUploadWidget.id = 'annotation-file';
+      fileUploadWidget.onchange = () => {
+        let source = this.getLocalAnnotationSource();
+        if (source) {
+          if (fileUploadWidget.files) {
+            let file = fileUploadWidget.files[0];
+            var reader = new FileReader();
+            if (reader) {
+              reader.onload = () => {
+                if (source && reader && reader.result) {
+                  let lines = (reader.result as string).split('\n');
+                  for (let line of lines) {
+                    var tokens = line.split(',');
+                    if (tokens.length === 8) {
+                      if (tokens[7].match(/^-?\d+_-?\d+_-?\d+$/)) {
+                        let pos = tokens[7].split('_').map(x => Number(x));
+                        let annot: Point = {
+                          id: tokens[7],
+                          type: AnnotationType.POINT,
+                          point: new Float32Array(pos),
+                          properties: []
+                        };
+                        source.add(annot);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            reader.readAsText(file);
+          }
+        }
+      }
+      this.element.appendChild(fileUploadWidget);
+    }
+
     let filterWidget = document.createElement('div');
     filterWidget.appendChild(document.createTextNode('Filter: '));
     let filterElement =  this.registerDisposer(new TrackableStringEdit(this.displayState.tableFilterByText)).element;
@@ -826,33 +888,7 @@ export class AnnotationLayerView extends Tab {
     let timeElement = this.registerDisposer(new EnumSelectWidget(this.displayState.tableFilterByTime)).element;
     filterWidget.appendChild(timeElement);
     
-
-    /*
-    let todayElement = this.registerDisposer(new TrackableBooleanCheckbox(this.displayState.tableFilterByToday)).element;
-    
-    todayElement.id = 'show_annotation_today_only';
-    let todayElementLabel = document.createElement('label');
-    todayElementLabel.innerText = 'Today';
-    todayElementLabel.htmlFor = todayElement.id;
-    */
-
-    // filterWidget.appendChild(todayElement);
-    // filterWidget.appendChild(todayElementLabel);
-
-
     this.element.appendChild(filterWidget);
-    
-    /*
-    let filterAnnotation = (annotation: Annotation, element: HTMLElement, filters: Array<(annotation: Annotation) => Boolean>) => {
-      element.style.display = "";
-      for (let filter of filters) {
-        if (!filter(annotation)) {
-          element.style.display = "none";
-          break;
-        }
-      }
-    };
-    */
 
     let filters = [
       (annotation: Annotation) => {
@@ -862,38 +898,6 @@ export class AnnotationLayerView extends Tab {
         return this.filterByTime(annotation, <FilterAnnotationByTimeType>verifyEnumString(timeElement.value, this.displayState.tableFilterByTime.enumType));
       }
     ]
-
-    /*
-    let filters = [
-      (annotation: Annotation) => {
-        if (filterElement.value) {
-          if (annotation.description) {
-            return annotation.description.toLowerCase().includes(filterElement.value.toLowerCase());
-          } else {
-            return false;
-          }
-        } else {
-          return true;
-        }
-      },
-      (annotation: Annotation) => {
-        if (todayElement.checked) {
-          if ('prop' in annotation) {
-            let prop = annotation['prop'];
-            if ('timestamp' in prop) {
-              let timestamp = Number(prop['timestamp']);
-              let annotationDate = new Date(timestamp);
-              let today = new Date();
-              return (annotationDate.toDateString() === today.toDateString());
-            }
-          }
-          return false;
-        } else {
-          return true;
-        }
-      }
-    ];
-    */
 
     let updateTable = () => {
       this.updateAnnotationTable(filters);
@@ -906,26 +910,13 @@ export class AnnotationLayerView extends Tab {
     // timeElement.onchange = this.throttledUpdateTable;
     this.registerDisposer(this.displayState.tableFilterByTime.changed.add(this.throttledUpdateTable));
     this.registerDisposer(() => this.throttledUpdateTable.cancel());
-    
 
-    /*
-    let { source } = this.layer;
-    if (source instanceof MultiscaleAnnotationSource) {
-      if (source.makeFilterWidget) {
-        let filterWidget = source.makeFilterWidget();
-        if (filterWidget) {
-          this.element.appendChild(filterWidget);
-        }
-      }
-    }
-    */
-
-   let numAnnotationWidget = document.createElement('p');
-   numAnnotationWidget.innerText = `#Annotations: ${this.countAnnotaionTable()}`;
-   this.element.appendChild(numAnnotationWidget);
-   this.updateNumAnnotationWidget = () => {
+    let numAnnotationWidget = document.createElement('p');
     numAnnotationWidget.innerText = `#Annotations: ${this.countAnnotaionTable()}`;
-   };
+    this.element.appendChild(numAnnotationWidget);
+    this.updateNumAnnotationWidget = () => {
+      numAnnotationWidget.innerText = `#Annotations: ${this.countAnnotaionTable()}`;
+    };
 
     this.element.appendChild(this.listContainer);
     this.listContainer.addEventListener('mouseleave', () => {
