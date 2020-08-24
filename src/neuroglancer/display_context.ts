@@ -92,6 +92,7 @@ export class DisplayContext extends RefCounted implements FrameNumberCounter {
 
   constructor(public container: HTMLElement) {
     super();
+    this.canvas.id = 'canvas';
     const {canvas, resizeObserver} = this;
     container.style.position = 'relative';
     canvas.style.position = 'absolute';
