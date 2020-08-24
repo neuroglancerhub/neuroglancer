@@ -20,6 +20,9 @@ import {defaultCredentialsManager} from 'neuroglancer/credentials_provider/defau
 import {credentialsKey} from 'neuroglancer/datasource/brainmaps/api';
 import {BrainmapsCredentialsProvider} from 'neuroglancer/datasource/brainmaps/credentials_provider';
 
+import {credentialsKey as ClioCredentialsKey} from 'neuroglancer/datasource/clio/api';
+import {ClioCredentialsProvider} from 'neuroglancer/datasource/clio/credentials_provider';
+
 
 /**
  * Sets up the default neuroglancer viewer.
@@ -53,6 +56,7 @@ export function setupDefaultViewer(options: {
 
   registerProvider('dvid', (options) => new DVIDDataSource(options.credentialsManager));
   registerProvider('clio', (options) => new ClioDataSource(options.credentialsManager));
+  defaultCredentialsManager.register(ClioCredentialsKey, (authServer) => new ClioCredentialsProvider(authServer));
   registerProvider('precomputed', () => new PrecomputedDataSource());
 
   // register_brainmaps
