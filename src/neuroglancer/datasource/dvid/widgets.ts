@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import {JsonObject, getJsonSchemaProperties, PropertyTreeNode} from './jsonschema';
+import {JsonObject, getJsonSchemaProperties, PropertyTreeNode} from 'neuroglancer/datasource/dvid/jsonschema';
 import {proofreadingStats} from 'neuroglancer/datasource/dvid/frontend';
 import {StatusMessage} from 'neuroglancer/status';
 import {AnnotationType, AnnotationReference, Annotation} from 'neuroglancer/annotation/index';

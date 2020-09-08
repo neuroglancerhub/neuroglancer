@@ -14,12 +14,13 @@ import {mat4, vec3} from 'neuroglancer/util/geom';
 import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
 import {parseArray, parseFixedLengthArray, parseQueryStringParameters, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
-import {getUserFromToken, DVIDPointAnnotation, DVIDPointAnnotationFacade, parseDescription, getAnnotationDescription} from 'neuroglancer/datasource/dvid/utils';
+import {getUserFromToken, parseDescription} from 'neuroglancer/datasource/dvid/utils';
 import {makeRequest} from 'neuroglancer/datasource/dvid/api';
 import {parseSpecialUrl} from 'neuroglancer/util/http_request';
 import {StatusMessage} from 'neuroglancer/status';
 import {createBasicElement} from 'neuroglancer/datasource/dvid/widgets';
 import {makeAnnotationEditWidget} from 'neuroglancer/datasource/dvid/widgets';
+import {ClioPointAnnotation, ClioPointAnnotationFacade, defaultAnnotationSchema, defaultAtlasSchema as defaultAtlasSchema, getAnnotationDescription} from 'neuroglancer/datasource/clio/utils';
 
 class ClioAnnotationChunkSource extends
 (WithParameters(WithCredentialsProvider<ClioToken>()(AnnotationGeometryChunkSource), AnnotationChunkSourceParameters)) {}
@@ -200,6 +201,8 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
       
       return element;
     };
+
+    this.getUser = () => this.parameters.user;
   }
 
   getSources(_options: VolumeSourceOptions):
@@ -233,24 +236,38 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
     }
 
     if (annotation.type === AnnotationType.POINT) {
-      let annotationRef = new DVIDPointAnnotationFacade(<DVIDPointAnnotation>annotation);
-      annotationRef.kind = 'Note';
+      let annotationRef = new ClioPointAnnotationFacade(<ClioPointAnnotation>annotation);
+      annotationRef.kind = this.parameters.kind || 'Note';
       
       // (<DVIDPointAnnotation>annotation).kind = 'Note';
       annotation.point = annotation.point.map(x => Math.round(x));
 
       annotationRef.addTimeStamp();
+      if (this.parameters.user) {
+        annotationRef.user = this.parameters.user;
+      }
 
       if (annotation.description) {
         let defaultProp = parseDescription(annotation.description);
         if (defaultProp) {
           annotationRef.addProp(defaultProp);
-          annotation.description = getAnnotationDescription(<DVIDPointAnnotation>annotation);
+          annotation.description = getAnnotationDescription(<ClioPointAnnotation>annotation);
         }
       }
     }
 
     return super.add(annotation, commit);
+  }
+
+  update(reference: AnnotationReference, newAnnotation: Annotation) {
+    if (newAnnotation.type === AnnotationType.POINT) {
+      newAnnotation.point = newAnnotation.point.map(x => Math.round(x));
+    }
+    let description = getAnnotationDescription(<ClioPointAnnotation>newAnnotation);
+    if (description) {
+      newAnnotation.description = description;
+    }
+    super.update(reference, newAnnotation);
   }
 }
 
@@ -327,6 +344,16 @@ function parseSourceUrl(url: string): ClioSourceParameters {
     } else if (sourceParameters.authToken) {
       sourceParameters.user = getUserFromToken(sourceParameters.authToken);
     }
+
+    if (parameters.kind) {
+      if (parameters.kind === 'atlas') {
+        sourceParameters.kind = 'Atlas';
+      } else {
+        sourceParameters.kind = parameters.kind;
+      }
+    } else {
+      sourceParameters.kind = 'Normal';
+    }
   }
 
   return sourceParameters;
@@ -359,7 +386,7 @@ async function getDataSource(options: GetDataSourceOptions, getCredentialsProvid
   
   return options.chunkManager.memoize.getUncounted(
       {
-        type: 'dvid:MultiscaleVolumeChunkSource',
+        type: 'clio:MultiscaleVolumeChunkSource',
         ...sourceParameters
       },
       async () => {
@@ -371,6 +398,12 @@ async function getDataSource(options: GetDataSourceOptions, getCredentialsProvid
         };
 
         // annotationSourceParameters.schema = getSchema(annotationSourceParameters);
+
+        if (sourceParameters.kind === 'Atlas') {
+          annotationSourceParameters.schema = defaultAtlasSchema;
+        } else {
+          annotationSourceParameters.schema = defaultAnnotationSchema;
+        }
 
         annotationSourceParameters.properties = [{
           identifier: 'rendering_attribute',

@@ -1208,6 +1208,7 @@ function makeAnnotationGeometrySourceSpecifications(multiscaleInfo: MultiscaleVo
       throw("Expecting a valid user");
     }
   } else {
+    // return [[makeSpec(multiscaleInfo.scales[0])]];
     return [multiscaleInfo.scales.map(scale => makeSpec(scale))];
   }
 }
@@ -1422,9 +1423,9 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
 
     let sourceSpecifications = makeAnnotationGeometrySourceSpecifications(this.multiscaleVolumeInfo, this.parameters);
 
-    let limit = 0;
+    let limit = 0; //estimated annotation count in a chunk
     if (sourceSpecifications[0].length > 1) {
-      limit = 10;
+      limit = 3;
     }
 
     return sourceSpecifications.map(

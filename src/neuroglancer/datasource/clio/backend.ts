@@ -23,14 +23,16 @@ import {AnnotationSourceParameters, AnnotationChunkSourceParameters, ClioSourceP
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {Uint64} from 'neuroglancer/util/uint64';
-import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, Point, /*Sphere, Line,*/ AnnotationPropertySpec} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationSerializer, AnnotationPropertySerializer, AnnotationType, /*Sphere, Line,*/ AnnotationPropertySpec} from 'neuroglancer/annotation';
 import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk, AnnotationSource, AnnotationSubsetGeometryChunk, AnnotationGeometryChunkSourceBackend} from 'neuroglancer/annotation/backend';
 import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {ClioToken, makeRequestWithCredentials} from 'neuroglancer/datasource/clio/api';
-import {DVIDPointAnnotation, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, getAnnotationId} from 'neuroglancer/datasource/dvid/utils';
-import {parseAnnotation, annotationToDVID} from 'neuroglancer/datasource/dvid/backend'
+import {ClioPointAnnotation, ClioAnnotation, ClioPointAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, getAnnotationId} from 'neuroglancer/datasource/clio/utils';
+import {parseAnnotation as parseDvidAnnotation, annotationToDVID} from 'neuroglancer/datasource/dvid/backend';
+import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
+import {vec3} from 'neuroglancer/util/geom';
 
 class AnnotationStore {
   store = new Map();
@@ -71,40 +73,120 @@ export function parseUint64ToArray(out: Uint64[], v: string): Uint64[] {
   return out;
 }
 
+function getPostionFromKey(key: string) {
+  if (key) {
+    let pos = key.split('_').map(x=>+x);
+    if (pos.length === 3) {
+      return vec3.fromValues(pos[0], pos[1], pos[2]);
+    }
+  }
+
+  return null;
+}
+
+function parseAnnotation(key: string, entry: any) : ClioAnnotation|null {
+  if (entry) {
+    const kind = verifyObjectProperty(entry, 'Kind', verifyString);
+    if (kind === 'Note') {
+      return parseDvidAnnotation(entry) as ClioAnnotation;
+    } else {
+      let prop: { [key: string]: string } = {};
+      let corner = getPostionFromKey(key);
+      if (!corner) {
+        const posKey = ('location' in entry) ? 'location' : 'Pos';
+        corner = verifyObjectProperty(entry, posKey, x => parseIntVec(vec3.create(), x));
+      }
+      if ('Prop' in entry) {
+        prop = verifyObjectProperty(entry, 'Prop', verifyObject);
+      }
+
+      let description = '';
+      if ('description' in entry) {
+        description = verifyObjectProperty(entry, 'description', verifyString);
+      }
+
+      let title = '';
+      if ('title' in entry) {
+        title = verifyObjectProperty(entry, 'title', verifyString);
+      }
+
+      let user = '';
+      if ('user' in entry) {
+        user = verifyObjectProperty(entry, 'user', verifyString);
+      }
+
+      let annotation: ClioPointAnnotation = {
+        point: corner,
+        type: AnnotationType.POINT,
+        properties: [],
+        kind,
+        id: `${corner[0]}_${corner[1]}_${corner[2]}`,
+        prop: {}
+      };
+
+      let annotationRef = new ClioPointAnnotationFacade(annotation);
+      annotationRef.prop = prop;
+
+      if (description) {
+        annotationRef.description = description;
+      }
+
+      if (title) {
+        annotationRef.title = title;
+      }
+
+      if (user) {
+        annotationRef.user = user;
+      }
+
+      annotation.description = getAnnotationDescription(annotation);
+
+      return annotation;
+    }
+  }
+
+  return null;
+}
 
 // const annotationPropertySerializer = new AnnotationPropertySerializer(3, []);
 
 function parseAnnotations(
   source: ClioAnnotationSource|ClioAnnotationGeometryChunkSource,
-  chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any[],
+  chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any,
   propSpec: AnnotationPropertySpec[], emittingAddSignal: boolean) {
-
   const annotationPropertySerializer = new AnnotationPropertySerializer(3, propSpec);
   const serializer = new AnnotationSerializer(annotationPropertySerializer);
   if (responses) {
-    let parseSingleAnnotation = (response: any) => {
+    let parseSingleAnnotation = (key: string, response: any) => {
       if (response) {
         try {
-          let annotation = parseAnnotation(response);
+          let annotation = parseAnnotation(key, response);
           if (annotation) {
             annotationStore.add(getAnnotationId(annotation), response);
             serializer.add(annotation);
             if (emittingAddSignal) {
-              if (annotation.type === AnnotationType.SPHERE || annotation.type === AnnotationType.LINE || (annotation.type === AnnotationType.POINT && annotation.kind === 'Note')) {
-                source.rpc!.invoke(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, {
-                      id: source.rpcId,
-                      newAnnotation: { ...annotation, description: getAnnotationDescription(annotation) }
-                    });
-              }
+              source.rpc!.invoke(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, {
+                id: source.rpcId,
+                newAnnotation: { ...annotation }
+              });
             }
           }
         } catch (e) {
-          throw new Error(`Error parsing annotation: ${e.message}`);
+          console.log(`Error parsing annotation: ${e.message}`);
         }
       }
     };
 
-    responses.forEach(parseSingleAnnotation);
+    const {parameters} = source;
+    Object.keys(responses).forEach(key => {
+      let response = responses[key];
+      if (response) {
+        if (!('Kind' in response)) {
+          response['Kind'] = parameters.kind!;
+        }
+      }
+      parseSingleAnnotation(key, response)
+    });
   }
   chunk.data = Object.assign(new AnnotationGeometryData(), serializer.serialize());
 }
@@ -117,8 +199,12 @@ function getClioUrl(parameters: ClioSourceParameters, path: string) {
   return getTopUrl(parameters) + path;
 }
 
+function getAnnotationEndpoint(parameters: ClioSourceParameters) {
+  return parameters.kind === 'Atlas' ? 'atlas' : 'annotations';
+}
+
 function getElementsPath(parameters: ClioSourceParameters) {
-  return `/annotations/${parameters.dataset}`;
+  return `/${getAnnotationEndpoint(parameters)}/${parameters.dataset}`;
 } 
 
 function getAnnotationPath(parameters: ClioSourceParameters, position: ArrayLike<number|string>) {
@@ -145,7 +231,7 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
         cancellationToken);
       // values = [...pointAnnotationValues];
 
-      return parseAnnotations(this, chunk, Object.values(pointAnnotationValues), this.parameters.properties, true);
+      return parseAnnotations(this, chunk, pointAnnotationValues, this.parameters.properties, true);
     } catch(e) {
       console.log(e);
     }
@@ -195,7 +281,7 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     return this.requestMetadata(chunk, cancellationToken).then(
       response => {
         if (response) {
-          chunk.annotation = parseAnnotation(response);
+          chunk.annotation = parseAnnotation(chunk.key!, response);
         } else {
           chunk.annotation = null;
         }
@@ -203,22 +289,76 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     )
   }
 
-  private uploadable(annotation: Annotation): annotation is Point /*| Sphere | Line*/ {
+  private uploadable(annotation: Annotation){
     const { parameters } = this;
 
     if (parameters.user && parameters.user !== '') {
-      return annotation.type === AnnotationType.POINT/* || annotation.type === AnnotationType.SPHERE ||
-      annotation.type === AnnotationType.LINE*/;
+      if (annotation.type === AnnotationType.POINT) {
+        if (parameters.kind === 'Atlas') {
+          const annotationRef = new ClioPointAnnotationFacade(<ClioPointAnnotation>annotation);
+          if (annotationRef.title) {
+            return true;
+          }
+          return false;
+        } else {
+          return true;
+        }
+      }
     }
 
     return false;
   }
 
-  private updatePointAnnotation(annotation: DVIDPointAnnotation) {
-    const { parameters } = this;
-    const dvidAnnotation = annotationToDVID(annotation, parameters.user);
+  private encodeAnnotation(annotation: ClioPointAnnotation, user: string|undefined): any {
+    if (annotation.kind === 'Note') {
+      return annotationToDVID(annotation, user);
+    } else {
+      let obj: { [key: string]: any } = {
+        Kind: annotation.kind, //todo: might not be necessary
+      };
 
-    let value = JSON.stringify(dvidAnnotation);
+      /* //No need to add position, which is encoded in the key
+      if (annotation.kind !== 'Atlas') {
+        obj['Pos'] = [annotation.point[0], annotation.point[1], annotation.point[2]];
+      }
+      */
+
+      let annotationRef = new ClioPointAnnotationFacade(annotation);
+
+      if (annotationRef.description !== undefined) {
+        obj.description = annotationRef.description;
+      } else if (annotation.kind === 'Atlas') {
+        obj.description = '';
+      }
+
+      if (annotationRef.title !== undefined) {
+        obj.title = annotationRef.title;
+      }
+
+      if (user) {
+        obj.user = user;
+      }
+
+      if (annotation.prop) {
+        let prop = {...annotation.prop};
+        delete prop.comment;
+        delete prop.user;
+        delete prop.title;
+        if (prop) {
+          obj.Prop = prop;
+        }
+      }
+
+      return obj;
+    }
+  }
+
+  private updatePointAnnotation(annotation: ClioPointAnnotation) {
+    const { parameters } = this;
+    const encoded = this.encodeAnnotation(annotation, parameters.user);
+    // const dvidAnnotation = annotationToDVID(annotation, parameters.user);
+
+    let value = JSON.stringify(encoded);
     annotationStore.update(getAnnotationId(annotation), value);
 
     if (parameters.baseUrl.startsWith('http://localhost')) { //mock server
@@ -238,7 +378,7 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     }
   }
 
-  private addPointAnnotation(annotation: DVIDPointAnnotation) {
+  private addPointAnnotation(annotation: ClioPointAnnotation) {
     return this.updatePointAnnotation(annotation)
       .then(() => {
         return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
@@ -253,21 +393,29 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     if (this.uploadable(annotation)) {
       switch (annotation.type) {
         case AnnotationType.POINT:
-          return this.addPointAnnotation(<DVIDPointAnnotation>annotation);
+          return this.addPointAnnotation(<ClioPointAnnotation>annotation);
         default:
           throw('Unspported annotation type');
       }
       
     } else {
-      return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
+      if (annotation.type === AnnotationType.POINT) {
+        return Promise.resolve(`${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`);
+      } else {
+        return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
+      }
     }
   }
   
-  update(_: AnnotationId, annotation: Annotation) {
+  update(id: AnnotationId, annotation: Annotation) {
     if (this.uploadable(annotation)) {
       switch (annotation.type) {
         case AnnotationType.POINT:
-          return this.updatePointAnnotation(<DVIDPointAnnotation>annotation);
+          if (getAnnotationId(<ClioPointAnnotation>annotation) !== id) {
+            return this.updatePointAnnotation(<ClioPointAnnotation>annotation).then(() => this.delete(id));
+          } else {
+            return this.updatePointAnnotation(<ClioPointAnnotation>annotation);
+          }
         default:
           throw ('Unspported annotation type');
       }

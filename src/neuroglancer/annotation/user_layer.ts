@@ -17,7 +17,7 @@
 import './user_layer.css';
 
 import {AnnotationPropertySpec, AnnotationType, LocalAnnotationSource} from 'neuroglancer/annotation';
-import {AnnotationDisplayState, AnnotationLayerState, FilterAnnotationByTimeType} from 'neuroglancer/annotation/annotation_layer_state';
+import {AnnotationDisplayState, AnnotationLayerState, FilterAnnotationByTimeType, FilterAnnotationByUserType} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {CoordinateTransformSpecification, makeCoordinateSpace} from 'neuroglancer/coordinate_transform';
 import {DataSourceSpecification, localAnnotationsUrl, LocalDataSource} from 'neuroglancer/datasource';
@@ -103,6 +103,7 @@ const IGNORE_NULL_SEGMENT_FILTER_JSON_KEY = 'ignoreNullSegmentFilter';
 const TABLE_FILTER_BY_TEXT = 'tableFilterByText';
 // const TABLE_FILTER_BY_TODAY = 'tableFilterByToday';
 const TABLE_FILTER_BY_TIME = 'tableFilterByTime';
+const TABLE_FILTER_BY_USER = 'tableFilterByUser';
 
 class LinkedSegmentationLayers extends RefCounted {
   changed = new NullarySignal();
@@ -339,6 +340,7 @@ export class AnnotationUserLayer extends Base {
         this.specificationChanged.dispatch);
     // this.annotationDisplayState.tableFilterByToday.changed.add(this.specificationChanged.dispatch);
     this.annotationDisplayState.tableFilterByTime.changed.add(this.specificationChanged.dispatch);
+    this.annotationDisplayState.tableFilterByUser.changed.add(this.specificationChanged.dispatch);
     this.annotationDisplayState.tableFilterByText.changed.add(this.specificationChanged.dispatch);
     this.annotationCrossSectionRenderScaleTarget.changed.add(this.specificationChanged.dispatch);
     this.localAnnotationsJson = specification[ANNOTATIONS_JSON_KEY];
@@ -358,6 +360,14 @@ export class AnnotationUserLayer extends Base {
     } else {
       this.annotationDisplayState.tableFilterByTime.value = FilterAnnotationByTimeType.ALL;
     }
+
+    if (TABLE_FILTER_BY_USER in specification) {
+      this.annotationDisplayState.tableFilterByUser.restoreState(
+        specification[TABLE_FILTER_BY_USER]);
+    } else {
+      this.annotationDisplayState.tableFilterByUser.value = FilterAnnotationByUserType.MINE;
+    }
+
     
     this.tabs.add(
         'rendering',
@@ -552,6 +562,7 @@ export class AnnotationUserLayer extends Base {
         this.annotationDisplayState.ignoreNullSegmentFilter.toJSON();
     // x[TABLE_FILTER_BY_TODAY] = this.annotationDisplayState.tableFilterByToday.toJSON();
     x[TABLE_FILTER_BY_TIME] = this.annotationDisplayState.tableFilterByTime.toJSON();
+    x[TABLE_FILTER_BY_USER] = this.annotationDisplayState.tableFilterByUser.toJSON();
     x[TABLE_FILTER_BY_TEXT] = this.annotationDisplayState.tableFilterByText.toJSON();    
     Object.assign(x, this.linkedSegmentationLayers.toJSON());
     return x;

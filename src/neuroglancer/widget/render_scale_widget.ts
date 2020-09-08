@@ -157,7 +157,7 @@ export class RenderScaleWidget extends RefCounted {
     }
 
     const sortedSpatialScales = Array.from(spatialScales.keys());
-    sortedSpatialScales.sort();
+    sortedSpatialScales.sort(); //A minor bug here? The elements are sorted as strings instead of numbers.
 
     const tempColor = vec3.create();
 

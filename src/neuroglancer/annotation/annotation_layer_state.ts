@@ -92,10 +92,22 @@ export enum FilterAnnotationByTimeType {
   RECENT = 2
 };
 
+export enum FilterAnnotationByUserType {
+  ALL_USERS = 0,
+  MINE = 1
+};
+
 export class TrackableFilterAnnotationByTime extends TrackableEnum<FilterAnnotationByTimeType>
 {
   constructor(value = FilterAnnotationByTimeType.ALL) {
     super(FilterAnnotationByTimeType, value);
+  }
+}
+
+export class TrackableFilterAnnotationByUser extends TrackableEnum<FilterAnnotationByUserType>
+{
+  constructor(value = FilterAnnotationByUserType.ALL_USERS) {
+    super(FilterAnnotationByUserType, value);
   }
 }
 
@@ -125,6 +137,7 @@ export class AnnotationDisplayState extends RefCounted {
   pointRadius = trackableFiniteFloat(6);
   tableFilterByText = new TrackableString('');
   tableFilterByTime = new TrackableFilterAnnotationByTime();
+  tableFilterByUser = new TrackableFilterAnnotationByUser();
   // tableFilterByToday = new TrackableBoolean(false);
 }
 

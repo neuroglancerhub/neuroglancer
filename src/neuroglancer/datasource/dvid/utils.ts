@@ -86,7 +86,7 @@ export function isAnnotationIdValid(id: AnnotationId) {
   return typeOfAnnotationId(id) !== null;
 }
 
-class DVIDAnnotationFacade {
+export class DVIDAnnotationFacade {
   constructor(public annotation: DVIDAnnotation) {
     this.updateProperties();
   }

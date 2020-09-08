@@ -22,7 +22,7 @@ import './annotations.css';
 
 import debounce from 'lodash/debounce';
 import {Annotation, AnnotationReference, AnnotationSource, AnnotationType, AxisAlignedBoundingBox, Ellipsoid, getAnnotationTypeHandler, Point, Line, Sphere, annotationToJson} from 'neuroglancer/annotation';
-import {AnnotationDisplayState, AnnotationLayerState, FilterAnnotationByTimeType, AnnotationDefaultProperty} from 'neuroglancer/annotation/annotation_layer_state';
+import {AnnotationDisplayState, AnnotationLayerState, FilterAnnotationByTimeType, FilterAnnotationByUserType, AnnotationDefaultProperty} from 'neuroglancer/annotation/annotation_layer_state';
 import {MultiscaleAnnotationSource} from 'neuroglancer/annotation/frontend_source';
 import {AnnotationLayer, PerspectiveViewAnnotationLayer, SliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
 import {SpatiallyIndexedPerspectiveViewAnnotationLayer, SpatiallyIndexedSliceViewAnnotationLayer} from 'neuroglancer/annotation/renderlayer';
@@ -523,6 +523,20 @@ export class AnnotationLayerView extends Tab {
     }
   }
 
+  private getSourceUser(): string|undefined {
+    const states = this.annotationStates.states;
+    for (const state of states) {
+      const source = state.source;
+      if (source instanceof MultiscaleAnnotationSource) {
+        if (source.getUser) {
+          return source.getUser();
+        }
+      }
+    }
+
+    return undefined;
+  }
+
   private updateAttachedAnnotationLayerStates() {
     const states = this.annotationStates.states;
     const {attachedAnnotationStates} = this;
@@ -658,12 +672,34 @@ export class AnnotationLayerView extends Tab {
     }
   }
 
+  private filterByUser(annotation: Annotation, userFilter: FilterAnnotationByUserType) {
+    if (userFilter === FilterAnnotationByUserType.MINE) {
+      let passed = false;
+      if ('prop' in annotation) {
+        let prop = annotation['prop'];
+        if ('user' in prop) {
+          passed = prop['user'] === this.getSourceUser();
+        }
+      }
+      return passed;
+    } else {
+      return true;
+    }
+  }
+
   private tableFilters = [
     (annotation: Annotation) => {
       return this.filterByDescription(annotation, this.displayState.tableFilterByText.value);
     },
     (annotation: Annotation) => {
       return this.filterByTime(annotation, this.displayState.tableFilterByTime.value);
+    },
+    (annotation: Annotation) => {
+      if (this.layer.userFilterNeeded) {
+        return this.filterByUser(annotation, this.displayState.tableFilterByUser.value);
+      } else {
+        return true;
+      }
     }
   ];
 
@@ -897,7 +933,16 @@ export class AnnotationLayerView extends Tab {
       (annotation: Annotation) => {
         return this.filterByTime(annotation, <FilterAnnotationByTimeType>verifyEnumString(timeElement.value, this.displayState.tableFilterByTime.enumType));
       }
-    ]
+    ];
+
+    if (this.layer.userFilterNeeded) {
+      let userElement = this.registerDisposer(new EnumSelectWidget(this.displayState.tableFilterByUser)).element;
+      filterWidget.appendChild(userElement);
+
+      filters.push((annotation: Annotation) => {
+        return this.filterByUser(annotation, <FilterAnnotationByUserType>verifyEnumString(userElement.value, this.displayState.tableFilterByUser.enumType));
+      });
+    }
 
     let updateTable = () => {
       this.updateAnnotationTable(filters);
@@ -909,6 +954,7 @@ export class AnnotationLayerView extends Tab {
     filterElement.onkeyup = this.throttledUpdateTable;
     // timeElement.onchange = this.throttledUpdateTable;
     this.registerDisposer(this.displayState.tableFilterByTime.changed.add(this.throttledUpdateTable));
+    this.registerDisposer(this.displayState.tableFilterByUser.changed.add(this.throttledUpdateTable));
     this.registerDisposer(() => this.throttledUpdateTable.cancel());
 
     let numAnnotationWidget = document.createElement('p');
@@ -1969,7 +2015,8 @@ export interface UserLayerWithAnnotations extends UserLayer {
   annotationDisplayState: AnnotationDisplayState;
   annotationStates: MergedAnnotationStates;
   initializeAnnotationLayerViewTab(tab: AnnotationLayerView): void;
-  updateLayerWidget?: (_: AnnotationLayer) => {}
+  updateLayerWidget?: (_: AnnotationLayer) => {};
+  userFilterNeeded?: Boolean;
   annotationCrossSectionRenderScaleHistogram: RenderScaleHistogram;
   annotationCrossSectionRenderScaleTarget: TrackableValue<number>;
   annotationProjectionRenderScaleHistogram: RenderScaleHistogram;
@@ -1990,6 +2037,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
     annotationProjectionRenderScaleHistogram = new RenderScaleHistogram();
     annotationProjectionRenderScaleTarget = trackableRenderScaleTarget(8);
     annotationDefaultProperty = new AnnotationDefaultProperty();
+    userFilterNeeded = false;
 
     constructor(...args: any[]) {
       super(...args);
@@ -2053,6 +2101,13 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       this.annotationDisplayState.shaderControls.restoreState(
           specification[SHADER_CONTROLS_JSON_KEY]);
       this.annotationDefaultProperty.restoreState(specification[ANNOTATION_DEFAULT_PROPERTY_JSON_KEY]);
+
+      if ('source' in specification ) { //tmp hack
+        let url = ('url' in specification['source']) ? specification.source.url : specification.source;
+        if (typeof(url) === 'string' && url.startsWith('clio://')) {
+          this.userFilterNeeded = true;
+        }
+      }
     }
 
     addLocalAnnotations(

@@ -353,6 +353,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   makeEditWidget: (reference: AnnotationReference) => HTMLElement|null;
   makeFilterWidget?: () => HTMLElement|null;
   invalidateCache?(): void;
+  getUser?(): string|undefined;
 
   readonly relationships: readonly string[];
   readonly properties: Readonly<AnnotationPropertySpec>[];
