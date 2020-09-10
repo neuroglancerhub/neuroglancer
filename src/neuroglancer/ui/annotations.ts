@@ -2103,7 +2103,7 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
       this.annotationDefaultProperty.restoreState(specification[ANNOTATION_DEFAULT_PROPERTY_JSON_KEY]);
 
       if ('source' in specification ) { //tmp hack
-        let url = ('url' in specification['source']) ? specification.source.url : specification.source;
+        let url = (typeof(specification['source']) === 'string') ? specification.source : specification.source.url;
         if (typeof(url) === 'string' && url.startsWith('clio://')) {
           this.userFilterNeeded = true;
         }
