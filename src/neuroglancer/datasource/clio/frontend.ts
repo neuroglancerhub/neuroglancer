@@ -269,6 +269,23 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
     }
     super.update(reference, newAnnotation);
   }
+
+  invalidateCache() {
+    this.metadataChunkSource.invalidateCache();
+    for (let sources1 of this.getSources({
+      multiscaleToViewTransform: new Float32Array(),
+      displayRank: 1,
+      modelChannelDimensionIndices: [],
+    })) {
+      for (let source of sources1) {
+        source.chunkSource.invalidateCache();
+      }
+    }
+    for (let source of this.segmentFilteredSources) {
+      source.invalidateCache();
+    }
+    this.childRefreshed.dispatch();
+  }
 }
 
 async function getAnnotationChunkSource(options: GetDataSourceOptions, sourceParameters: AnnotationSourceParameters, dataInfo: AnnotationDataInfo, credentialsProvider: CredentialsProvider<ClioToken>) {
