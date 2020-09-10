@@ -2138,8 +2138,13 @@ export function UserLayerWithAnnotationsMixin<TBase extends {new (...args: any[]
           specification[SHADER_CONTROLS_JSON_KEY]);
       this.annotationDefaultProperty.restoreState(specification[ANNOTATION_DEFAULT_PROPERTY_JSON_KEY]);
 
-      if ('source' in specification ) { //tmp hack
-        let url = (typeof(specification['source']) === 'string') ? specification.source : specification.source.url;
+      if ('source' in specification ) { // tmp hack
+        let url;
+        if (typeof(specification.source) === 'string') {
+          url = specification.source;
+        } else if ('url' in specification['source']) {
+          url = specification.source.url;
+        }
         if (typeof(url) === 'string' && url.startsWith('clio://')) {
           this.userFilterNeeded = true;
         }
