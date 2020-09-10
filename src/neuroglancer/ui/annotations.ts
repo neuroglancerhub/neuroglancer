@@ -794,6 +794,52 @@ export class AnnotationLayerView extends Tab {
     return undefined;
   }
 
+  private loadAnnotationFromCsv(source: AnnotationSource, lines: Iterable<string>) {
+    for (let line of lines) {
+      let annot = this.parseAnnotationFromCsvLine(line);
+      if (annot) {
+        source.add(annot);
+      }
+    }
+  }
+
+  private loadAnnotationFromJson(source: AnnotationSource, text: string) {
+    try {
+      let objs = JSON.parse(text);
+      for (let obj of objs) {
+        let annot = this.parseAnnotationFromJson(obj);
+        if (annot) {
+          source.add(annot);
+        }
+      }
+    } catch (e) {
+      throw new Error(`Failed to prase the JSON file`);
+    }
+  }
+
+  private parseAnnotationFromJson(obj: any): Annotation|null {
+    obj;
+    return null;
+  }
+
+  private parseAnnotationFromCsvLine(line: string): Annotation|null {
+    let tokens = line.split(',');
+    if (tokens.length === 8) {
+      if (tokens[7].match(/^-?\d+_-?\d+_-?\d+$/)) {
+        let pos = tokens[7].split('_').map(x => Number(x));
+        let annot: Point = {
+          id: tokens[7],
+          type: AnnotationType.POINT,
+          point: new Float32Array(pos),
+          properties: []
+        };
+        return annot;
+      }
+    }
+
+    return null;
+  }
+
   constructor(
       public layer: Borrowed<UserLayerWithAnnotations>,
       public state: Owned<SelectedAnnotationState>, public displayState: AnnotationDisplayState) {
@@ -882,25 +928,15 @@ export class AnnotationLayerView extends Tab {
         if (source) {
           if (fileUploadWidget.files) {
             let file = fileUploadWidget.files[0];
+            let filePathLowerCase = fileUploadWidget.value.toLowerCase();
             var reader = new FileReader();
             if (reader) {
               reader.onload = () => {
                 if (source && reader && reader.result) {
-                  let lines = (reader.result as string).split('\n');
-                  for (let line of lines) {
-                    var tokens = line.split(',');
-                    if (tokens.length === 8) {
-                      if (tokens[7].match(/^-?\d+_-?\d+_-?\d+$/)) {
-                        let pos = tokens[7].split('_').map(x => Number(x));
-                        let annot: Point = {
-                          id: tokens[7],
-                          type: AnnotationType.POINT,
-                          point: new Float32Array(pos),
-                          properties: []
-                        };
-                        source.add(annot);
-                      }
-                    }
+                  if (filePathLowerCase.endsWith('.csv')) {
+                    this.loadAnnotationFromCsv(source, (reader.result as string).split('\n'));
+                  } else if (filePathLowerCase.endsWith('.json')) {
+                    this.loadAnnotationFromJson(source, (reader.result as string));
                   }
                 }
               }
