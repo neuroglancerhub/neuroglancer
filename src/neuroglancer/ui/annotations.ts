@@ -782,6 +782,7 @@ export class AnnotationLayerView extends Tab {
     return false;
   }
 
+  /*
   private getLocalAnnotationSource(): AnnotationSource | undefined {
     const states = this.annotationStates.states;
     for (const state of states) {
@@ -793,13 +794,18 @@ export class AnnotationLayerView extends Tab {
 
     return undefined;
   }
+  */
 
   private loadAnnotationFromCsv(source: AnnotationSource, lines: Iterable<string>) {
-    for (let line of lines) {
-      let annot = this.parseAnnotationFromCsvLine(line);
-      if (annot) {
-        source.add(annot);
+    try {
+      for (let line of lines) {
+        let annot = this.parseAnnotationFromCsvLine(line);
+        if (annot) {
+          source.add(annot);
+        }
       }
+    } catch (e) {
+      throw new Error(`Failed to prase the CSV file`);
     }
   }
 
@@ -818,7 +824,22 @@ export class AnnotationLayerView extends Tab {
   }
 
   private parseAnnotationFromJson(obj: any): Annotation|null {
-    obj;
+    if (obj) {
+      if (obj.kind === 'sphere' || obj.kind === 'line') {
+        let pointA = new Float32Array((obj.from as string).split(',').map(x => Number(x)));
+        let pointB = new Float32Array((obj.to as string).split(',').map(x => Number(x)));
+        let id = `${pointA[0]}_${pointA[1]}_${pointA[2]}-${pointB[0]}_${pointB[1]}_${pointB[2]}-${obj.kind}`;
+        let description = obj.comment;
+        return {
+          id,
+          type: obj.kind === 'sphere' ? AnnotationType.SPHERE : AnnotationType.LINE,
+          pointA,
+          pointB,
+          description,
+          properties: []
+        };
+      }
+    }
     return null;
   }
 
@@ -924,7 +945,19 @@ export class AnnotationLayerView extends Tab {
       fileUploadWidget.type = 'file';
       fileUploadWidget.id = 'annotation-file';
       fileUploadWidget.onchange = () => {
-        let source = this.getLocalAnnotationSource();
+        let source: AnnotationSource|null = null;
+        let container: HTMLElement|null = null;
+        // const states = this.annotationStates.states;
+        for (const [state, {sublistContainer, listElements}] of this.attachedAnnotationStates) {
+          if (state.source instanceof AnnotationSource) {
+            source = state.source;
+            container = sublistContainer;
+            listElements;
+            break;
+          }
+        }
+
+        // let source = this.getLocalAnnotationSource();
         if (source) {
           if (fileUploadWidget.files) {
             let file = fileUploadWidget.files[0];
@@ -933,10 +966,16 @@ export class AnnotationLayerView extends Tab {
             if (reader) {
               reader.onload = () => {
                 if (source && reader && reader.result) {
+                  if (container) {
+                    container.style.display = "none";
+                  }
                   if (filePathLowerCase.endsWith('.csv')) {
                     this.loadAnnotationFromCsv(source, (reader.result as string).split('\n'));
                   } else if (filePathLowerCase.endsWith('.json')) {
                     this.loadAnnotationFromJson(source, (reader.result as string));
+                  }
+                  if (container) {
+                    container.style.display = "";
                   }
                 }
               }
@@ -1155,7 +1194,8 @@ export class AnnotationLayerView extends Tab {
         listElements.clear();
         if (state.chunkTransform.value.error !== undefined) continue;
         for (const annotation of state.source) {
-          sublistContainer.appendChild(self.makeAnnotationListElement(annotation, state));
+          let element = self.makeAnnotationListElement(annotation, state);
+          sublistContainer.appendChild(element);
         }
         yield sublistContainer;
       }
