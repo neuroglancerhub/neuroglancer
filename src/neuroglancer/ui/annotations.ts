@@ -55,7 +55,7 @@ import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 import {makeIcon} from 'neuroglancer/widget/icon';
 import {Tab} from 'neuroglancer/widget/tab_view';
 import {Uint64EntryWidget} from 'neuroglancer/widget/uint64_entry_widget';
-// import {StatusMessage} from 'neuroglancer/status';
+import {StatusMessage} from 'neuroglancer/status';
 import {EnumSelectWidget} from 'neuroglancer/widget/enum_widget';
 import {verifyEnumString} from 'neuroglancer/util/json';
 
@@ -501,6 +501,7 @@ export class AnnotationLayerView extends Tab {
   private updated = false;
   private mutableControls = document.createElement('div');
   private headerRow = document.createElement('div');
+  private loadingHint = document.createElement('p');
 
   private throttledUpdateTable:any = undefined;
 
@@ -511,6 +512,7 @@ export class AnnotationLayerView extends Tab {
   private attachedAnnotationStates =
       new Map<AnnotationLayerState, AnnotationLayerViewAttachedState>();
 
+  /*
   private invalidateAnnotationSourceCache() {
     const states = this.annotationStates.states;
     for (const state of states) {
@@ -522,6 +524,7 @@ export class AnnotationLayerView extends Tab {
       }
     }
   }
+  */
 
   private getSourceUser(): string|undefined {
     const states = this.annotationStates.states;
@@ -565,6 +568,7 @@ export class AnnotationLayerView extends Tab {
         (annotationId) => this.deleteAnnotationElement(annotationId, state)));
 
       refCounted.registerDisposer(state.transform.changed.add(this.forceUpdateView));
+
       const sublistContainer = document.createElement('div');
       sublistContainer.classList.add('neuroglancer-annotation-sublist');
       newAttachedAnnotationStates.set(
@@ -797,29 +801,29 @@ export class AnnotationLayerView extends Tab {
   */
 
   private loadAnnotationFromCsv(source: AnnotationSource, lines: Iterable<string>) {
-    try {
-      for (let line of lines) {
-        let annot = this.parseAnnotationFromCsvLine(line);
-        if (annot) {
+    for (let line of lines) {
+      let annot = this.parseAnnotationFromCsvLine(line);
+      if (annot) {
+        try {
           source.add(annot);
+        } catch (e) {
+          console.log(e);
         }
       }
-    } catch (e) {
-      throw new Error(`Failed to prase the CSV file`);
     }
   }
 
   private loadAnnotationFromJson(source: AnnotationSource, text: string) {
-    try {
-      let objs = JSON.parse(text);
-      for (let obj of objs) {
-        let annot = this.parseAnnotationFromJson(obj);
-        if (annot) {
+    let objs = JSON.parse(text);
+    for (let obj of objs) {
+      let annot = this.parseAnnotationFromJson(obj);
+      if (annot) {
+        try {
           source.add(annot);
+        } catch (e) {
+          console.log(e);
         }
       }
-    } catch (e) {
-      throw new Error(`Failed to prase the JSON file`);
     }
   }
 
@@ -835,6 +839,17 @@ export class AnnotationLayerView extends Tab {
           type: obj.kind === 'sphere' ? AnnotationType.SPHERE : AnnotationType.LINE,
           pointA,
           pointB,
+          description,
+          properties: []
+        };
+      } else if (obj.kind === 'point') {
+        let point = new Float32Array(obj.pos);
+        let id = `${point[0]}_${point[1]}_${point[2]}-${obj.kind}`;
+        let description = obj.comment;
+        return {
+          id,
+          type: AnnotationType.POINT,
+          point,
           description,
           properties: []
         };
@@ -963,21 +978,31 @@ export class AnnotationLayerView extends Tab {
             let file = fileUploadWidget.files[0];
             let filePathLowerCase = fileUploadWidget.value.toLowerCase();
             var reader = new FileReader();
-            if (reader) {
-              reader.onload = () => {
+            let hint = this.loadingHint;
+            hint.innerText = 'Loading ...';
+            hint.style.display = '';
+
+            reader.onload = () => {
+              try {
                 if (source && reader && reader.result) {
                   if (container) {
-                    container.style.display = "none";
+                    container.style.display = 'none';
                   }
                   if (filePathLowerCase.endsWith('.csv')) {
                     this.loadAnnotationFromCsv(source, (reader.result as string).split('\n'));
                   } else if (filePathLowerCase.endsWith('.json')) {
                     this.loadAnnotationFromJson(source, (reader.result as string));
                   }
+                  hint.style.display = 'none';
                   if (container) {
-                    container.style.display = "";
+                    container.style.display = '';
                   }
                 }
+              } catch(e) {
+                hint.style.display = 'none';
+                const status = new StatusMessage();
+                status.setErrorMessage(e);
+                status.setVisible(true);
               }
             }
             reader.readAsText(file);
@@ -1032,6 +1057,9 @@ export class AnnotationLayerView extends Tab {
     this.registerDisposer(this.displayState.tableFilterByUser.changed.add(this.throttledUpdateTable));
     this.registerDisposer(() => this.throttledUpdateTable.cancel());
 
+    this.loadingHint.style.display = 'none';
+    this.element.appendChild(this.loadingHint);
+
     let numAnnotationWidget = document.createElement('p');
     numAnnotationWidget.innerText = `#Annotations: ${this.countAnnotaionTable()}`;
     this.element.appendChild(numAnnotationWidget);
@@ -1055,7 +1083,7 @@ export class AnnotationLayerView extends Tab {
     }));
     this.updateCoordinateSpace();
     this.updateAttachedAnnotationLayerStates();
-    this.invalidateAnnotationSourceCache();
+    // this.invalidateAnnotationSourceCache();
   }
 
   private clearSelectionClass() {

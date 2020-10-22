@@ -54,6 +54,10 @@
   align-items: stretch;
 }
 
+.neuroglancer-annotation-error {
+  color: red;
+}
+
 .neuroglancer-annotation-list-header {
   display: contents;
 }

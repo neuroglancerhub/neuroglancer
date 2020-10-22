@@ -373,7 +373,7 @@ export interface FrontendAnnotationSource {
 
 
 export function makeAnnotationEditWidget(reference: AnnotationReference, schema: JsonObject|null|undefined, source: FrontendAnnotationSource) {
-  const annotation = reference.value!;
+  const annotation = {...reference.value!};
 
   if (annotation.type !== AnnotationType.POINT && annotation.type !== AnnotationType.SPHERE &&
   annotation.type !== AnnotationType.LINE) {

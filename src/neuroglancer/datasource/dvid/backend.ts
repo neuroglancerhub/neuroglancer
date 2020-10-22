@@ -745,6 +745,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
       })
       .catch(e => {
+        console.log(e);
         throw new Error(e);
       });
   }
@@ -787,6 +788,7 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         return this.getLineAnnotationId(annotation);
       })
       .catch(e => {
+        console.log(e);
         throw new Error(e);
       });
   }
@@ -843,7 +845,6 @@ export class DVIDAnnotationGeometryChunkSource extends (DVIDSource(AnnotationGeo
         case AnnotationType.LINE:
           return this.addLineAnnotation(<DVIDLineAnnotation>annotation);
       }
-      
     } else {
       return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
     }

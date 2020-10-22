@@ -509,6 +509,17 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     this.applyLocalUpdate(reference, /*existing=*/ true, /*commit=*/ true, reference.value!);
   }
 
+  updateReference(annotation: Annotation) {
+    let existing = this.references.get(annotation.id);
+    if (existing !== undefined) {
+      existing.value = annotation;
+    } else {
+      let reference = new AnnotationReference(annotation.id);
+      this.references.set(annotation.id, reference);
+      reference.value = annotation;
+    }
+  }
+
   setReferenceValue(annotation: Annotation) {
     let existing = this.references.get(annotation.id);
     if (existing !== undefined) {
@@ -733,7 +744,13 @@ export class MultiscaleAnnotationSource extends SharedObject implements
 
   // FIXME
   changed = new NullarySignal();
-  * [Symbol.iterator](): Iterator<Annotation> {}
+  * [Symbol.iterator](): Iterator<Annotation> {
+    for (let reference of this.references) {
+      if (reference[1].value) {
+        yield reference[1].value;
+      }
+    }
+  }
   readonly = false;
   childAdded: Signal<(annotation: Annotation) => void>;
   childUpdated: Signal<(annotation: Annotation) => void>;
@@ -770,6 +787,7 @@ registerRPC(ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, function(x) {
   const source = <AnnotationGeometryChunkSource>this.get(x.id);
   const newAnnotation: Annotation|null = fixAnnotationAfterStructuredCloning(x.newAnnotation);
   if (newAnnotation) {
+    source.parent.updateReference(newAnnotation);
     source.parent.childAdded.dispatch(newAnnotation);
   }
 });
