@@ -560,12 +560,18 @@ export class AnnotationLayerView extends Tab {
       }
       const source = state.source;
       const refCounted = new RefCounted();
-      refCounted.registerDisposer(
-        source.childAdded.add((annotation) => this.addAnnotationElement(annotation, state)));
-      refCounted.registerDisposer(source.childUpdated.add(
-        (annotation) => this.updateAnnotationElement(annotation, state)));
-      refCounted.registerDisposer(source.childDeleted.add(
-        (annotationId) => this.deleteAnnotationElement(annotationId, state)));
+      if (source.childAdded) {
+        refCounted.registerDisposer(
+          source.childAdded.add((annotation) => this.addAnnotationElement(annotation, state)));
+      }
+      if (source.childUpdated) {
+        refCounted.registerDisposer(source.childUpdated.add(
+          (annotation) => this.updateAnnotationElement(annotation, state)));
+      }
+      if (source.childDeleted) {
+        refCounted.registerDisposer(source.childDeleted.add(
+          (annotationId) => this.deleteAnnotationElement(annotationId, state)));
+      }
 
       refCounted.registerDisposer(state.transform.changed.add(this.forceUpdateView));
 
