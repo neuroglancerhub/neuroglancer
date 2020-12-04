@@ -637,7 +637,7 @@ function getDefaultAuthServer(baseUrl: string) {
   }
 }
 
-function parseSourceUrl(url: string): DVIDSourceParameters {
+export function parseSourceUrl(url: string): DVIDSourceParameters {
   let match = url.match(urlPattern);
   if (match === null) {
     throw new Error(`Invalid DVID URL: ${JSON.stringify(url)}.`);
@@ -1134,8 +1134,10 @@ export class VolumeInfo {
       this.numChannels = 1;
 
       let extended = verifyObjectProperty(obj, 'Extended', verifyObject);
-      let maxdownreslevel = verifyObjectProperty(extended, 'MaxDownresLevel', verifyPositiveInt);
-      this.numLevels = maxdownreslevel + 1;
+      if (extended.MaxDownresLevel) {
+        let maxdownreslevel = verifyObjectProperty(extended, 'MaxDownresLevel', verifyPositiveInt);
+        this.numLevels = maxdownreslevel + 1;
+      }
 
       this.voxelSize = verifyObjectProperty(extended, 'VoxelSize', x => parseIntVec(vec3.create(), x));
       this.upperVoxelBound = verifyObjectProperty(extended, 'MaxPoint', x => parseIntVec(vec3.create(), x.map((a:number) => {return ++a;})));

@@ -81,7 +81,7 @@ export class ClioCredentialsProvider extends CredentialsProvider<ClioToken> {
     } else if (authServer.startsWith('token:')) {
       return Promise.resolve(authServer.substring(6));
     } else if (authServer == 'neurohub') {
-      return getNeurohubToken(DEBUG_NEUROHUB_CREDENTIALS? mockWindow : window);
+      return getNeurohubToken(DEBUG_NEUROHUB_CREDENTIALS ? mockWindow : window);
     } else {
       const headers = new Headers();
       // headers.set('Access-Control-Allow-Origin', '*');

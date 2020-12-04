@@ -12,15 +12,16 @@ import { makeSliceViewChunkSpecification } from 'neuroglancer/sliceview/base';
 import {SliceViewSingleResolutionSource} from 'neuroglancer/sliceview/frontend';
 import {mat4, vec3} from 'neuroglancer/util/geom';
 import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform, makeIdentityTransformedBoundingBox} from 'neuroglancer/coordinate_transform';
-import {parseArray, parseFixedLengthArray, parseQueryStringParameters, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyOptionalString, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
+import {parseArray, parseFixedLengthArray, parseQueryStringParameters, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {getUserFromToken, parseDescription} from 'neuroglancer/datasource/dvid/utils';
 import {makeRequest} from 'neuroglancer/datasource/dvid/api';
-import {parseSpecialUrl} from 'neuroglancer/util/http_request';
+import {parseUrl} from 'neuroglancer/util/http_request';
 import {StatusMessage} from 'neuroglancer/status';
 import {createBasicElement} from 'neuroglancer/datasource/dvid/widgets';
 import {makeAnnotationEditWidget} from 'neuroglancer/datasource/dvid/widgets';
 import {ClioPointAnnotation, ClioPointAnnotationFacade, defaultAnnotationSchema, defaultAtlasSchema as defaultAtlasSchema, getAnnotationDescription} from 'neuroglancer/datasource/clio/utils';
+import {VolumeInfo as DVIDVolumeInfo, parseSourceUrl as parseDVIDSourceUrl} from 'neuroglancer/datasource/dvid/frontend';
 
 class ClioAnnotationChunkSource extends
 (WithParameters(WithCredentialsProvider<ClioToken>()(AnnotationGeometryChunkSource), AnnotationChunkSourceParameters)) {}
@@ -67,8 +68,6 @@ class ScaleInfo {
 interface MultiscaleVolumeInfo {
   dataType: DataType;
   volumeType: VolumeType;
-  mesh: string|undefined;
-  skeletons: string|undefined;
   scales: ScaleInfo[];
   modelSpace: CoordinateSpace;
 }
@@ -78,8 +77,6 @@ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
   const dataType = verifyObjectProperty(obj, 'data_type', x => verifyEnumString(x, DataType));
   const numChannels = verifyObjectProperty(obj, 'num_channels', verifyPositiveInt);
   const volumeType = verifyObjectProperty(obj, 'type', x => verifyEnumString(x, VolumeType));
-  const mesh = verifyObjectProperty(obj, 'mesh', verifyOptionalString);
-  const skeletons = verifyObjectProperty(obj, 'skeletons', verifyOptionalString);
   const scaleInfos =
       verifyObjectProperty(obj, 'scales', x => parseArray(x, y => new ScaleInfo(y, numChannels)));
   if (scaleInfos.length === 0) throw new Error('Expected at least one scale');
@@ -110,7 +107,7 @@ function parseMultiscaleVolumeInfo(obj: unknown): MultiscaleVolumeInfo {
     scales,
     boundingBoxes: [makeIdentityTransformedBoundingBox(box)],
   });
-  return {dataType, volumeType, mesh, skeletons, scales: scaleInfos, modelSpace};
+  return {dataType, volumeType, scales: scaleInfos, modelSpace};
 }
 
 class AnnotationDataInfo {
@@ -118,24 +115,43 @@ class AnnotationDataInfo {
   lowerVoxelBound: vec3;
   upperVoxelBound: vec3;
 
-  constructor(obj: any) {
-    const info = parseMultiscaleVolumeInfo(obj);
-    const scale = info.scales[0];
-    this.voxelSize = vec3.fromValues(scale.resolution[0], scale.resolution[1], scale.resolution[2]);
-    this.lowerVoxelBound = vec3.fromValues(scale.voxelOffset[0], scale.voxelOffset[1], scale.voxelOffset[2]);
-    this.upperVoxelBound = vec3.add(vec3.create(), this.lowerVoxelBound, vec3.fromValues(scale.size[0], scale.size[1], scale.size[2]));
+  constructor(obj: any, protocol: string) {
+    if (protocol === 'gs') {
+      const info = parseMultiscaleVolumeInfo(obj);
+      const scale = info.scales[0];
+      this.voxelSize = vec3.fromValues(scale.resolution[0], scale.resolution[1], scale.resolution[2]);
+      this.lowerVoxelBound = vec3.fromValues(scale.voxelOffset[0], scale.voxelOffset[1], scale.voxelOffset[2]);
+      this.upperVoxelBound = vec3.add(vec3.create(), this.lowerVoxelBound, vec3.fromValues(scale.size[0], scale.size[1], scale.size[2]));  
+    } else { //DVID info
+      const info = new DVIDVolumeInfo(obj);
+      this.voxelSize = info.voxelSize;
+      this.lowerVoxelBound = info.boundingBoxes[0].corner;
+      this.upperVoxelBound = info.upperVoxelBound;
+    }
   }
 }
 
+function getGrayscaleInfoUrl(u: {protocol: string, host: string, path: string}) {
+  if (u.protocol === 'gs') {
+    return `https://storage.googleapis.com/${u.host}${u.path}/info`;
+  } else if (u.protocol === 'dvid') {
+    const sourceParameters = parseDVIDSourceUrl(u.host + u.path);
+    return `${sourceParameters.baseUrl}/api/node/${sourceParameters.nodeKey}/${sourceParameters.dataInstanceKey}/info`;
+  }
+
+  throw Error("Unrecognized volume information");
+}
+
 async function getAnnotationDataInfo(parameters: AnnotationSourceParameters): Promise<AnnotationDataInfo> {
-  if (parameters.grayscale) {
-    let {grayscale} = parameters;
+  const { grayscale } = parameters;
+  if (grayscale) {
+    const u = parseUrl(grayscale);
     return makeRequest({
       'method': 'GET',
-      'url': parseSpecialUrl(grayscale) + '/info',
+      'url': getGrayscaleInfoUrl(u),
       responseType: 'json'
     }).then(response => {
-      return new AnnotationDataInfo(response);
+      return new AnnotationDataInfo(response, u.protocol);
     });
   } else {
     throw Error('No volume information provided.');
