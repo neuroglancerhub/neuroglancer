@@ -534,9 +534,11 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       }
       const userLayer = state.layer.layer;
       if (userLayer !== null) {
-        this.viewer.selectedLayer.layer = state.layer;
-        this.viewer.selectedLayer.visible = true;
-        userLayer.tabs.value = 'annotations';
+        if (!userLayer.expectingExternalTable) {
+          this.viewer.selectedLayer.layer = state.layer;
+          this.viewer.selectedLayer.visible = true;
+          userLayer.tabs.value = 'annotations';
+        }
         (<UserLayerWithAnnotations>userLayer).selectedAnnotation.value = {
           id: state.id,
           partIndex: state.partIndex,

@@ -82,6 +82,7 @@ export class UserLayer extends RefCounted {
 
   dataSourcesChanged = new NullarySignal();
   dataSources: LayerDataSource[] = [];
+  expectingExternalTable: Boolean = false;
 
   get manager() {
     return this.managedLayer.manager;
