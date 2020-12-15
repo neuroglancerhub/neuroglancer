@@ -35,6 +35,7 @@ export const sphereAnnotationDataName = 'bookmarks';
 
 export interface DVIDAnnotationBase {
   kind?: string;
+  source?: string;
   prop: {[key: string]: string};
 }
 

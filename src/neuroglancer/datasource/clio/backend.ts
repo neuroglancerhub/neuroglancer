@@ -157,11 +157,16 @@ function parseAnnotations(
   const annotationPropertySerializer = new AnnotationPropertySerializer(3, propSpec);
   const serializer = new AnnotationSerializer(annotationPropertySerializer);
   if (responses) {
-    let parseSingleAnnotation = (key: string, response: any) => {
+    let parseSingleAnnotation = (key: string, response: any, index: number, lastIndex: number) => {
       if (response) {
         try {
           let annotation = parseAnnotation(key, response);
           if (annotation) {
+            if (index === lastIndex) {
+              annotation.source = `downloaded:last`;
+            } else {
+              annotation.source = `downloaded:${index}/${lastIndex}`;
+            }
             annotationStore.add(getAnnotationId(annotation), response);
             serializer.add(annotation);
             if (emittingAddSignal) {
@@ -178,14 +183,16 @@ function parseAnnotations(
     };
 
     const {parameters} = source;
-    Object.keys(responses).forEach(key => {
+    const annotationCount = Object.keys(responses).length;
+    Object.keys(responses).forEach((key, index) => {
       let response = responses[key];
       if (response) {
         if (!('Kind' in response)) {
           response['Kind'] = parameters.kind!;
         }
       }
-      parseSingleAnnotation(key, response)
+      console.log('Parse downloaded annotation', index + 1, annotationCount, key);
+      parseSingleAnnotation(key, response, index, annotationCount - 1);
     });
   }
   chunk.data = Object.assign(new AnnotationGeometryData(), serializer.serialize());
@@ -360,22 +367,14 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
 
     let value = JSON.stringify(encoded);
     annotationStore.update(getAnnotationId(annotation), value);
-
-    if (parameters.baseUrl.startsWith('http://localhost')) { //mock server
-      //no support for POST yet
-      console.log(getAnnotationUrl(parameters, annotation.point));
-      console.log(value);
-      return Promise.resolve('');
-    } else {
-      return makeRequestWithCredentials(
-        this.credentialsProvider,
-        {
-          method: 'POST',
-          url: getAnnotationUrl(parameters, annotation.point),
-          payload: value,
-          responseType: '',
-        });
-    }
+    return makeRequestWithCredentials(
+      this.credentialsProvider,
+      {
+        method: 'POST',
+        url: getAnnotationUrl(parameters, annotation.point),
+        payload: value,
+        responseType: '',
+      });
   }
 
   private addPointAnnotation(annotation: ClioPointAnnotation) {
