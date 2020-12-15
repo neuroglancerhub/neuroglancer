@@ -32,7 +32,7 @@ import {makeDeleteButton} from 'neuroglancer/widget/delete_button';
 import {StackView, Tab, TabView} from 'neuroglancer/widget/tab_view';
 
 class UserLayerInfoPanel extends Tab {
-  tabView = new TabView(this.layer.tabs.addRef(), this.visibility);
+  tabView = this.registerDisposer(new TabView(this.layer.tabs.addRef(), this.visibility));
   constructor(public layer: UserLayer) {
     super();
     this.element.appendChild(this.tabView.element);

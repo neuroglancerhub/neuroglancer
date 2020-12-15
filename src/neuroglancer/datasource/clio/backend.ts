@@ -191,7 +191,6 @@ function parseAnnotations(
           response['Kind'] = parameters.kind!;
         }
       }
-      console.log('Parse downloaded annotation', index + 1, annotationCount, key);
       parseSingleAnnotation(key, response, index, annotationCount - 1);
     });
   }

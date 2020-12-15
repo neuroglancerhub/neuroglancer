@@ -1499,10 +1499,7 @@ export class AnnotationDetailsTab extends Tab {
       this.updateView();
     }));
     this.registerDisposer(this.visibility.changed.add(() => this.updateView()));
-    this.state.changed.add(() => {
-      this.valid = false;
-      this.updateView();
-    });
+
     this.element.addEventListener('mouseenter', () => {
       this.mouseEntered = true;
       const selected = this.state.value;
