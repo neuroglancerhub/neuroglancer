@@ -26,6 +26,7 @@ const annotationChunkDataSize = vec3.fromValues(64, 64, 64);
 export class ClioSourceParameters {
   baseUrl: string;
   dataset: string;
+  apiVersion = 1;
   kind?: string;
   user?: string;
   grayscale?: string;

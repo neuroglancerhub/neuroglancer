@@ -19,7 +19,6 @@
  */
 
 import {WithParameters} from 'neuroglancer/chunk_manager/backend';
-import {AnnotationSourceParameters, AnnotationChunkSourceParameters, ClioSourceParameters} from 'neuroglancer/datasource/clio/base';
 import {CancellationToken} from 'neuroglancer/util/cancellation';
 import {registerSharedObject, SharedObject, RPC} from 'neuroglancer/worker_rpc';
 import {Uint64} from 'neuroglancer/util/uint64';
@@ -28,11 +27,13 @@ import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk
 import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {ClioToken, makeRequestWithCredentials} from 'neuroglancer/datasource/clio/api';
-import {ClioPointAnnotation, ClioAnnotation, ClioPointAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, getAnnotationId} from 'neuroglancer/datasource/clio/utils';
 import {parseAnnotation as parseDvidAnnotation, annotationToDVID} from 'neuroglancer/datasource/dvid/backend';
 import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
 import {vec3} from 'neuroglancer/util/geom';
+import {AnnotationSourceParameters, AnnotationChunkSourceParameters} from 'neuroglancer/datasource/clio/base';
+import {ClioToken, makeRequestWithCredentials, ClioInstance} from 'neuroglancer/datasource/clio/api';
+import {ClioPointAnnotation, ClioAnnotation, ClioPointAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, getAnnotationId} from 'neuroglancer/datasource/clio/utils';
+
 
 class AnnotationStore {
   store = new Map();
@@ -197,21 +198,22 @@ function parseAnnotations(
   chunk.data = Object.assign(new AnnotationGeometryData(), serializer.serialize());
 }
 
-function getTopUrl(parameters: ClioSourceParameters) {
-  return `${parameters.baseUrl}/clio_toplevel`;
-}
+// function getTopUrl(parameters: ClioSourceParameters) {
+//   return `${parameters.baseUrl}`;
+// }
 
-function getClioUrl(parameters: ClioSourceParameters, path: string) {
-  return getTopUrl(parameters) + path;
-}
+// function getClioUrl(parameters: ClioSourceParameters, path: string) {
+//   return getTopUrl(parameters) + path;
+// }
 
+/*
 function getAnnotationEndpoint(parameters: ClioSourceParameters) {
   return parameters.kind === 'Atlas' ? 'atlas' : 'annotations';
 }
 
 function getElementsPath(parameters: ClioSourceParameters) {
   return `/${getAnnotationEndpoint(parameters)}/${parameters.dataset}`;
-} 
+}
 
 function getAnnotationPath(parameters: ClioSourceParameters, position: ArrayLike<number|string>) {
   return `${getElementsPath(parameters)}?x=${position[0]}&y=${position[1]}&z=${position[2]}`;
@@ -220,17 +222,19 @@ function getAnnotationPath(parameters: ClioSourceParameters, position: ArrayLike
 function getAnnotationUrl(parameters: ClioSourceParameters, position: ArrayLike<number|string>) {
   return getClioUrl(parameters, getAnnotationPath(parameters, position));
 }
+*/
 
 @registerSharedObject() //
 export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeometryChunkSourceBackend, AnnotationChunkSourceParameters)) {
   async download(chunk: AnnotationGeometryChunk, cancellationToken: CancellationToken) {
     // let values: any[] = [];
     try {
+      const clioInstance = new ClioInstance(this.parameters);
       let pointAnnotationValues = await makeRequestWithCredentials(
         this.credentialsProvider,
         {
           method: 'GET',
-          url: getClioUrl(this.parameters, getElementsPath(this.parameters)),
+          url: clioInstance.getAllAnnotationsUrl(),
           payload: undefined,
           responseType: 'json',
         },
@@ -362,15 +366,15 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
   private updatePointAnnotation(annotation: ClioPointAnnotation) {
     const { parameters } = this;
     const encoded = this.encodeAnnotation(annotation, parameters.user);
-    // const dvidAnnotation = annotationToDVID(annotation, parameters.user);
-
     let value = JSON.stringify(encoded);
     annotationStore.update(getAnnotationId(annotation), value);
+
+    const clioInstance = new ClioInstance(parameters);
     return makeRequestWithCredentials(
       this.credentialsProvider,
       {
         method: 'POST',
-        url: getAnnotationUrl(parameters, annotation.point),
+        url: clioInstance.getAnnotationUrl(annotation.point),
         payload: value,
         responseType: '',
       });
@@ -395,7 +399,7 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
         default:
           throw('Unspported annotation type');
       }
-      
+
     } else {
       if (annotation.type === AnnotationType.POINT) {
         return Promise.resolve(`${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`);
@@ -404,7 +408,7 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
       }
     }
   }
-  
+
   update(id: AnnotationId, annotation: Annotation) {
     if (this.uploadable(annotation)) {
       switch (annotation.type) {
@@ -424,7 +428,7 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
 
   delete(id: AnnotationId) {
     if (isAnnotationIdValid(id)) {
-      const { parameters } = this;
+      const clioInstance = new ClioInstance(this.parameters);
       switch (typeOfAnnotationId(id)) {
         case AnnotationType.POINT:
           annotationStore.remove(id);
@@ -432,8 +436,9 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
             this.credentialsProvider,
             {
               method: 'DELETE',
-              url: getAnnotationUrl(parameters, id.split('_')),
-              responseType: '',
+              url: clioInstance.getAnnotationUrl(id.split('_')),
+              // url: getAnnotationUrl(parameters, id.split('_')),
+              responseType: ''
             });
         default:
           throw new Error(`Invalid annotation ID for DVID: ${id}`)

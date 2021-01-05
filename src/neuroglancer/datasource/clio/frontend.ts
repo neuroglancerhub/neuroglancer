@@ -2,8 +2,6 @@
 import {MultiscaleAnnotationSource, AnnotationGeometryChunkSource} from 'neuroglancer/annotation/frontend_source';
 import {ChunkManager, WithParameters} from 'neuroglancer/chunk_manager/frontend';
 import {WithCredentialsProvider} from 'neuroglancer/credentials_provider/chunk_source_frontend';
-import {ClioToken, credentialsKey, makeRequestWithCredentials} from 'neuroglancer/datasource/clio/api';
-import {AnnotationSourceParameters, AnnotationChunkSourceParameters, ClioSourceParameters} from 'neuroglancer/datasource/clio/base';
 import { AnnotationType, Annotation, AnnotationReference } from 'neuroglancer/annotation';
 import {Signal, NullarySignal} from 'neuroglancer/util/signal';
 import {CredentialsManager, CredentialsProvider} from 'neuroglancer/credentials_provider';
@@ -20,8 +18,10 @@ import {parseUrl} from 'neuroglancer/util/http_request';
 import {StatusMessage} from 'neuroglancer/status';
 import {createBasicElement} from 'neuroglancer/datasource/dvid/widgets';
 import {makeAnnotationEditWidget} from 'neuroglancer/datasource/dvid/widgets';
+import {VolumeInfo as DVIDVolumeInfo} from 'neuroglancer/datasource/dvid/frontend';
 import {ClioPointAnnotation, ClioPointAnnotationFacade, defaultAnnotationSchema, defaultAtlasSchema as defaultAtlasSchema, getAnnotationDescription} from 'neuroglancer/datasource/clio/utils';
-import {VolumeInfo as DVIDVolumeInfo, parseSourceUrl as parseDVIDSourceUrl} from 'neuroglancer/datasource/dvid/frontend';
+import {ClioToken, credentialsKey, makeRequestWithCredentials, getGrayscaleInfoUrl, ClioInstance} from 'neuroglancer/datasource/clio/api';
+import {AnnotationSourceParameters, AnnotationChunkSourceParameters, ClioSourceParameters} from 'neuroglancer/datasource/clio/base';
 
 class ClioAnnotationChunkSource extends
 (WithParameters(WithCredentialsProvider<ClioToken>()(AnnotationGeometryChunkSource), AnnotationChunkSourceParameters)) {}
@@ -121,7 +121,7 @@ class AnnotationDataInfo {
       const scale = info.scales[0];
       this.voxelSize = vec3.fromValues(scale.resolution[0], scale.resolution[1], scale.resolution[2]);
       this.lowerVoxelBound = vec3.fromValues(scale.voxelOffset[0], scale.voxelOffset[1], scale.voxelOffset[2]);
-      this.upperVoxelBound = vec3.add(vec3.create(), this.lowerVoxelBound, vec3.fromValues(scale.size[0], scale.size[1], scale.size[2]));  
+      this.upperVoxelBound = vec3.add(vec3.create(), this.lowerVoxelBound, vec3.fromValues(scale.size[0], scale.size[1], scale.size[2]));
     } else { //DVID info
       const info = new DVIDVolumeInfo(obj);
       this.voxelSize = info.voxelSize;
@@ -129,17 +129,6 @@ class AnnotationDataInfo {
       this.upperVoxelBound = info.upperVoxelBound;
     }
   }
-}
-
-function getGrayscaleInfoUrl(u: {protocol: string, host: string, path: string}) {
-  if (u.protocol === 'gs') {
-    return `https://storage.googleapis.com/${u.host}${u.path}/info`;
-  } else if (u.protocol === 'dvid') {
-    const sourceParameters = parseDVIDSourceUrl(u.host + u.path);
-    return `${sourceParameters.baseUrl}/api/node/${sourceParameters.nodeKey}/${sourceParameters.dataInstanceKey}/info`;
-  }
-
-  throw Error("Unrecognized volume information");
 }
 
 async function getAnnotationDataInfo(parameters: AnnotationSourceParameters): Promise<AnnotationDataInfo> {
@@ -214,7 +203,7 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
       element.addEventListener('change', (e: Event) => {
         console.log(e);
       });
-      
+
       return element;
     };
 
@@ -254,7 +243,7 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
     if (annotation.type === AnnotationType.POINT) {
       let annotationRef = new ClioPointAnnotationFacade(<ClioPointAnnotation>annotation);
       annotationRef.kind = this.parameters.kind || 'Note';
-      
+
       // (<DVIDPointAnnotation>annotation).kind = 'Note';
       annotation.point = annotation.point.map(x => Math.round(x));
 
@@ -348,8 +337,6 @@ async function getAnnotationSource(options: GetDataSourceOptions, sourceParamete
 //https://us-east4-flyem-private.cloudfunctions.net/mb20?query=value
 const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/\?]+)(\?.*)?$/;
 
-
-
 function parseSourceUrl(url: string): ClioSourceParameters {
   let match = url.match(urlPattern);
   if (match === null) {
@@ -359,7 +346,7 @@ function parseSourceUrl(url: string): ClioSourceParameters {
   let sourceParameters: ClioSourceParameters = {
     baseUrl: match[1],
     dataset: match[2],
-
+    apiVersion: 1
   };
 
   let queryString = match[3];
@@ -387,14 +374,24 @@ function parseSourceUrl(url: string): ClioSourceParameters {
     } else {
       sourceParameters.kind = 'Normal';
     }
+
+    if (parameters.apiver) {
+      sourceParameters.apiVersion = parameters.apiver;
+    }
   }
 
   return sourceParameters;
 }
 
 async function completeSourceParameters(sourceParameters: ClioSourceParameters, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<ClioToken>): Promise<ClioSourceParameters> {
-  // let credentials = await getCredentialsProvider(sourceParameters.authToken).get();
-  return makeRequestWithCredentials(getCredentialsProvider(sourceParameters.authServer), {url: `${sourceParameters.baseUrl}/clio_toplevel/datasets`, method: 'GET', responseType: 'json'}).then(response => {
+  const clioInstance = new ClioInstance(sourceParameters);
+  return makeRequestWithCredentials(
+    getCredentialsProvider(sourceParameters.authServer),
+    {
+      url: clioInstance.getDatasetsUrl(),
+      method: 'GET',
+      responseType: 'json'
+    }).then(response => {
     const grayscaleInfo = verifyObjectProperty(response, sourceParameters.dataset, verifyObject);
     sourceParameters.grayscale = verifyObjectProperty(grayscaleInfo, "location", verifyString);
     return sourceParameters;
@@ -404,11 +401,6 @@ async function completeSourceParameters(sourceParameters: ClioSourceParameters, 
 type AuthType = string|undefined|null;
 
 async function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (auth:AuthType) => CredentialsProvider<ClioToken>): Promise<DataSource> {
-  // let match = options.providerUrl.match(urlPattern);
-  // if (match === null) {
-  //   throw new Error(`Invalid DVID URL: ${JSON.stringify(options.providerUrl)}.`);
-  // }
-
   let sourceParameters = parseSourceUrl(options.providerUrl);
 
   if (!sourceParameters.user && sourceParameters.authServer) {
@@ -416,7 +408,7 @@ async function getDataSource(options: GetDataSourceOptions, getCredentialsProvid
     sourceParameters.authToken = (await credentials).credentials;
     sourceParameters.user = getUserFromToken(sourceParameters.authToken);
   }
-  
+
   return options.chunkManager.memoize.getUncounted(
       {
         type: 'clio:MultiscaleVolumeChunkSource',
@@ -465,10 +457,7 @@ async function completeHttpPath(_1: string) {
 export class ClioDataSource extends DataSourceProvider {
   constructor(public credentialsManager: CredentialsManager) {
     super();
-  }
-
-  get description() {
-    return 'Clio';
+    this.description = 'Clio';
   }
 
   getCredentialsProvider(authServer: AuthType) {

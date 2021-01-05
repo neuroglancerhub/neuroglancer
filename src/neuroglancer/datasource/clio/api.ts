@@ -19,9 +19,11 @@
  */
 
 import {CancellationToken, uncancelableToken} from 'neuroglancer/util/cancellation';
-import {responseJson, responseArrayBuffer, ResponseTransform} from 'neuroglancer/util/http_request';
+import {responseJson, responseArrayBuffer, ResponseTransform, parseUrl} from 'neuroglancer/util/http_request';
 import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
+// import {parseSourceUrl as parseDVIDSourceUrl} from 'neuroglancer/datasource/dvid/frontend';
+import {ClioSourceParameters} from 'neuroglancer/datasource/clio/base';
 
 export type ClioToken = string;
 
@@ -33,6 +35,63 @@ interface HttpCall {
   payload?: string;
 }
 
+const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/;
+function parseDVIDSourceUrl(url: string): { baseUrl: string, nodeKey: string, dataInstanceKey: string } {
+  let match = url.match(urlPattern);
+  if (match === null) {
+    throw new Error(`Invalid DVID URL: ${JSON.stringify(url)}.`);
+  }
+
+  return {
+    baseUrl: match[1],
+    nodeKey: match[2],
+    dataInstanceKey: match[3],
+  };
+}
+
+export function getGrayscaleInfoUrl(u: {protocol: string, host: string, path: string}): string {
+  if (u.protocol === 'gs') {
+    return `https://storage.googleapis.com/${u.host}${u.path}/info`;
+  }else if (u.protocol === 'dvid') {
+    const sourceParameters = parseDVIDSourceUrl(u.host + u.path);
+    return `${sourceParameters.baseUrl}/api/node/${sourceParameters.nodeKey}/${sourceParameters.dataInstanceKey}/info`;
+  }
+
+  throw Error("Unrecognized volume information");
+}
+
+export class ClioInstance {
+  constructor(public parameters: ClioSourceParameters) {}
+
+  getTopLevelUrl(): string {
+    return this.parameters.apiVersion > 1 ? this.parameters.baseUrl : `${this.parameters.baseUrl}/clio_toplevel`;
+  }
+
+  getDatasetsUrl(): string {
+    return `${this.getTopLevelUrl()}/datasets`;
+  }
+
+  getGrayscaleInfoUrl(): string {
+    const u = parseUrl(this.parameters.grayscale!);
+
+    return getGrayscaleInfoUrl(u);
+  }
+
+  getAnnotationEndpoint(): string {
+    return this.parameters.kind === 'Atlas' ? 'atlas' : 'annotations';
+  }
+
+  getAnnotationEntryUrl(): string {
+    return `${this.getTopLevelUrl()}/${this.getAnnotationEndpoint()}/${this.parameters.dataset}`;
+  }
+  getAllAnnotationsUrl(): string {
+    return this.getAnnotationEntryUrl();
+  }
+
+  getAnnotationUrl(position: ArrayLike<number|string>): string {
+    return `${this.getAnnotationEntryUrl()}?x=${position[0]}&y=${position[1]}&z=${position[2]}`;
+  }
+}
 
 export function responseText(response: Response): Promise<any> {
   return response.text();
@@ -56,9 +115,9 @@ export function makeRequestWithCredentials(
   httpCall: HttpCall & { responseType: XMLHttpRequestResponseType },
   cancellationToken: CancellationToken = uncancelableToken): Promise<any> {
     return fetchWithClioCredentials(
-      credentialsProvider, 
-      httpCall.url, 
-      { method: httpCall.method, body: httpCall.payload }, 
+      credentialsProvider,
+      httpCall.url,
+      { method: httpCall.method, body: httpCall.payload },
       httpCall.responseType === '' ? responseText : (httpCall.responseType === 'json' ? responseJson : responseArrayBuffer),
       cancellationToken
     );
@@ -77,7 +136,7 @@ function  applyCredentials(input?: string) {
       newInit.headers = { ...newInit.headers, Authorization: `Bearer ${credentials}` };
     }
     return newInit;
-  } 
+  }
 }
 
 export function fetchWithClioCredentials<T>(
