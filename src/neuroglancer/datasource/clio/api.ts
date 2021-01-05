@@ -65,11 +65,12 @@ export class ClioInstance {
   constructor(public parameters: ClioSourceParameters) {}
 
   getTopLevelUrl(): string {
-    return this.parameters.apiVersion > 1 ? this.parameters.baseUrl : `${this.parameters.baseUrl}/clio_toplevel`;
+    const {baseUrl, api} = this.parameters;
+    return `${baseUrl}/${api || 'clio_toplevel'}`;
   }
 
   getDatasetsUrl(): string {
-    return `${this.getTopLevelUrl()}/datasets`;
+    return `${this.parameters.baseUrl}/datasets`;
   }
 
   getGrayscaleInfoUrl(): string {

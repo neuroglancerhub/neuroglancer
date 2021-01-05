@@ -335,7 +335,7 @@ async function getAnnotationSource(options: GetDataSourceOptions, sourceParamete
 }
 
 //https://us-east4-flyem-private.cloudfunctions.net/mb20?query=value
-const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/\?]+)(\?.*)?$/;
+const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/\?]+\/)?([^\/\?]+)(\?.*)?$/;
 
 function parseSourceUrl(url: string): ClioSourceParameters {
   let match = url.match(urlPattern);
@@ -345,11 +345,11 @@ function parseSourceUrl(url: string): ClioSourceParameters {
 
   let sourceParameters: ClioSourceParameters = {
     baseUrl: match[1],
-    dataset: match[2],
-    apiVersion: 1
+    api: match[2] ? match[2].slice(0, -1) : undefined,
+    dataset: match[3]
   };
 
-  let queryString = match[3];
+  let queryString = match[4];
   if (queryString && queryString.length > 1) {
     let parameters = parseQueryStringParameters(queryString.substring(1));
     if (parameters.token) {
@@ -373,10 +373,6 @@ function parseSourceUrl(url: string): ClioSourceParameters {
       }
     } else {
       sourceParameters.kind = 'Normal';
-    }
-
-    if (parameters.apiver) {
-      sourceParameters.apiVersion = parameters.apiver;
     }
   }
 
