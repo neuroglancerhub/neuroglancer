@@ -67,6 +67,7 @@ function getNeurohubToken(w: any) {
 }
 
 export class ClioCredentialsProvider extends CredentialsProvider<ClioToken> {
+  refreshable = false;
   constructor(public authServer: string) {
     super();
   }
@@ -74,6 +75,7 @@ export class ClioCredentialsProvider extends CredentialsProvider<ClioToken> {
   private getAuthToken(
     authServer: string,
     cancellationToken = uncancelableToken) {
+    this.refreshable = false;
     // console.log('getAuthToken:', authServer);
     if (!authServer) {
       // throw Error('token failure test');
@@ -83,6 +85,7 @@ export class ClioCredentialsProvider extends CredentialsProvider<ClioToken> {
     } else if (authServer == 'neurohub') {
       return getNeurohubToken(DEBUG_NEUROHUB_CREDENTIALS ? mockWindow : window);
     } else {
+      this.refreshable = true;
       const headers = new Headers();
       // headers.set('Access-Control-Allow-Origin', '*');
       return cancellableFetchOk(

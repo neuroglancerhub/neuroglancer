@@ -24,6 +24,7 @@ import {CredentialsProvider} from 'neuroglancer/credentials_provider';
 import {fetchWithCredentials} from 'neuroglancer/credentials_provider/http_request';
 // import {parseSourceUrl as parseDVIDSourceUrl} from 'neuroglancer/datasource/dvid/frontend';
 import {ClioSourceParameters} from 'neuroglancer/datasource/clio/base';
+import {ClioCredentialsProvider} from 'neuroglancer/datasource/clio/credentials_provider';
 
 export type ClioToken = string;
 
@@ -150,10 +151,14 @@ export function fetchWithClioCredentials<T>(
     applyCredentials(input),
     error => {
       const { status } = error;
+
       if (status === 403 || status === 401) {
         // Authorization needed.  Retry with refreshed token.
-        return 'refresh';
+        if ((<ClioCredentialsProvider>(credentialsProvider)).refreshable) {
+          return 'refresh';
+        }
       }
+
       if (status === 504) {
         // Gateway timeout can occur if the server takes too long to reply.  Retry.
         return 'retry';
