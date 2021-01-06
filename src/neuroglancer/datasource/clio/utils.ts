@@ -19,7 +19,7 @@
  */
 
 import {AnnotationType, AnnotationId} from 'neuroglancer/annotation/index';
-import {DVIDPointAnnotation, DVIDAnnotationFacade, defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
+import {DVIDPointAnnotation, DVIDLineAnnotation, DVIDAnnotationFacade, defaultJsonSchema} from 'neuroglancer/datasource/dvid/utils';
 // import {JsonObject} from 'neuroglancer/datasource/dvid/jsonschema';
 // import {FrontendAnnotationSource, createAnnotationWidget} from 'neuroglancer/datasource/dvid/widgets';
 
@@ -30,14 +30,17 @@ import {DVIDPointAnnotation, DVIDAnnotationFacade, defaultJsonSchema} from 'neur
 // }
 
 export type ClioPointAnnotation = DVIDPointAnnotation;
+export type ClioLineAnnotation = DVIDLineAnnotation;
 
-export type ClioAnnotation = ClioPointAnnotation;
+export type ClioAnnotation = ClioPointAnnotation | ClioLineAnnotation;
 
 // const twoPointAnnotationIdPattern = '-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+';
 export function typeOfAnnotationId(id: AnnotationId) {
   if (id.match(/^-?\d+_-?\d+_-?\d+$/)) {
     return AnnotationType.POINT;
-  } else {
+  } else if (id.match(/^-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+-Line$/)) {
+    return AnnotationType.LINE;
+  } {
     console.log(`Invalid ID for Clio annotation: ${id}`);
     return null;
     // throw new Error(`Invalid annotation ID for DVID: ${id}`)
@@ -48,6 +51,8 @@ export function getAnnotationId(annotation: ClioAnnotation) {
   switch (annotation.type) {
     case AnnotationType.POINT:
       return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
+    case AnnotationType.LINE:
+      return `${annotation.pointA[0]}_${annotation.pointA[1]}_${annotation.pointA[2]}--${annotation.pointB[0]}_${annotation.pointB[1]}_${annotation.pointB[2]}-Line`;
   }
 }
 
@@ -92,6 +97,12 @@ export function parseDescription(description: string)
     return JSON.parse(match[1]);
   } else {
     return null;
+  }
+}
+
+export class ClioLineAnnotationFacade extends ClioAnnotationFacade {
+  constructor(public annotation: ClioLineAnnotation) {
+    super(annotation);
   }
 }
 

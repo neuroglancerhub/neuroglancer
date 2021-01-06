@@ -13,13 +13,14 @@ import {BoundingBox, CoordinateSpace, makeCoordinateSpace, makeIdentityTransform
 import {parseArray, parseFixedLengthArray, parseQueryStringParameters, verifyEnumString, verifyFinitePositiveFloat, verifyInt, verifyObject, verifyObjectProperty, verifyOptionalObjectProperty, verifyPositiveInt, verifyString} from 'neuroglancer/util/json';
 import {CompleteUrlOptions, DataSource, DataSourceProvider, GetDataSourceOptions} from 'neuroglancer/datasource';
 import {getUserFromToken, parseDescription} from 'neuroglancer/datasource/dvid/utils';
+import {Borrowed} from 'neuroglancer/util/disposable';
 import {makeRequest} from 'neuroglancer/datasource/dvid/api';
 import {parseUrl} from 'neuroglancer/util/http_request';
 import {StatusMessage} from 'neuroglancer/status';
 import {createBasicElement} from 'neuroglancer/datasource/dvid/widgets';
 import {makeAnnotationEditWidget} from 'neuroglancer/datasource/dvid/widgets';
 import {VolumeInfo as DVIDVolumeInfo} from 'neuroglancer/datasource/dvid/frontend';
-import {ClioPointAnnotation, ClioPointAnnotationFacade, defaultAnnotationSchema, defaultAtlasSchema as defaultAtlasSchema, getAnnotationDescription} from 'neuroglancer/datasource/clio/utils';
+import {ClioPointAnnotation, ClioLineAnnotation, ClioPointAnnotationFacade, ClioLineAnnotationFacade, defaultAnnotationSchema, defaultAtlasSchema as defaultAtlasSchema, getAnnotationDescription} from 'neuroglancer/datasource/clio/utils';
 import {ClioToken, credentialsKey, makeRequestWithCredentials, getGrayscaleInfoUrl, ClioInstance} from 'neuroglancer/datasource/clio/api';
 import {AnnotationSourceParameters, AnnotationChunkSourceParameters, ClioSourceParameters} from 'neuroglancer/datasource/clio/base';
 
@@ -233,6 +234,14 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
         })));
   }
 
+  commit(reference: Borrowed<AnnotationReference>) {
+    if (reference.value && reference.value.type === AnnotationType.LINE) {
+      reference.value.pointA = reference.value.pointA.map(x => Math.round(x));
+      reference.value.pointB = reference.value.pointB.map(x => Math.round(x));
+    }
+    super.commit(reference);
+  }
+
   add(annotation: Annotation, commit: boolean = true): AnnotationReference {
     if (this.readonly) {
       let errorMessage = 'Permission denied for changing annotations.';
@@ -259,8 +268,15 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
           annotation.description = getAnnotationDescription(<ClioPointAnnotation>annotation);
         }
       }
+    } else if (annotation.type == AnnotationType.LINE) {
+      annotation.pointA = annotation.pointA.map(x => Math.round(x));
+      annotation.pointB = annotation.pointB.map(x => Math.round(x));
+      let annotationRef = new ClioLineAnnotationFacade(<ClioLineAnnotation>annotation);
+      annotationRef.addTimeStamp();
+      if (this.parameters.user) {
+        annotationRef.user = this.parameters.user;
+      }
     }
-
     return super.add(annotation, commit);
   }
 

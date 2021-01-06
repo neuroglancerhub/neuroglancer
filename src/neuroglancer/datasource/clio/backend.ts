@@ -254,6 +254,10 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     // updateAnnotationTypeHandler();
   }
 
+  private requestLineMetaData(id: AnnotationId, _: CancellationToken) {
+    return Promise.resolve(annotationStore.getValue(id));
+  }
+
   private requestPointMetaData(id: AnnotationId, _: CancellationToken) {
     return Promise.resolve(annotationStore.getValue(id));
     /*
@@ -282,6 +286,8 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     switch (typeOfAnnotationId(id)) {
       case AnnotationType.POINT:
         return this.requestPointMetaData(id, cancellationToken);
+      case AnnotationType.LINE:
+        return this.requestLineMetaData(id, cancellationToken);
       default:
         throw new Error(`Invalid annotation ID for DVID: ${id}`);
     }
@@ -319,19 +325,13 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     return false;
   }
 
-  private encodeAnnotation(annotation: ClioPointAnnotation, user: string|undefined): any {
-    if (annotation.kind === 'Note') {
+  private encodeAnnotation(annotation: ClioAnnotation, user: string|undefined): any {
+    if (annotation.kind === 'Note' || annotation.type === AnnotationType.LINE) {
       return annotationToDVID(annotation, user);
     } else {
       let obj: { [key: string]: any } = {
         Kind: annotation.kind, //todo: might not be necessary
       };
-
-      /* //No need to add position, which is encoded in the key
-      if (annotation.kind !== 'Atlas') {
-        obj['Pos'] = [annotation.point[0], annotation.point[1], annotation.point[2]];
-      }
-      */
 
       let annotationRef = new ClioPointAnnotationFacade(annotation);
 
@@ -363,27 +363,31 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     }
   }
 
-  private updatePointAnnotation(annotation: ClioPointAnnotation) {
+  private updateAnnotation(annotation: ClioAnnotation) {
     const { parameters } = this;
     const encoded = this.encodeAnnotation(annotation, parameters.user);
     let value = JSON.stringify(encoded);
     annotationStore.update(getAnnotationId(annotation), value);
 
-    const clioInstance = new ClioInstance(parameters);
-    return makeRequestWithCredentials(
-      this.credentialsProvider,
-      {
-        method: 'POST',
-        url: clioInstance.getAnnotationUrl(annotation.point),
-        payload: value,
-        responseType: '',
-      });
+    if (this.uploadable(annotation)) {
+      const clioInstance = new ClioInstance(parameters);
+      return makeRequestWithCredentials(
+        this.credentialsProvider,
+        {
+          method: 'POST',
+          url: clioInstance.getAnnotationUrl((<ClioPointAnnotation>annotation).point),
+          payload: value,
+          responseType: '',
+        });
+    } else {
+      return Promise.resolve(getAnnotationId(annotation));
+    }
   }
 
-  private addPointAnnotation(annotation: ClioPointAnnotation) {
-    return this.updatePointAnnotation(annotation)
+  private addAnnotation(annotation: ClioAnnotation) {
+    return this.updateAnnotation(annotation)
       .then(() => {
-        return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
+        return getAnnotationId(annotation);
       })
       .catch(e => {
         throw new Error(e);
@@ -392,37 +396,14 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
 
 
   add(annotation: Annotation) {
-    if (this.uploadable(annotation)) {
-      switch (annotation.type) {
-        case AnnotationType.POINT:
-          return this.addPointAnnotation(<ClioPointAnnotation>annotation);
-        default:
-          throw('Unspported annotation type');
-      }
-
-    } else {
-      if (annotation.type === AnnotationType.POINT) {
-        return Promise.resolve(`${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`);
-      } else {
-        return Promise.resolve(`${annotation.type}_${JSON.stringify(annotation)}`);
-      }
-    }
+    return this.addAnnotation(<ClioAnnotation>annotation);
   }
 
   update(id: AnnotationId, annotation: Annotation) {
-    if (this.uploadable(annotation)) {
-      switch (annotation.type) {
-        case AnnotationType.POINT:
-          if (getAnnotationId(<ClioPointAnnotation>annotation) !== id) {
-            return this.updatePointAnnotation(<ClioPointAnnotation>annotation).then(() => this.delete(id));
-          } else {
-            return this.updatePointAnnotation(<ClioPointAnnotation>annotation);
-          }
-        default:
-          throw ('Unspported annotation type');
-      }
+    if (getAnnotationId(<ClioAnnotation>annotation) !== id) {
+      return this.updateAnnotation(<ClioAnnotation>annotation).then(() => this.delete(id));
     } else {
-      throw new Error('Cannot update DVID annotation');
+      return this.updateAnnotation(<ClioAnnotation>annotation);
     }
   }
 
@@ -440,6 +421,9 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
               // url: getAnnotationUrl(parameters, id.split('_')),
               responseType: ''
             });
+        case AnnotationType.LINE:
+          annotationStore.remove(id);
+          return Promise.resolve(id);
         default:
           throw new Error(`Invalid annotation ID for DVID: ${id}`)
       }
