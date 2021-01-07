@@ -70,7 +70,7 @@ export class ClioInstance {
   }
 
   getDatasetsUrl(): string {
-    return `${this.parameters.baseUrl}/datasets`;
+    return `${this.getTopLevelUrl()}/datasets`;
   }
 
   getGrayscaleInfoUrl(): string {
