@@ -2,7 +2,7 @@
   "name": "@janelia-flyem/neuroglancer",
   "description": "Visualization tool for 3-D volumetric data.",
   "license": "Apache-2.0",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "main": "dist/module/main_module.js",
   "repository": {
     "type": "git",
@@ -92,6 +92,7 @@
     "ts-loader": "^6.2.1",
     "typescript": "3.7.4",
     "url-loader": "^3.0.0",
-    "webpack": "^4.41.5"
+    "webpack": "^4.41.5",
+    "fsevents": "^2.1.2"
   }
 }
