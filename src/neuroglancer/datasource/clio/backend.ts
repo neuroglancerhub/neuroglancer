@@ -32,7 +32,7 @@ import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neu
 import {vec3} from 'neuroglancer/util/geom';
 import {AnnotationSourceParameters, AnnotationChunkSourceParameters} from 'neuroglancer/datasource/clio/base';
 import {ClioToken, makeRequestWithCredentials, ClioInstance} from 'neuroglancer/datasource/clio/api';
-import {ClioPointAnnotation, ClioAnnotation, ClioPointAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, getAnnotationId} from 'neuroglancer/datasource/clio/utils';
+import {ClioPointAnnotation, ClioLineAnnotation, ClioAnnotation, ClioPointAnnotationFacade, ClioLineAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, getAnnotationId} from 'neuroglancer/datasource/clio/utils';
 
 
 class AnnotationStore {
@@ -85,8 +85,115 @@ function getPostionFromKey(key: string) {
   return null;
 }
 
-function parseAnnotation(key: string, entry: any) : ClioAnnotation|null {
+function makeLineAnnotation(prop: any, startPos: vec3, endPos: vec3, kind: string|undefined, title?: string, description?: string, user?: string) {
+  let annotation: ClioLineAnnotation = {
+    pointA: startPos,
+    pointB: endPos,
+    type: AnnotationType.LINE,
+    properties: [],
+    kind,
+    id: '',
+    prop: {}
+  };
+
+  annotation.id = getAnnotationId(annotation);
+
+  let annotationRef = new ClioLineAnnotationFacade(annotation);
+  annotationRef.prop = prop;
+
+  if (description) {
+    annotationRef.description = description;
+  }
+
+  if (title) {
+    annotationRef.title = title;
+  }
+
+  if (user) {
+    annotationRef.user = user;
+  }
+
+  annotation.description = getAnnotationDescription(annotation);
+
+  return annotation;
+}
+
+function makePointAnnotation(prop: any, pos: vec3, kind?: string, title?: string, description?: string, user?: string) {
+  let annotation: ClioPointAnnotation = {
+    point: pos,
+    type: AnnotationType.POINT,
+    properties: [],
+    kind,
+    id: '',
+    prop: {}
+  };
+
+  annotation.id = getAnnotationId(annotation);
+
+  let annotationRef = new ClioPointAnnotationFacade(annotation);
+  annotationRef.prop = prop;
+
+  if (description) {
+    annotationRef.description = description;
+  }
+
+  if (title) {
+    annotationRef.title = title;
+  }
+
+  if (user) {
+    annotationRef.user = user;
+  }
+
+  annotation.description = getAnnotationDescription(annotation);
+
+  return annotation;
+}
+
+function parseAnnotationV2(entry: any) : ClioAnnotation|null {
+  let prop: { [key: string]: string } = {};
+
+  //{"kind":"lineseg","tags":[],"pos":[15863,11100,13312,15963,11200,13412],"prop":{"user":"zhaot@hhmi.org","timestamp":"1611066453198"},"Kind":"Normal"}
+
+  const kind = verifyObjectProperty(entry, 'kind', verifyString);
+  const pos = entry['pos'];
+
+  if ('prop' in entry) {
+    prop = verifyObjectProperty(entry, 'prop', verifyObject);
+  }
+
+  let description = '';
+  if ('description' in entry) {
+    description = verifyObjectProperty(entry, 'description', verifyString);
+  }
+
+  let title = '';
+  if ('title' in entry) {
+    title = verifyObjectProperty(entry, 'title', verifyString);
+  }
+
+  let user = '';
+  if ('user' in entry) {
+    user = verifyObjectProperty(entry, 'user', verifyString);
+  }
+
+  const group = verifyObjectProperty(entry, 'Kind', verifyString);
+
+  const startPos = vec3.fromValues(pos[0], pos[1], pos[2]);
+  if (kind === 'lineseg') {
+    const endPos = vec3.fromValues(pos[3], pos[4], pos[5]);
+    return makeLineAnnotation(prop, startPos, endPos, group, description, user);
+  }
+
+  return makePointAnnotation(prop, startPos, group, title, description, user);
+}
+
+function parseAnnotation(key: string, entry: any, api: string|undefined) : ClioAnnotation|null {
   if (entry) {
+    if (api === 'v2') {
+      return parseAnnotationV2(entry);
+    }
+
     const kind = verifyObjectProperty(entry, 'Kind', verifyString);
     if (kind === 'Note') {
       return parseDvidAnnotation(entry) as ClioAnnotation;
@@ -116,33 +223,7 @@ function parseAnnotation(key: string, entry: any) : ClioAnnotation|null {
         user = verifyObjectProperty(entry, 'user', verifyString);
       }
 
-      let annotation: ClioPointAnnotation = {
-        point: corner,
-        type: AnnotationType.POINT,
-        properties: [],
-        kind,
-        id: `${corner[0]}_${corner[1]}_${corner[2]}`,
-        prop: {}
-      };
-
-      let annotationRef = new ClioPointAnnotationFacade(annotation);
-      annotationRef.prop = prop;
-
-      if (description) {
-        annotationRef.description = description;
-      }
-
-      if (title) {
-        annotationRef.title = title;
-      }
-
-      if (user) {
-        annotationRef.user = user;
-      }
-
-      annotation.description = getAnnotationDescription(annotation);
-
-      return annotation;
+      return makePointAnnotation(prop, corner, undefined, title, description, user);
     }
   }
 
@@ -154,14 +235,14 @@ function parseAnnotation(key: string, entry: any) : ClioAnnotation|null {
 function parseAnnotations(
   source: ClioAnnotationSource|ClioAnnotationGeometryChunkSource,
   chunk: AnnotationGeometryChunk | AnnotationSubsetGeometryChunk, responses: any,
-  propSpec: AnnotationPropertySpec[], emittingAddSignal: boolean) {
+  propSpec: AnnotationPropertySpec[], api: string|undefined, emittingAddSignal: boolean) {
   const annotationPropertySerializer = new AnnotationPropertySerializer(3, propSpec);
   const serializer = new AnnotationSerializer(annotationPropertySerializer);
   if (responses) {
     let parseSingleAnnotation = (key: string, response: any, index: number, lastIndex: number) => {
       if (response) {
         try {
-          let annotation = parseAnnotation(key, response);
+          let annotation = parseAnnotation(key, response, api);
           if (annotation) {
             if (index === lastIndex) {
               annotation.source = `downloaded:last`;
@@ -241,7 +322,7 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
         cancellationToken);
       // values = [...pointAnnotationValues];
 
-      return parseAnnotations(this, chunk, pointAnnotationValues, this.parameters.properties, true);
+      return parseAnnotations(this, chunk, pointAnnotationValues, this.parameters.properties, this.parameters.api, true);
     } catch(e) {
       console.log(e);
     }
@@ -297,7 +378,7 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     return this.requestMetadata(chunk, cancellationToken).then(
       response => {
         if (response) {
-          chunk.annotation = parseAnnotation(chunk.key!, response);
+          chunk.annotation = parseAnnotation(chunk.key!, response, this.parameters.api);
         } else {
           chunk.annotation = null;
         }
@@ -325,7 +406,75 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     return false;
   }
 
-  private encodeAnnotation(annotation: ClioAnnotation, user: string|undefined): any {
+  private encodePointAnnotationV2(annotation: ClioPointAnnotation): any {
+    let obj: { [key: string]: any } = {
+      kind: 'point',
+      tags: [],
+      pos: [annotation.point[0], annotation.point[1], annotation.point[2]]
+    };
+    let annotationRef = new ClioPointAnnotationFacade(annotation);
+
+    if (annotationRef.description !== undefined) {
+      obj.description = annotationRef.description;
+    } else if (annotation.kind === 'Atlas') {
+      obj.description = '';
+    }
+
+    if (annotationRef.title !== undefined) {
+      obj.title = annotationRef.title;
+    }
+
+    if (annotation.prop) {
+      let prop = { ...annotation.prop };
+      delete prop.comment;
+      // delete prop.user;
+      delete prop.title;
+      if (prop) {
+        obj.prop = prop;
+      }
+    }
+
+    return obj;
+  }
+
+  private encodeLineAnnotationV2(annotation: ClioLineAnnotation): any {
+    let obj: { [key: string]: any } = {
+      kind: 'lineseg',
+      tags: [],
+      pos: [annotation.pointA[0], annotation.pointA[1], annotation.pointA[2], annotation.pointB[0], annotation.pointB[1], annotation.pointB[2]]
+    };
+    let annotationRef = new ClioLineAnnotationFacade(annotation);
+
+    if (annotationRef.description !== undefined) {
+      obj.description = annotationRef.description;
+    }
+
+    if (annotationRef.title !== undefined) {
+      obj.title = annotationRef.title;
+    }
+
+    if (annotation.prop) {
+      let prop = { ...annotation.prop };
+      delete prop.comment;
+      // delete prop.user;
+      delete prop.title;
+      if (prop) {
+        obj.prop = prop;
+      }
+    }
+
+    return obj;
+  }
+
+  private encodeAnnotationV2(annotation: ClioAnnotation): any {
+    if (annotation.type === AnnotationType.POINT) {
+      return this.encodePointAnnotationV2(annotation);
+    } else {
+      return this.encodeLineAnnotationV2(annotation);
+    }
+  }
+
+  private encodeAnnotationV1(annotation: ClioAnnotation, user: string|undefined) {
     if (annotation.kind === 'Note' || annotation.type === AnnotationType.LINE) {
       return annotationToDVID(annotation, user);
     } else {
@@ -363,30 +512,45 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     }
   }
 
+  private encodeAnnotation(annotation: ClioAnnotation, user: string | undefined, api?: string): any {
+    if (api === 'v2') {
+      return this.encodeAnnotationV2(annotation);
+    } else {
+      return this.encodeAnnotationV1(annotation, user);
+    }
+  }
+
   private updateAnnotation(annotation: ClioAnnotation) {
     const { parameters } = this;
-    const encoded = this.encodeAnnotation(annotation, parameters.user);
+    const encoded = this.encodeAnnotation(annotation, parameters.user, parameters.api);
     let value = JSON.stringify(encoded);
-    annotationStore.update(getAnnotationId(annotation), value);
 
     if (this.uploadable(annotation)) {
       const clioInstance = new ClioInstance(parameters);
+      const pos = (<ClioPointAnnotation>annotation).point;
+      const url = clioInstance.getPostAnnotationUrl(pos);
+
       return makeRequestWithCredentials(
         this.credentialsProvider,
         {
           method: 'POST',
-          url: clioInstance.getAnnotationUrl((<ClioPointAnnotation>annotation).point),
+          url,
           payload: value,
           responseType: '',
+        }).then(response => {
+          annotationStore.update(getAnnotationId(annotation), value);
+          return response;
         });
     } else {
+      annotationStore.update(getAnnotationId(annotation), value);
       return Promise.resolve(getAnnotationId(annotation));
     }
   }
 
   private addAnnotation(annotation: ClioAnnotation) {
     return this.updateAnnotation(annotation)
-      .then(() => {
+      .then((response) => {
+        console.log(response);
         return getAnnotationId(annotation);
       })
       .catch(e => {
@@ -417,7 +581,7 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
             this.credentialsProvider,
             {
               method: 'DELETE',
-              url: clioInstance.getAnnotationUrl(id.split('_')),
+              url: clioInstance.getDeleteAnnotationUrl(id),
               // url: getAnnotationUrl(parameters, id.split('_')),
               responseType: ''
             });

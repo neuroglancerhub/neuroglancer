@@ -36,9 +36,9 @@ export type ClioAnnotation = ClioPointAnnotation | ClioLineAnnotation;
 
 // const twoPointAnnotationIdPattern = '-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+';
 export function typeOfAnnotationId(id: AnnotationId) {
-  if (id.match(/^-?\d+_-?\d+_-?\d+$/)) {
+  if (id.match(/^-?\d+_-?\d+_-?\d+$/) || id.match(/^Pt-?\d+_-?\d+_-?\d+$/)) {
     return AnnotationType.POINT;
-  } else if (id.match(/^-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+-Line$/)) {
+  } else if (id.match(/^-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+-Line$/) || id.match(/^Ln-?\d+_-?\d+_-?\d+_?\d+_-?\d+_-?\d+$/)) {
     return AnnotationType.LINE;
   } {
     console.log(`Invalid ID for Clio annotation: ${id}`);
@@ -50,9 +50,9 @@ export function typeOfAnnotationId(id: AnnotationId) {
 export function getAnnotationId(annotation: ClioAnnotation) {
   switch (annotation.type) {
     case AnnotationType.POINT:
-      return `${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
+      return `Pt${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
     case AnnotationType.LINE:
-      return `${annotation.pointA[0]}_${annotation.pointA[1]}_${annotation.pointA[2]}--${annotation.pointB[0]}_${annotation.pointB[1]}_${annotation.pointB[2]}-Line`;
+      return `Ln${annotation.pointA[0]}_${annotation.pointA[1]}_${annotation.pointA[2]}_${annotation.pointB[0]}_${annotation.pointB[1]}_${annotation.pointB[2]}`;
   }
 }
 

@@ -90,6 +90,29 @@ export class ClioInstance {
     return this.getAnnotationEntryUrl();
   }
 
+  hasPointQueryApi(): Boolean {
+    return (this.parameters.api !== 'v2' || this.parameters.kind === 'Atlas');
+  }
+
+  getPostAnnotationUrl(position: ArrayLike<number|string>): string {
+    if (this.hasPointQueryApi()) {
+      return `${this.getAnnotationEntryUrl()}?x=${position[0]}&y=${position[1]}&z=${position[2]}`;
+    }
+
+    return this.getAnnotationEntryUrl();
+  }
+
+  getDeleteAnnotationUrl(id: string): string {
+    if (this.hasPointQueryApi()) {
+      const tokens = id.match(/(\d+)_(\d+)_(\d+)/);
+      if (tokens) {
+        return this.getAnnotationUrl(tokens?.slice(1, 4))
+      }
+    }
+
+    return `${this.getAnnotationEntryUrl()}/${id}`;
+  }
+
   getAnnotationUrl(position: ArrayLike<number|string>): string {
     return `${this.getAnnotationEntryUrl()}?x=${position[0]}&y=${position[1]}&z=${position[2]}`;
   }
