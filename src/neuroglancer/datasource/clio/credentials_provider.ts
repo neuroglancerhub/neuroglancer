@@ -51,7 +51,7 @@ const mockWindow: NeurohubWindow = {
     clio: {
         auth: {
           getAuthResponse: () => {
-            return {id_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiZW1haWwiOiJndWVzdEB0ZXN0LmNvbSJ9.TQVXqy_0z-cYXQnBXk_R1djE7VRbRZvOOwE5jl-vLXM"};
+            return {id_token: ""};
           }
         }
     }

@@ -36,6 +36,7 @@ export const sphereAnnotationDataName = 'bookmarks';
 export interface DVIDAnnotationBase {
   kind?: string;
   source?: string;
+  key?: string;
   prop: {[key: string]: string};
 }
 
@@ -79,7 +80,7 @@ export function getAnnotationId(annotation: DVIDAnnotation) {
 
 export const DVIDAnnotationKindMap = {
   [AnnotationType.POINT]: 'Note',
-  [AnnotationType.LINE]: 'PureLine', 
+  [AnnotationType.LINE]: 'PureLine',
   [AnnotationType.SPHERE]: 'Line' //for back compatibility
 };
 

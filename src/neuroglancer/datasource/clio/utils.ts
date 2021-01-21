@@ -48,6 +48,10 @@ export function typeOfAnnotationId(id: AnnotationId) {
 }
 
 export function getAnnotationId(annotation: ClioAnnotation) {
+  if (annotation.key) {
+    return annotation.key;
+  }
+
   switch (annotation.type) {
     case AnnotationType.POINT:
       return `Pt${annotation.point[0]}_${annotation.point[1]}_${annotation.point[2]}`;
@@ -60,7 +64,7 @@ export function isAnnotationIdValid(id: AnnotationId) {
   return typeOfAnnotationId(id) !== null;
 }
 
-class ClioAnnotationFacade extends DVIDAnnotationFacade {
+export class ClioAnnotationFacade extends DVIDAnnotationFacade {
   constructor(public annotation: ClioAnnotation) {
     super(annotation);
   }
@@ -103,6 +107,14 @@ export function parseDescription(description: string)
 export class ClioLineAnnotationFacade extends ClioAnnotationFacade {
   constructor(public annotation: ClioLineAnnotation) {
     super(annotation);
+  }
+
+  get renderingAttribute() {
+    return this.timestamp > 0 ? 11 : 0;
+  }
+
+  updateProperties() {
+    this.annotation.properties = [this.renderingAttribute];
   }
 }
 

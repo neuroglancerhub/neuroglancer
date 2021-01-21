@@ -27,13 +27,12 @@ import {AnnotationGeometryChunk, AnnotationGeometryData, AnnotationMetadataChunk
 import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base';
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
-import {parseAnnotation as parseDvidAnnotation, annotationToDVID} from 'neuroglancer/datasource/dvid/backend';
+import {parseAnnotation as parseDvidAnnotation} from 'neuroglancer/datasource/dvid/backend';
 import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
 import {vec3} from 'neuroglancer/util/geom';
 import {AnnotationSourceParameters, AnnotationChunkSourceParameters} from 'neuroglancer/datasource/clio/base';
 import {ClioToken, makeRequestWithCredentials, ClioInstance} from 'neuroglancer/datasource/clio/api';
-import {ClioPointAnnotation, ClioLineAnnotation, ClioAnnotation, ClioPointAnnotationFacade, ClioLineAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, isAnnotationIdValid, getAnnotationId} from 'neuroglancer/datasource/clio/utils';
-
+import {ClioPointAnnotation, ClioLineAnnotation, ClioAnnotation, ClioPointAnnotationFacade, ClioLineAnnotationFacade, ClioAnnotationFacade, getAnnotationDescription, typeOfAnnotationId, getAnnotationId} from 'neuroglancer/datasource/clio/utils';
 
 class AnnotationStore {
   store = new Map();
@@ -54,6 +53,10 @@ class AnnotationStore {
 
   getValue(id: string) {
     return this.store.get(id);
+  }
+
+  contains(id: string) {
+    return this.store.has(id);
   }
 }
 
@@ -150,6 +153,160 @@ function makePointAnnotation(prop: any, pos: vec3, kind?: string, title?: string
   return annotation;
 }
 
+function encodeV2Helper(annotation: ClioAnnotation) {
+  let obj: { [key: string]: any } = {
+    tags: []
+  };
+
+  let annotationRef = new ClioAnnotationFacade(annotation);
+
+  const prop = { ...annotation.prop };
+  if (annotationRef.description !== undefined) {
+    obj.description = annotationRef.description;
+  }
+
+  if (annotation.kind === 'Atlas') {
+    obj.description = obj.description || '';
+    obj.user = prop.user;
+    delete prop.user;
+  }
+
+  if (annotationRef.title !== undefined) {
+    obj.title = annotationRef.title;
+  }
+
+  delete prop.comment;
+  delete prop.title;
+  if (prop) {
+    obj.prop = prop;
+  }
+
+  return obj;
+};
+
+const encoder: any = {
+  v1: {
+    point: (annotation: ClioPointAnnotation) => {
+      let obj: { [key: string]: any } = {
+        Kind: annotation.kind, //todo: might not be necessary
+      };
+
+      let annotationRef = new ClioPointAnnotationFacade(annotation);
+
+      if (annotationRef.description !== undefined) {
+        obj.description = annotationRef.description;
+      } else if (annotation.kind === 'Atlas') {
+        obj.description = '';
+      }
+
+      if (annotationRef.title !== undefined) {
+        obj.title = annotationRef.title;
+      }
+
+      if (annotationRef.user) {
+        obj.user = annotationRef.user;
+      }
+
+      if (annotation.prop) {
+        let prop = {...annotation.prop};
+        delete prop.comment;
+        delete prop.user;
+        delete prop.title;
+        if (prop) {
+          obj.Prop = prop;
+        }
+      }
+
+      return obj;
+    }, //point
+  }, //v1
+  v2: {
+    point: (annotation: ClioPointAnnotation) => {
+      const obj = encodeV2Helper(annotation);
+      obj.kind = 'point';
+      obj.pos = [annotation.point[0], annotation.point[1], annotation.point[2]];
+
+      return obj;
+    }, //point
+    lineseg: (annotation: ClioLineAnnotation) =>  {
+      const obj = encodeV2Helper(annotation);
+      obj.kind = 'lineseg';
+      obj.pos = [annotation.pointA[0], annotation.pointA[1], annotation.pointA[2], annotation.pointB[0], annotation.pointB[1], annotation.pointB[2]];
+      return obj;
+    }, //line
+  }, //v2
+};
+
+encoder.v1.lineseg = encoder.v2.lineseg;
+encoder.v1[AnnotationType.POINT] = encoder.v1.point;
+encoder.v1[AnnotationType.LINE] = encoder.v1.lineseg;
+encoder.clio_toplevel = encoder.v1;
+
+encoder.v2[AnnotationType.POINT] = encoder.v2.point;
+encoder.v2[AnnotationType.LINE] = encoder.v2.lineseg;
+
+function getEncoder (api: string|undefined, kind: string|AnnotationType|undefined) {
+  return encoder[api || 'v1'][kind || AnnotationType.POINT];
+}
+
+const decoder: any = {
+  v1: {
+    point: (key: string, entry: any) => {
+      const kind = verifyObjectProperty(entry, 'Kind', verifyString);
+      if (kind === 'Note') {
+        return parseDvidAnnotation(entry) as ClioAnnotation;
+      } else {
+        let prop: { [key: string]: string } = {};
+        let corner = getPostionFromKey(key);
+        if (!corner) {
+          const posKey = ('location' in entry) ? 'location' : 'Pos';
+          corner = verifyObjectProperty(entry, posKey, x => parseIntVec(vec3.create(), x));
+        }
+        if ('Prop' in entry) {
+          prop = verifyObjectProperty(entry, 'Prop', verifyObject);
+        }
+
+        let description = '';
+        if ('description' in entry) {
+          description = verifyObjectProperty(entry, 'description', verifyString);
+        }
+
+        let title = '';
+        if ('title' in entry) {
+          title = verifyObjectProperty(entry, 'title', verifyString);
+        }
+
+        let user = '';
+        if ('user' in entry) {
+          user = verifyObjectProperty(entry, 'user', verifyString);
+        }
+
+        return makePointAnnotation(prop, corner, undefined, title, description, user);
+      }
+    }, //point
+  }, //v1
+  v2: {
+    point: (_: string, entry: any) => {
+      return parseAnnotationV2(entry);
+    },
+    lineseg: (_: string, entry: any) => {
+      return parseAnnotationV2(entry);
+    }
+  }, //v2
+};
+
+decoder.v1.lineseg = decoder.v2.lineseg;
+decoder.v1[AnnotationType.POINT] = decoder.v1.point;
+decoder.v1[AnnotationType.LINE] = decoder.v1.lineseg;
+decoder.clio_toplevel = decoder.v1;
+
+decoder.v2[AnnotationType.POINT] = decoder.v2.point;
+decoder.v2[AnnotationType.LINE] = decoder.v2.lineseg;
+
+function getDecoder (api: string|undefined, kind: string|AnnotationType|undefined) {
+  return decoder[api || 'v1'][kind || AnnotationType.POINT];
+}
+
 function parseAnnotationV2(entry: any) : ClioAnnotation|null {
   let prop: { [key: string]: string } = {};
 
@@ -163,17 +320,17 @@ function parseAnnotationV2(entry: any) : ClioAnnotation|null {
   }
 
   let description = '';
-  if ('description' in entry) {
+  if (entry.description) {
     description = verifyObjectProperty(entry, 'description', verifyString);
   }
 
   let title = '';
-  if ('title' in entry) {
+  if (entry.title) {
     title = verifyObjectProperty(entry, 'title', verifyString);
   }
 
   let user = '';
-  if ('user' in entry) {
+  if (entry.user) {
     user = verifyObjectProperty(entry, 'user', verifyString);
   }
 
@@ -187,11 +344,15 @@ function parseAnnotationV2(entry: any) : ClioAnnotation|null {
 
   return makePointAnnotation(prop, startPos, group, title, description, user);
 }
-
+/*
 function parseAnnotation(key: string, entry: any, api: string|undefined) : ClioAnnotation|null {
   if (entry) {
     if (api === 'v2') {
-      return parseAnnotationV2(entry);
+      const annotation = parseAnnotationV2(entry);
+      if (annotation) {
+        annotation.key = key;
+      }
+      return annotation;
     }
 
     const kind = verifyObjectProperty(entry, 'Kind', verifyString);
@@ -229,6 +390,7 @@ function parseAnnotation(key: string, entry: any, api: string|undefined) : ClioA
 
   return null;
 }
+*/
 
 // const annotationPropertySerializer = new AnnotationPropertySerializer(3, []);
 
@@ -242,7 +404,9 @@ function parseAnnotations(
     let parseSingleAnnotation = (key: string, response: any, index: number, lastIndex: number) => {
       if (response) {
         try {
-          let annotation = parseAnnotation(key, response, api);
+          let kind = response.kind || 'point';
+          let annotation = getDecoder(api, kind)(key, response);
+          // let annotation = parseAnnotation(key, response, api);
           if (annotation) {
             if (index === lastIndex) {
               annotation.source = `downloaded:last`;
@@ -278,32 +442,6 @@ function parseAnnotations(
   }
   chunk.data = Object.assign(new AnnotationGeometryData(), serializer.serialize());
 }
-
-// function getTopUrl(parameters: ClioSourceParameters) {
-//   return `${parameters.baseUrl}`;
-// }
-
-// function getClioUrl(parameters: ClioSourceParameters, path: string) {
-//   return getTopUrl(parameters) + path;
-// }
-
-/*
-function getAnnotationEndpoint(parameters: ClioSourceParameters) {
-  return parameters.kind === 'Atlas' ? 'atlas' : 'annotations';
-}
-
-function getElementsPath(parameters: ClioSourceParameters) {
-  return `/${getAnnotationEndpoint(parameters)}/${parameters.dataset}`;
-}
-
-function getAnnotationPath(parameters: ClioSourceParameters, position: ArrayLike<number|string>) {
-  return `${getElementsPath(parameters)}?x=${position[0]}&y=${position[1]}&z=${position[2]}`;
-}
-
-function getAnnotationUrl(parameters: ClioSourceParameters, position: ArrayLike<number|string>) {
-  return getClioUrl(parameters, getAnnotationPath(parameters, position));
-}
-*/
 
 @registerSharedObject() //
 export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeometryChunkSourceBackend, AnnotationChunkSourceParameters)) {
@@ -378,7 +516,8 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     return this.requestMetadata(chunk, cancellationToken).then(
       response => {
         if (response) {
-          chunk.annotation = parseAnnotation(chunk.key!, response, this.parameters.api);
+          chunk.annotation = getDecoder(this.parameters.api,response.kind)(chunk.key!, response);
+          // chunk.annotation = parseAnnotation(chunk.key!, response, this.parameters.api);
         } else {
           chunk.annotation = null;
         }
@@ -400,12 +539,17 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
         } else {
           return true;
         }
+      } else if (annotation.type == AnnotationType.LINE) {
+        if (parameters.api === 'v2' && parameters.kind !== 'Atlas') {
+          return true;
+        }
       }
     }
 
     return false;
   }
 
+  /*
   private encodePointAnnotationV2(annotation: ClioPointAnnotation): any {
     let obj: { [key: string]: any } = {
       kind: 'point',
@@ -519,10 +663,12 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
       return this.encodeAnnotationV1(annotation, user);
     }
   }
+  */
 
   private updateAnnotation(annotation: ClioAnnotation) {
     const { parameters } = this;
-    const encoded = this.encodeAnnotation(annotation, parameters.user, parameters.api);
+    const encoded = getEncoder(parameters.api, annotation.type)(annotation);
+    // const encoded = this.encodeAnnotation(annotation, parameters.user, parameters.api);
     let value = JSON.stringify(encoded);
 
     if (this.uploadable(annotation)) {
@@ -571,23 +717,32 @@ export class ClioAnnotationGeometryChunkSource extends (ClioSource(AnnotationGeo
     }
   }
 
+  makeDeleteRequest(id: AnnotationId) {
+    const clioInstance = new ClioInstance(this.parameters);
+    return makeRequestWithCredentials(
+      this.credentialsProvider,
+      {
+        method: 'DELETE',
+        url: clioInstance.getDeleteAnnotationUrl(id),
+        responseType: ''
+      }).then(response => {
+        annotationStore.remove(id);
+        return response;
+      });
+  }
+
   delete(id: AnnotationId) {
-    if (isAnnotationIdValid(id)) {
-      const clioInstance = new ClioInstance(this.parameters);
+    if (annotationStore.contains(id)) {
       switch (typeOfAnnotationId(id)) {
         case AnnotationType.POINT:
-          annotationStore.remove(id);
-          return makeRequestWithCredentials(
-            this.credentialsProvider,
-            {
-              method: 'DELETE',
-              url: clioInstance.getDeleteAnnotationUrl(id),
-              // url: getAnnotationUrl(parameters, id.split('_')),
-              responseType: ''
-            });
+          return this.makeDeleteRequest(id);
         case AnnotationType.LINE:
-          annotationStore.remove(id);
-          return Promise.resolve(id);
+          if (this.parameters.api === 'v2' && this.parameters.kind !== 'Atlas') {
+            return this.makeDeleteRequest(id);
+          } else {
+            annotationStore.remove(id);
+            return Promise.resolve(id);
+          }
         default:
           throw new Error(`Invalid annotation ID for DVID: ${id}`)
       }
