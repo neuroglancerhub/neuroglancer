@@ -163,7 +163,7 @@ function encodeV2Helper(annotation: ClioAnnotation) {
   const prop = { ...annotation.prop };
 
   if (annotation.kind === 'Atlas') {
-    obj.description = obj.description || '';
+    obj.description = annotationRef.description || '';
   } else if (annotationRef.description !== undefined) {
     obj.description = annotationRef.description;
   }
