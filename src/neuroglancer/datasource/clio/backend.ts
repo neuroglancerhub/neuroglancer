@@ -161,15 +161,15 @@ function encodeV2Helper(annotation: ClioAnnotation) {
   let annotationRef = new ClioAnnotationFacade(annotation);
 
   const prop = { ...annotation.prop };
-  if (annotationRef.description !== undefined) {
-    obj.description = annotationRef.description;
-  }
 
   if (annotation.kind === 'Atlas') {
     obj.description = obj.description || '';
-    obj.user = prop.user;
-    delete prop.user;
+  } else if (annotationRef.description !== undefined) {
+    obj.description = annotationRef.description;
   }
+
+  obj.user = prop.user;
+  delete prop.user;
 
   if (annotationRef.title !== undefined) {
     obj.title = annotationRef.title;
@@ -193,10 +193,14 @@ const encoder: any = {
 
       let annotationRef = new ClioPointAnnotationFacade(annotation);
 
+      const prop = { ...annotation.prop };
+      if (annotation.kind === 'Atlas') {
+        obj.description = annotationRef.description || '';
+        delete prop.comment;
+      }
+
       if (annotationRef.description !== undefined) {
         obj.description = annotationRef.description;
-      } else if (annotation.kind === 'Atlas') {
-        obj.description = '';
       }
 
       if (annotationRef.title !== undefined) {
@@ -207,14 +211,10 @@ const encoder: any = {
         obj.user = annotationRef.user;
       }
 
-      if (annotation.prop) {
-        let prop = {...annotation.prop};
-        delete prop.comment;
-        delete prop.user;
-        delete prop.title;
-        if (prop) {
-          obj.Prop = prop;
-        }
+      delete prop.user;
+      delete prop.title;
+      if (prop) {
+        obj.Prop = prop;
       }
 
       return obj;
@@ -271,6 +271,8 @@ const decoder: any = {
         let description = '';
         if ('description' in entry) {
           description = verifyObjectProperty(entry, 'description', verifyString);
+        } else if ('comment' in prop) {
+          description = verifyObjectProperty(prop, 'comment', verifyString);
         }
 
         let title = '';
@@ -343,7 +345,7 @@ function parseAnnotationV2(entry: any) : ClioAnnotation|null {
   const startPos = vec3.fromValues(pos[0], pos[1], pos[2]);
   if (kind === 'lineseg') {
     const endPos = vec3.fromValues(pos[3], pos[4], pos[5]);
-    return makeLineAnnotation(prop, startPos, endPos, group, description, user);
+    return makeLineAnnotation(prop, startPos, endPos, group, title, description, user);
   }
 
   return makePointAnnotation(prop, startPos, group, title, description, user);
