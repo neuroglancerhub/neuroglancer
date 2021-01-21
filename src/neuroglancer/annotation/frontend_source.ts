@@ -647,6 +647,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
         throw new Error(`Received invalid successful update notification`);
       }
       localUpdate.reference.id = newAnnotation.id;
+      localUpdate.reference.addRef();
       this.references.delete(id);
       this.references.set(newAnnotation.id, localUpdate.reference);
       this.localUpdates.delete(id);

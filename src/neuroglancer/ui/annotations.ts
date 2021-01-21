@@ -768,7 +768,7 @@ export class AnnotationLayerView extends Tab {
         if (maxCount > 0 && count >= maxCount) {
           e.element.style.display = 'none';
         } else {
-          let annotRef = state.source.getReference(e.id);
+          let annotRef = state.source.getReference(e.id, false);
           if (annotRef.value) {
             this.filterAnnotationElement(annotRef.value, e.element, filters);
           } else {
