@@ -264,6 +264,8 @@ const decoder: any = {
         }
         if ('Prop' in entry) {
           prop = verifyObjectProperty(entry, 'Prop', verifyObject);
+        } else if ('prop' in entry) {
+          prop = verifyObjectProperty(entry, 'prop', verifyObject);
         }
 
         let description = '';
@@ -279,9 +281,11 @@ const decoder: any = {
         let user = '';
         if ('user' in entry) {
           user = verifyObjectProperty(entry, 'user', verifyString);
+        } else if (prop.user) {
+          user = prop.user;
         }
 
-        return makePointAnnotation(prop, corner, undefined, title, description, user);
+        return makePointAnnotation(prop, corner, kind, title, description, user);
       }
     }, //point
   }, //v1

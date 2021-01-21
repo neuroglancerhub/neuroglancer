@@ -363,7 +363,7 @@ export class SelectedAnnotationState extends RefCounted implements
       return;
     }
     this.annotationLayer_ = newAnnotationLayer;
-    const reference = this.reference_ = newAnnotationLayer!.source.getReference(value.id);
+    const reference = this.reference_ = newAnnotationLayer!.source.getReference(value.id, false);
     reference.changed.add(this.referenceChanged);
     newAnnotationLayer.source.changed.add(this.validate);
     newAnnotationLayer.dataSource.layer.dataSourcesChanged.add(this.validate);
@@ -746,8 +746,8 @@ export class AnnotationLayerView extends Tab {
       let maxCount = -1;
       if (this.displayState.tableFilterByTime.value == FilterAnnotationByTimeType.RECENT) {
         listElementArray.sort((a, b) => {
-          let annotRef1 = state.source.getReference(a.id);
-          let annotRef2 = state.source.getReference(b.id);
+          let annotRef1 = state.source.getReference(a.id, false);
+          let annotRef2 = state.source.getReference(b.id, false);
           if (annotRef1.value && !annotRef2.value) {
             return -1;
           } else if (!annotRef2.value && annotRef1.value) {
@@ -1029,7 +1029,7 @@ export class AnnotationLayerView extends Tab {
 
     let timeElement = this.registerDisposer(new EnumSelectWidget(this.displayState.tableFilterByTime)).element;
     filterWidget.appendChild(timeElement);
-    
+
     this.element.appendChild(filterWidget);
 
     let filters = [
@@ -1253,20 +1253,20 @@ export class AnnotationLayerView extends Tab {
       info.sublistContainer.appendChild(this.makeAnnotationListElement(annotation, state));
     }
 
-    if (!state.source.getReference(annotation.id).value) {
+    if (!state.source.getReference(annotation.id, false).value) {
       state.source.setReferenceValue(annotation);
     }
 
-    if (this.displayState.tableFilterByTime.value === 
+    if (this.displayState.tableFilterByTime.value ===
       FilterAnnotationByTimeType.RECENT) {
-      if (state.source.getReference(annotation.id).value) {
+      if (state.source.getReference(annotation.id, false).value) {
         this.throttledUpdateTable();
       } else {
         this.resetOnUpdate();
       }
     } else {
       this.resetOnUpdate();
-    } 
+    }
   }
 
   private updateAnnotationElement(annotation: Annotation, state: AnnotationLayerState) {
@@ -1355,7 +1355,7 @@ export class AnnotationLayerView extends Tab {
       deleteButton = makeDeleteButton({
         title: 'Delete annotation',
         onClick: () => {
-          const ref = state.source.getReference(annotation.id);
+          const ref = state.source.getReference(annotation.id, false);
           try {
             state.source.delete(ref);
           } finally {
@@ -1404,7 +1404,7 @@ export class AnnotationLayerView extends Tab {
       maybeAddDeleteButton();
 
       //tmp hack for downloading annotation data
-      state.source.getReference(annotation.id);
+      state.source.getReference(annotation.id, false);
     };
     switch (annotation.type) {
       case AnnotationType.POINT:

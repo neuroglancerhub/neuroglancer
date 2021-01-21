@@ -440,6 +440,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       if (newAnnotation !== null) {
         // Add to temporary chunk.
         updateAnnotation(this.temporary.data!, newAnnotation, this.annotationPropertySerializer);
+        reference.value = newAnnotation;
       }
     } else {
       if (newAnnotation === null) {
@@ -527,10 +528,10 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     }
   }
 
-  getReference(id: AnnotationId): Owned<AnnotationReference> {
+  getReference(id: AnnotationId, addingRef = true): Owned<AnnotationReference> {
     let existing = this.references.get(id);
     if (existing !== undefined) {
-      return existing.addRef();
+      return addingRef ? existing.addRef() : existing;
     }
     existing = new AnnotationReference(id);
     this.references.set(id, existing);

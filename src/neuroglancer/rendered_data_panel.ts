@@ -607,7 +607,7 @@ export abstract class RenderedDataPanel extends RenderedPanel {
       const annotationLayer = mouseState.pickedAnnotationLayer;
       if (annotationLayer !== undefined && !annotationLayer.source.readonly &&
           selectedAnnotationId !== undefined) {
-        const ref = annotationLayer.source.getReference(selectedAnnotationId);
+        const ref = annotationLayer.source.getReference(selectedAnnotationId, false);
         try {
           annotationLayer.source.delete(ref);
         } finally {
