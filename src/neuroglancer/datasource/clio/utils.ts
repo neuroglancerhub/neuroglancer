@@ -38,7 +38,7 @@ export type ClioAnnotation = ClioPointAnnotation | ClioLineAnnotation;
 export function typeOfAnnotationId(id: AnnotationId) {
   if (id.match(/^-?\d+_-?\d+_-?\d+$/) || id.match(/^Pt-?\d+_-?\d+_-?\d+$/)) {
     return AnnotationType.POINT;
-  } else if (id.match(/^-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+-Line$/) || id.match(/^Ln-?\d+_-?\d+_-?\d+_?\d+_-?\d+_-?\d+$/)) {
+  } else if (id.match(/^-?\d+_-?\d+_-?\d+--?\d+_-?\d+_-?\d+-Line$/) || id.match(/^Ln-?\d+_-?\d+_-?\d+_-?\d+_-?\d+_-?\d+$/)) {
     return AnnotationType.LINE;
   } {
     console.log(`Invalid ID for Clio annotation: ${id}`);

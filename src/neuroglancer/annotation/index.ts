@@ -27,6 +27,8 @@ import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 
+const DEBUG = false;
+
 export type AnnotationId = string;
 
 export class AnnotationReference extends RefCounted {
@@ -43,14 +45,18 @@ export class AnnotationReference extends RefCounted {
   }
 
   addRef() {
-    console.log('INC ref', this);
+    if (DEBUG) {
+      console.log('INC ref', this);
+    }
     return super.addRef();
   }
 
   dispose() {
-    console.log('DEC ref', this);
-    if (this.refCount === 1) {
-      console.log('Deleting', this);
+    if (DEBUG) {
+      console.log('DEC ref', this);
+      if (this.refCount === 1) {
+        console.log('Deleting', this);
+      }
     }
     super.dispose();
   }
