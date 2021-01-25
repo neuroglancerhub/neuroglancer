@@ -29,7 +29,10 @@ import {DVIDPointAnnotation, DVIDLineAnnotation, DVIDAnnotationFacade, defaultJs
 //   prop: {[key: string]: string};
 // }
 
-export type ClioPointAnnotation = DVIDPointAnnotation;
+export interface ClioPointAnnotation extends DVIDPointAnnotation {
+  verified?: Boolean;
+}
+
 export type ClioLineAnnotation = DVIDLineAnnotation;
 
 export type ClioAnnotation = ClioPointAnnotation | ClioLineAnnotation;
@@ -140,7 +143,7 @@ export class ClioPointAnnotationFacade extends ClioAnnotationFacade {
   }
 
   get checked() {
-    return (this.prop && this.prop.verified) ? true : false;
+    return this.annotation.verified ? true : false;
   }
 
   get renderingAttribute(): number {

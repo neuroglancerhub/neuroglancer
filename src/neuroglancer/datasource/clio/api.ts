@@ -104,7 +104,7 @@ export class ClioInstance {
 
   getDeleteAnnotationUrl(id: string): string {
     if (this.hasPointQueryApi()) {
-      const tokens = id.match(/(\d+)_(\d+)_(\d+)/);
+      const tokens = id.match(/(-?\d+)_(-?\d+)_(-?\d+)/);
       if (tokens) {
         return this.getAnnotationUrl(tokens?.slice(1, 4))
       }
