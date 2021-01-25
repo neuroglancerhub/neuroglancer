@@ -139,9 +139,15 @@ export class ClioPointAnnotationFacade extends ClioAnnotationFacade {
     this.annotation.point = point;
   }
 
-  get renderingAttribute():number {
+  get checked() {
+    return (this.prop && this.prop.verified) ? true : false;
+  }
+
+  get renderingAttribute(): number {
     if (this.kind === 'Atlas') {
       if (!this.title) {
+        return -1;
+      } else if (this.checked) {
         return 1;
       }
     }

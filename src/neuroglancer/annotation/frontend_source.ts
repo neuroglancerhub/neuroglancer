@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationPropertySpec, AnnotationReference, AnnotationSourceSignals, AnnotationType, annotationTypes, fixAnnotationAfterStructuredCloning, getAnnotationTypeHandler, makeAnnotationId, SerializedAnnotations} from 'neuroglancer/annotation';
+import {Annotation, AnnotationId, AnnotationPropertySerializer, AnnotationPropertySpec, AnnotationReference, AnnotationSourceSignals, AnnotationType, annotationTypes, fixAnnotationAfterStructuredCloning, getAnnotationTypeHandler, makeAnnotationTmpId, SerializedAnnotations} from 'neuroglancer/annotation';
 import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID, ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, ANNOTATION_COMMIT_UPDATE_RPC_ID, ANNOTATION_GEOMETRY_CHUNK_SOURCE_RPC_ID, ANNOTATION_METADATA_CHUNK_SOURCE_RPC_ID, ANNOTATION_REFERENCE_ADD_RPC_ID, ANNOTATION_REFERENCE_DELETE_RPC_ID, ANNOTATION_SUBSET_GEOMETRY_CHUNK_SOURCE_RPC_ID, AnnotationGeometryChunkSpecification} from 'neuroglancer/annotation/base';
 import {getAnnotationTypeRenderHandler} from 'neuroglancer/annotation/type_handler';
 import {Chunk, ChunkManager, ChunkSource} from 'neuroglancer/chunk_manager/frontend';
@@ -401,7 +401,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   }
 
   add(annotation: Annotation, commit: boolean = true): AnnotationReference {
-    annotation.id = makeAnnotationId();
+    annotation.id = makeAnnotationTmpId();
     const reference = new AnnotationReference(annotation.id);
     reference.value = annotation;
     this.references.set(reference.id, reference);
@@ -511,14 +511,8 @@ export class MultiscaleAnnotationSource extends SharedObject implements
   }
 
   updateReference(annotation: Annotation) {
-    let existing = this.references.get(annotation.id);
-    if (existing !== undefined) {
-      existing.value = annotation;
-    } else {
-      let reference = new AnnotationReference(annotation.id);
-      this.references.set(annotation.id, reference);
-      reference.value = annotation;
-    }
+    const reference = this.getReference(annotation.id, false);
+    reference.value = annotation;
   }
 
   setReferenceValue(annotation: Annotation) {
@@ -678,6 +672,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
       if (added) {
         this.childAdded.dispatch(newAnnotation!);
       } else if (newAnnotation === null) {
+        this.getReference(id, false).dispose();
         this.childDeleted.dispatch(id);
       } else {
         this.childUpdated.dispatch(newAnnotation);
@@ -742,6 +737,8 @@ export class MultiscaleAnnotationSource extends SharedObject implements
     reference.dispose();
 
     this.localUpdates.delete(id);
+
+    // console.log('#References:', this.references.size);
   }
 
   // FIXME

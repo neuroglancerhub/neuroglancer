@@ -833,6 +833,14 @@ export function makeAnnotationId() {
   return getRandomHexString(160);
 }
 
+export function makeAnnotationTmpId() {
+  return 'tmp:' + makeAnnotationId();
+}
+
+export function isAnnotationTmpId(id: string) {
+  return id.startsWith('tmp:');
+}
+
 export function makeDataBoundsBoundingBoxAnnotation(box: BoundingBox): AxisAlignedBoundingBox {
   return {
     type: AnnotationType.AXIS_ALIGNED_BOUNDING_BOX,

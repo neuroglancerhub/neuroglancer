@@ -364,10 +364,15 @@ export class SelectedAnnotationState extends RefCounted implements
     }
     this.annotationLayer_ = newAnnotationLayer;
     const reference = this.reference_ = newAnnotationLayer!.source.getReference(value.id, false);
-    reference.changed.add(this.referenceChanged);
-    newAnnotationLayer.source.changed.add(this.validate);
-    newAnnotationLayer.dataSource.layer.dataSourcesChanged.add(this.validate);
-    this.changed.dispatch();
+    if (reference.value) {
+      reference.changed.add(this.referenceChanged);
+      newAnnotationLayer.source.changed.add(this.validate);
+      newAnnotationLayer.dataSource.layer.dataSourcesChanged.add(this.validate);
+      this.changed.dispatch();
+    } else {
+      this.unbindReference();
+      reference.dispose();
+    }
   });
 
   toJSON() {
@@ -1356,11 +1361,15 @@ export class AnnotationLayerView extends Tab {
         title: 'Delete annotation',
         onClick: () => {
           const ref = state.source.getReference(annotation.id, false);
+          state.source.delete(ref);
+          /*
+          const ref = state.source.getReference(annotation.id);
           try {
             state.source.delete(ref);
           } finally {
             ref.dispose();
           }
+          */
         },
       });
       deleteButton.classList.add('neuroglancer-annotation-list-entry-delete');
@@ -1405,20 +1414,23 @@ export class AnnotationLayerView extends Tab {
 
       //tmp hack for downloading annotation data
       state.source.getReference(annotation.id, false);
+
+      return position;
     };
+    let positionElement = null;
     switch (annotation.type) {
       case AnnotationType.POINT:
-        addPositionRow(annotation.point);
+        positionElement = addPositionRow(annotation.point);
         break;
       case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
       case AnnotationType.LINE:
       case AnnotationType.SPHERE:
-        addPositionRow(annotation.pointA);
-        addPositionRow(annotation.pointB);
+        positionElement = addPositionRow(annotation.pointA);
+        positionElement = addPositionRow(annotation.pointB);
         break;
       case AnnotationType.ELLIPSOID:
-        addPositionRow(annotation.center);
-        addPositionRow(annotation.radii, /*isVector=*/ true);
+        positionElement =addPositionRow(annotation.center);
+        positionElement = addPositionRow(annotation.radii, /*isVector=*/ true);
         break;
     }
 
@@ -1439,14 +1451,19 @@ export class AnnotationLayerView extends Tab {
 
     const info = this.attachedAnnotationStates.get(state)!;
     info.listElements.set(annotation.id, element);
-    element.addEventListener('mouseenter', () => {
+    const hoverAction = () => {
       this.displayState.hoverState.value = {
         id: annotation.id,
         partIndex: 0,
         annotationLayerState: state,
       };
-    });
-    element.addEventListener('click', () => {
+    };
+    positionElement.addEventListener('mouseenter', hoverAction);
+    if (deleteButton !== undefined) {
+      deleteButton.addEventListener('mouseenter', hoverAction);
+    }
+
+    positionElement.addEventListener('click', () => {
       this.state.value = {
         id: annotation.id,
         partIndex: 0,
@@ -1455,7 +1472,7 @@ export class AnnotationLayerView extends Tab {
       };
     });
 
-    element.addEventListener('mouseup', (event: MouseEvent) => {
+    positionElement.addEventListener('mouseup', (event: MouseEvent) => {
       if (event.button === 2) {
         const {layerRank} = chunkTransform;
         const chunkPosition = new Float32Array(layerRank);

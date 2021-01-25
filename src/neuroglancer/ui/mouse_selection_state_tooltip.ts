@@ -22,7 +22,7 @@
 import './mouse_selection_state_tooltip.css';
 
 import debounce from 'lodash/debounce';
-import {Annotation, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, getAnnotationTypeHandler} from 'neuroglancer/annotation';
+import {Annotation, AnnotationReference, AnnotationType, AxisAlignedBoundingBox, getAnnotationTypeHandler, isAnnotationTmpId} from 'neuroglancer/annotation';
 import {AnnotationLayerState} from 'neuroglancer/annotation/annotation_layer_state';
 import {getSelectedAnnotation} from 'neuroglancer/annotation/selection';
 import {CoordinateSpace} from 'neuroglancer/coordinate_transform';
@@ -96,6 +96,11 @@ export class MouseSelectionStateTooltipManager extends RefCounted {
     if (coordinateSpace === undefined) {
       return false;
     }
+
+    if (isAnnotationTmpId(state.id)) {
+      return false;
+    }
+
     let {tooltip} = this;
     if (tooltip === undefined) {
       tooltip = this.tooltip = new Tooltip();
