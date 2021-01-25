@@ -95,6 +95,23 @@ export class ClioAnnotationFacade extends DVIDAnnotationFacade {
   set user(value: string) {
     super.addProp({'user': value});
   }
+
+  get checked() {
+    if (this.annotation.type === AnnotationType.POINT) {
+      return this.annotation.verified ? true : false;
+    }
+
+    return super.checked;
+  }
+
+  set checked(value: boolean) {
+    if (this.annotation.type === AnnotationType.POINT) {
+      this.annotation.verified = value;
+      this.updateProperties();
+    } else {
+      super.checked = value;
+    }
+  }
 }
 
 export function parseDescription(description: string)
@@ -140,10 +157,6 @@ export class ClioPointAnnotationFacade extends ClioAnnotationFacade {
 
   set point(point: Float32Array) {
     this.annotation.point = point;
-  }
-
-  get checked() {
-    return this.annotation.verified ? true : false;
   }
 
   get renderingAttribute(): number {

@@ -28,7 +28,7 @@ import {ANNOTAIION_COMMIT_ADD_SIGNAL_RPC_ID} from 'neuroglancer/annotation/base'
 import {ChunkSourceParametersConstructor} from 'neuroglancer/chunk_manager/base';
 import {WithSharedCredentialsProviderCounterpart} from 'neuroglancer/credentials_provider/shared_counterpart';
 import {parseAnnotation as parseDvidAnnotation} from 'neuroglancer/datasource/dvid/backend';
-import {verifyObject, verifyObjectProperty, parseIntVec, verifyString} from 'neuroglancer/util/json';
+import {verifyObject, verifyObjectProperty, parseIntVec, verifyString, verifyBoolean} from 'neuroglancer/util/json';
 import {vec3} from 'neuroglancer/util/geom';
 import {AnnotationSourceParameters, AnnotationChunkSourceParameters} from 'neuroglancer/datasource/clio/base';
 import {ClioToken, makeRequestWithCredentials, ClioInstance} from 'neuroglancer/datasource/clio/api';
@@ -166,6 +166,10 @@ function encodeV2Helper(annotation: ClioAnnotation) {
     obj.description = annotationRef.description || '';
   } else if (annotationRef.description !== undefined) {
     obj.description = annotationRef.description;
+  }
+
+  if (annotationRef.checked) {
+    obj.verified = annotationRef.checked;
   }
 
   obj.user = prop.user;
@@ -348,7 +352,12 @@ function parseAnnotationV2(entry: any) : ClioAnnotation|null {
     return makeLineAnnotation(prop, startPos, endPos, group, title, description, user);
   }
 
-  return makePointAnnotation(prop, startPos, group, title, description, user);
+  const annotation = makePointAnnotation(prop, startPos, group, title, description, user);
+  if ('verified' in entry) {
+    (new ClioPointAnnotationFacade(annotation)).checked = verifyObjectProperty(entry, 'verified', verifyBoolean);
+  }
+
+  return annotation;
 }
 /*
 function parseAnnotation(key: string, entry: any, api: string|undefined) : ClioAnnotation|null {

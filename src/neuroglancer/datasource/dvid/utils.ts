@@ -101,6 +101,11 @@ export class DVIDAnnotationFacade {
     return (this.prop && this.prop.checked === '1') ? true : false;
   }
 
+  set checked(value: boolean) {
+    this.setChecked(value);
+    this.updateProperties();
+  }
+
   getBooleanProperty(s: boolean) {
     return s ? '1' : '0';
   }
