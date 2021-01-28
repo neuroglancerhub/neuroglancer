@@ -577,6 +577,11 @@ export class AnnotationLayerView extends Tab {
         refCounted.registerDisposer(source.childDeleted.add(
           (annotationId) => this.deleteAnnotationElement(annotationId, state)));
       }
+      if (source.childRefreshed) {
+        refCounted.registerDisposer(source.childRefreshed.add(() => {
+          this.clearAnnotationListElements(state);
+        }))
+      }
 
       refCounted.registerDisposer(state.transform.changed.add(this.forceUpdateView));
 
@@ -1326,8 +1331,11 @@ export class AnnotationLayerView extends Tab {
     }
   }
 
-  clearAnnotationListElements() {
-    // removeChildren(this.annotationListContainer);
+  clearAnnotationListElements(state: AnnotationLayerState) {
+    const attached = this.attachedAnnotationStates.get(state);
+    if (attached) {
+      removeChildren(attached.sublistContainer);
+    }
     // this.annotationListElements.clear()
   }
 

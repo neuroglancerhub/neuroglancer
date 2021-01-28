@@ -27,7 +27,7 @@ import {getRandomHexString} from 'neuroglancer/util/random';
 import {NullarySignal, Signal} from 'neuroglancer/util/signal';
 import {Uint64} from 'neuroglancer/util/uint64';
 
-const DEBUG = false;
+const DEBUG = true;
 
 export type AnnotationId = string;
 

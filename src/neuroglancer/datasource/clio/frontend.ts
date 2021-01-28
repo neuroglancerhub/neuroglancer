@@ -292,6 +292,12 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
   }
 
   invalidateCache() {
+    this.references.forEach(reference => {
+      reference.dispose();
+    });
+    this.references.clear();
+    this.childRefreshed.dispatch();
+
     this.metadataChunkSource.invalidateCache();
     for (let sources1 of this.getSources({
       multiscaleToViewTransform: new Float32Array(),
@@ -305,7 +311,6 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
     for (let source of this.segmentFilteredSources) {
       source.invalidateCache();
     }
-    this.childRefreshed.dispatch();
   }
 }
 

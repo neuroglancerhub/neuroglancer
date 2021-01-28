@@ -738,7 +738,7 @@ export class MultiscaleAnnotationSource extends SharedObject implements
 
     this.localUpdates.delete(id);
 
-    // console.log('#References:', this.references.size);
+    console.log('#References:', this.references.size);
   }
 
   // FIXME

@@ -166,8 +166,8 @@ class LayerWidget extends RefCounted {
   prevValueText: string = '';
 
   private allowingRefresh(_layer: ManagedUserLayer): boolean {
-    return false;
-    // return (layer.initialSpecification.type === 'annotation');
+    // return false;
+    return (_layer.initialSpecification.type === 'annotation');
   }
 
   private allowingClose(_layer: ManagedUserLayer): boolean {
@@ -193,7 +193,7 @@ class LayerWidget extends RefCounted {
     this.registerEventListener(refreshElement, 'click', (event: MouseEvent) => {
       event.stopPropagation();
       let url = this.layer.layer!.dataSources[0].spec.url!;
-      
+
       let options: GetDataSourceOptionsBase = {chunkManager: this.layer.manager.chunkManager, url: url, transform: undefined, globalCoordinateSpace: this.layer.manager.root.coordinateSpace};
       this.layer.manager.dataSourceProviderRegistry.get(options).then((source: DataSource) => {
         const annotationSource = source.subsources[0].subsource.annotation!;
