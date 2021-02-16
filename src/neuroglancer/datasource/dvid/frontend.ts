@@ -97,7 +97,7 @@ class DVIDMeshSource extends
     if (defaultMeshService) {
       let { parameters } = this;
       let dvidInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
-      
+
       try {
         try {
           let mergedUrl = dvidInstance.getKeyValueUrl(parameters.dataInstanceKey, id + '.merge');
@@ -108,7 +108,7 @@ class DVIDMeshSource extends
               url: mergedUrl,
               responseType: ''
             });
-  
+
           await makeRequestWithCredentials(
             this.credentialsProvider,
             {
@@ -126,7 +126,7 @@ class DVIDMeshSource extends
               url: meshUrl,
               responseType: ''
             });
-  
+
           await makeRequestWithCredentials(
             this.credentialsProvider,
             {
@@ -149,7 +149,7 @@ class DVIDAnnotationChunkSource extends
 (WithParameters(WithCredentialsProvider<DVIDToken>()(AnnotationGeometryChunkSource), AnnotationChunkSourceParameters)) {}
 
 export class AnnotationDataInstanceInfo extends DataInstanceInfo {
-  
+
 
   get extended() {
     return verifyObjectProperty(this.obj, 'Extended', verifyObject);
@@ -242,7 +242,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
         x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
     this.blockSize = verifyObjectProperty(
       extended, 'BlockSize',
-      x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));    
+      x => parseFixedLengthArray(vec3.create(), x, verifyFinitePositiveFloat));
     this.lowerVoxelBound =
         verifyObjectProperty(extended, 'MinPoint', x => parseIntVec(vec3.create(), x));
     this.upperVoxelBoundInclusive =
@@ -595,7 +595,7 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
                   annot += ':' + type;
                 }
                 let status = ('status' in response) ? response['status'] : '';
-      
+
                 if (status) {
                   annot += ', ' + status;
                 }
@@ -631,7 +631,8 @@ const urlPattern = /^([^\/]+:\/\/[^\/]+)\/([^\/]+)\/([^\/\?]+)(\?.*)?$/;
 
 function getDefaultAuthServer(baseUrl: string) {
   if (baseUrl.startsWith('https')) {
-    return baseUrl + '/api/server/token';
+    return undefined; //Disable https token requirement. Need a better check or switch to the new neuroglancer branch.
+    // return baseUrl + '/api/server/token';
   } else {
     return undefined;
   }
@@ -835,7 +836,7 @@ function getSchema(parameters: AnnotationSourceParameters) {
 
 function bodyArrayToJson(bodyArray: Array<string>)
 {
-  return `[${bodyArray.join()}]`; 
+  return `[${bodyArray.join()}]`;
 }
 
 function getCredentialsProvider(authServer: AuthType) {
@@ -847,7 +848,7 @@ function getCredentialsProvider(authServer: AuthType) {
 }
 
 async function uploadMergedMesh(
-  meshUrl: string, bodyArray: Array<string>, user: string | null | undefined, credentialsProvider: CredentialsProvider<DVIDToken>) 
+  meshUrl: string, bodyArray: Array<string>, user: string | null | undefined, credentialsProvider: CredentialsProvider<DVIDToken>)
 {
   try {
     let response = await makeRequestWithCredentials(
@@ -974,7 +975,7 @@ export async function mergeBodies(dvidInstance: DVIDInstance, dataInstanceKey: s
       } catch (e) {
         uploadMergedMesh(meshUrl, newBodyArray, user, tokenProvider);
       }
-      
+
       return newBodyArray;
     });
 }
@@ -999,7 +1000,7 @@ function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (a
   let sourceParameters = parseSourceUrl(options.providerUrl);
 
   const {baseUrl, nodeKey, dataInstanceKey} = sourceParameters;
-  
+
   return options.chunkManager.memoize.getUncounted(
       {
         type: 'dvid:MultiscaleVolumeChunkSource',
@@ -1053,7 +1054,7 @@ function getDataSource(options: GetDataSourceOptions, getCredentialsProvider: (a
           annotationSourceParameters.usertag = userTagged(sourceParameters);
 
           // let annotationDataInstanceInfo = await getAnnotationDataInstanceDetails(options.chunkManager, sourceParameters, dataInstanceInfo, credentialsProvider);
-          
+
           return getAnnotationSource(options, annotationSourceParameters, dataInstanceInfo, credentialsProvider);
         } else {
           if (!(dataInstanceInfo instanceof VolumeDataInstanceInfo)) {
@@ -1114,9 +1115,11 @@ export async function completeUrl(options: CompleteUrlOptions, getCredentialsPro
   }
   let baseUrl = match[1];
   let path = match[2];
+  /*
   if (!auth && baseUrl.startsWith('https')) {
     auth = `${baseUrl}/api/server/token`;
   }
+  */
 
   const serverInfo = await getServerInfo(options.chunkManager, baseUrl, getCredentialsProvider(auth));
   return applyCompletionOffset(baseUrl.length + 1, completeNodeAndInstance(serverInfo, path));
@@ -1312,13 +1315,13 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     /*
 
     let sourceSpecifications = makeAnnotationGeometrySourceSpecifications(this.multiscaleVolumeInfo, options.parameters);
-    
+
     this.sources = sourceSpecifications.map(
       alternatives =>
           alternatives.map(({spec, chunkToMultiscaleTransform}) => ({
             chunkSource: this.chunkManager.getChunkSource(DVIDAnnotationChunkSource, {
-              spec: {limit: 1e9, ...spec}, 
-              parent: this, 
+              spec: {limit: 1e9, ...spec},
+              parent: this,
               credentialsProvider: this.credentialsProvider,
               parameters: this.parameters
             }), chunkToMultiscaleTransform})));
@@ -1345,7 +1348,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     if (this.parameters.readonly !== undefined) {
       this.readonly = this.parameters.readonly;
     }
-  
+
     if (!this.parameters.user || !this.parameters.usertag) {
       this.readonly = true;
     }
@@ -1353,11 +1356,11 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.makeEditWidget = (reference: AnnotationReference) => {
       return makeAnnotationEditWidget(reference, this.parameters.schema, this);
     };
-    
+
     /*
     this.makeEditWidget = (reference: AnnotationReference) => {
       const annotation = reference.value!;
-      
+
       if (annotation.type !== AnnotationType.POINT && annotation.type !== AnnotationType.SPHERE &&
       annotation.type !== AnnotationType.LINE) {
         return null;
@@ -1399,7 +1402,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
         }
         // let newAnnotation: DVIDPointAnnotation = <DVIDPointAnnotation>(annotation);
 
-        
+
         annotation.description = getAnnotationDescription(<DVIDAnnotation>annotation);
         this.update(reference, annotation);
         this.commit(reference);
@@ -1415,7 +1418,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
       element.addEventListener('change', (e: Event) => {
         console.log(e);
       });
-      
+
       return element;
     };
   }
@@ -1438,7 +1441,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
             parent: this,
             credentialsProvider: this.credentialsProvider,
             parameters: this.parameters
-          }), 
+          }),
           chunkToMultiscaleTransform
         })));
 
@@ -1483,7 +1486,7 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     if (annotation.type === AnnotationType.POINT) {
       let annotationRef = new DVIDPointAnnotationFacade(<DVIDPointAnnotation>annotation);
       annotationRef.kind = 'Note';
-      
+
       // (<DVIDPointAnnotation>annotation).kind = 'Note';
       annotation.point = annotation.point.map(x => Math.round(x));
       annotationRef.setCustom(true);

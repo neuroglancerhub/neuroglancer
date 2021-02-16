@@ -166,8 +166,8 @@ class LayerWidget extends RefCounted {
   prevValueText: string = '';
 
   private allowingRefresh(_layer: ManagedUserLayer): boolean {
-    // return false;
-    return (_layer.initialSpecification.type === 'annotation');
+    return false;
+    // return (_layer.initialSpecification.type === 'annotation');
   }
 
   private allowingClose(_layer: ManagedUserLayer): boolean {
