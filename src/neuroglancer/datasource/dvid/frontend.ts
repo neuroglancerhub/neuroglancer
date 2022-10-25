@@ -506,7 +506,7 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
     const {dvidService} = this.sourceParameters;
     if (dvidService) {
       // dvid=${dvidConfig.protocol}://${dvidConfig.host}&uuid=${dvidConfig.uuid}&${(user ? `&u=${user}` : '')}
-      return fetch(`${dvidService}/locate-body?dvid=${this.baseUrl}&uuid=${this.nodeKey}&body=${id.toString()}${this.supervoxels ? '&supervoxels=true' : ''}`, {
+      return fetch(`${dvidService}/locate-body?dvid=${this.baseUrl}&uuid=${this.nodeKey}&segmentation=${this.dataInstanceKey}&body=${id.toString()}${this.supervoxels ? '&supervoxels=true' : ''}`, {
         method: 'GET',
       }).then((response) => response.json()).then((location) => new Float32Array(location));
     };
