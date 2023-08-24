@@ -101,8 +101,8 @@ export function makeRequest(
 export function makeRequest(
     httpCall: HttpCall&{responseType: XMLHttpRequestResponseType},
     cancellationToken: CancellationToken = uncancelableToken): any {
-  let requestInfo = `${httpCall.url}`;
-  let init = {method: httpCall.method, body: httpCall.payload};
+  const requestInfo = `${httpCall.url}`;
+  const init = {method: httpCall.method, body: httpCall.payload};
 
   if (httpCall.responseType === '') {
     return cancellableFetchOk(requestInfo, init, responseText, cancellationToken);
@@ -145,7 +145,7 @@ export function fetchWithDVIDCredentials<T>(
   return fetchWithCredentials(
       credentialsProvider, input, init, transformResponse,
       (credentials: DVIDToken, init: RequestInit) => {
-        let newInit: RequestInit = {...init};
+        const newInit: RequestInit = {...init};
         if (credentials.token) {
           newInit.headers = {...newInit.headers, Authorization: `Bearer ${credentials}`};
         }
@@ -169,7 +169,7 @@ export function fetchWithDVIDCredentials<T>(
 export function fetchMeshDataFromService(parameters: MeshSourceParameters,fragmentId: string, cancellationToken?: CancellationToken) {
   const {dvidService} = parameters;
   if (dvidService) {
-    const serviceUrl = `${dvidService}/small-mesh?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${fragmentId}&segmentation=${parameters.segmentationName}${parameters.user ? `&u=${parameters.user}` : ''}`;
+    const serviceUrl = `${dvidService}/small-mesh?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${fragmentId}&segmentation=${parameters.segmentationName}${parameters.user ? `&u=${parameters.user}` : ''}${parameters.supervoxels ? '&supervoxels=true' : ''}`;
     // console.log('Fetching mesh from ' + serviceUrl);
     return makeRequest({
       method: 'GET',

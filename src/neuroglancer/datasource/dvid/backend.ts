@@ -76,14 +76,15 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 @registerSharedObject() export class DVIDMeshSource extends
 (DVIDSource(MeshSource, MeshSourceParameters)) {
   download(chunk: ManifestChunk) {
-    if (this.parameters.supervoxels) {
-      chunk.fragmentIds = [];
-    } else {
-      // DVID does not currently store meshes chunked, the main
-      // use-case is for low-resolution 3D views.
-      // for now, fragmentId is the body id
-      chunk.fragmentIds = [`${chunk.objectId}`];
-    }
+    // Note: The conditional supervoxels parameter check was removed to allow
+    // the small-mesh service to load meshes. Code in the downloadFragment
+    // method was altered to force the use of the small mesh service if the
+    // supervoxels parameter is true.
+
+    // DVID does not currently store meshes chunked, the main
+    // use-case is for low-resolution 3D views.
+    // for now, fragmentId is the body id
+    chunk.fragmentIds = [`${chunk.objectId}`];
     return Promise.resolve(undefined);
   }
 
@@ -94,8 +95,10 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
       const dvidInstance = new DVIDInstance(parameters.baseUrl, parameters.nodeKey);
       const meshUrl = dvidInstance.getKeyValueUrl(parameters.dataInstanceKey, `${fragmentId}.ngmesh`);
 
-      const {forceDvidService} = parameters;
-      if (forceDvidService) {
+      const { forceDvidService, supervoxels } = parameters;
+      // DVID should never load meshes for supervoxels, so if that parameter is
+      // true, then we should always use the small mesh service.
+      if (forceDvidService || supervoxels ) {
         return fetchMeshDataFromService(parameters, fragmentId, cancellationToken
         ).then(
           response => decodeFragmentChunk(chunk, response)

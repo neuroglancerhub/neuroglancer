@@ -510,7 +510,7 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
       }).then((response) => response.json()).then((location) => new Float32Array(location));
     }
 
-    return Promise.reject('No locate service is avialable');
+    return Promise.reject('No locate service is available');
   }
 
   getSources(volumeSourceOptions: VolumeSourceOptions) {
