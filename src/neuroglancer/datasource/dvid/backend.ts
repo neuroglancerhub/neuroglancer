@@ -119,14 +119,6 @@ export function decodeFragmentChunk(chunk: FragmentChunk, response: ArrayBuffer)
 
     throw new Error('Invalid mesh fragment ID.');
 
-    /*
-    return makeRequestWithCredentials(this.credentialsProvider, {
-          method: 'GET',
-          url: appendQueryStringForDvid(meshUrl, parameters.user),
-          responseType: 'arraybuffer'
-        }, cancellationToken)
-        .then(response => decodeFragmentChunk(chunk, response));
-    */
   }
 }
 
