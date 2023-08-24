@@ -159,21 +159,21 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
   getSources(
       chunkManager: ChunkManager, parameters: DVIDSourceParameters,
       volumeSourceOptions: VolumeSourceOptions, credentialsProvider: CredentialsProvider<DVIDToken>) {
-    let {encoding} = this;
-    let sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
+    const {encoding} = this;
+    const sources: SliceViewSingleResolutionSource<VolumeChunkSource>[][] = [];
 
     // must be 64 block size to work with neuroglancer properly
-    let blocksize = 64;
+    const blocksize = 64;
     for (let level = 0; level < this.numLevels; ++level) {
       const downsampleFactor = Math.pow(2, level);
       const invDownsampleFactor = Math.pow(2, -level);
-      let lowerVoxelBound = vec3.create();
-      let upperVoxelBound = vec3.create();
+      const lowerVoxelBound = vec3.create();
+      const upperVoxelBound = vec3.create();
       for (let i = 0; i < 3; ++i) {
-        let lowerVoxelNotAligned = Math.floor(this.lowerVoxelBound[i] * invDownsampleFactor);
+        const lowerVoxelNotAligned = Math.floor(this.lowerVoxelBound[i] * invDownsampleFactor);
         // adjust min to be a multiple of blocksize
         lowerVoxelBound[i] = lowerVoxelNotAligned - (lowerVoxelNotAligned % blocksize);
-        let upperVoxelNotAligned = Math.ceil(this.upperVoxelBound[i] * invDownsampleFactor);
+        const upperVoxelNotAligned = Math.ceil(this.upperVoxelBound[i] * invDownsampleFactor);
         upperVoxelBound[i] = upperVoxelNotAligned;
         // adjust max to be a multiple of blocksize
         if ((upperVoxelNotAligned % blocksize) !== 0) {
@@ -188,7 +188,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
         }
       }
 
-      let volParameters: VolumeChunkSourceParameters = {
+      const volParameters: VolumeChunkSourceParameters = {
         ...parameters,
         dataInstanceKey,
         dataScale: level.toString(),
@@ -199,7 +199,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
         chunkToMultiscaleTransform[5 * i] = downsampleFactor;
         chunkToMultiscaleTransform[12 + i] = lowerVoxelBound[i] * downsampleFactor;
       }
-      let alternatives =
+      const alternatives =
           makeDefaultVolumeChunkSpecifications({
             rank: 3,
             chunkToMultiscaleTransform,
@@ -505,11 +505,10 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
   getSegmentPosition?(id: Uint64): Promise<Float32Array> {
     const {dvidService} = this.sourceParameters;
     if (dvidService) {
-      // dvid=${dvidConfig.protocol}://${dvidConfig.host}&uuid=${dvidConfig.uuid}&${(user ? `&u=${user}` : '')}
       return fetch(`${dvidService}/locate-body?dvid=${this.baseUrl}&uuid=${this.nodeKey}&segmentation=${this.dataInstanceKey}&body=${id.toString()}${this.supervoxels ? '&supervoxels=true' : ''}`, {
         method: 'GET',
       }).then((response) => response.json()).then((location) => new Float32Array(location));
-    };
+    }
 
     return Promise.reject('No locate service is avialable');
   }
