@@ -1,6 +1,7 @@
 import {bindDefaultCopyHandler, bindDefaultPasteHandler} from 'neuroglancer/ui/default_clipboard_handling';
 import {setDefaultInputEventBindings} from 'neuroglancer/ui/default_input_event_bindings';
 import {makeMinimalViewer} from 'neuroglancer/ui/minimal_viewer';
+import {disableContextMenu} from 'neuroglancer/ui/disable_default_actions';
 // import {UrlHashBinding} from 'neuroglancer/ui/url_hash_binding';
 
 import 'neuroglancer/datasource/dvid/register_credentials_provider';
@@ -61,6 +62,8 @@ export function setupDefaultViewer(options: {
 
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
+
+  disableContextMenu(options.target);
 
   return viewer;
 }

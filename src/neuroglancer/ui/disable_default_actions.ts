@@ -20,8 +20,8 @@ import {registerEventListener} from 'neuroglancer/util/disposable';
  * Prevent context menu on right click, as this interferes with other event handlers for right mouse
  * clicks.
  */
-export function disableContextMenu() {
-  return registerEventListener(document, 'contextmenu', (e: Event) => {
+export function disableContextMenu(target: HTMLElement | Document = document) {
+  return registerEventListener(target, 'contextmenu', (e: Event) => {
     e.preventDefault();
   });
 }
