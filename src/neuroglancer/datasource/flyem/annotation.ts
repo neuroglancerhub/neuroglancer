@@ -93,8 +93,12 @@ export class AnnotationFacade {
     return 0;
   }
 
+  get confidence() : number {
+    return 0
+  }
+
   updateProperties() {
-    this.annotation.properties = [this.renderingAttribute];
+    this.annotation.properties = [this.renderingAttribute, this.confidence];
   }
 
   get ext() {

@@ -25,4 +25,12 @@ export class DVIDAnnotationFacade extends AnnotationFacade {
 
     return 0;
   }
+  get confidence() {
+    if (this.kind === 'PreSyn' || this.kind === "PostSyn") {
+        if (this.prop && this.prop.conf) {
+            return parseFloat(this.prop.conf);
+        }
+    }
+    return 0;
+  }
 }

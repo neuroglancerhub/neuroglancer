@@ -871,7 +871,17 @@ export function getDataSource(options: GetDataSourceOptions): Promise<DataSource
             min: 0,
             max: 5,
             step: 1
-          }];
+          },
+          {
+            identifier: 'confidence',
+            description: 'confidence',
+            type: 'float32',
+            default: 0.0,
+            min: 0.0,
+            max: 1.0,
+            step: 0.01
+          }
+        ];
 
           return getAnnotationSource(options, annotationSourceParameters, dataInstanceInfo, credentialsProvider);
         } else {
