@@ -22,6 +22,7 @@ import {
   DVIDInstance,
   fetchWithDVIDCredentials,
   appendQueryStringForDvid,
+  fetchMeshDataFromService,
 } from "#src/datasource/dvid/api.js";
 import {
   MeshSourceParameters,
@@ -66,6 +67,11 @@ export class DVIDSkeletonSource extends DVIDSource(
 ) {
   download(chunk: SkeletonChunk, signal: AbortSignal) {
     const { parameters } = this;
+    // DVID does not store skeletons for supervoxels
+    if (parameters.supervoxels) {
+      return Promise.reject();
+    }
+
     const bodyid = `${chunk.objectId}`;
     const url =
       `${parameters.baseUrl}/api/node/${parameters.nodeKey}` +
@@ -110,6 +116,11 @@ export class DVIDMeshSource extends DVIDSource(
   MeshSourceParameters,
 ) {
   download(chunk: ManifestChunk) {
+    // Note: The conditional supervoxels parameter check was removed to allow
+    // the small-mesh service to load meshes. Code in the downloadFragment
+    // method was altered to force the use of the small mesh service if the
+    // supervoxels parameter is true.
+
     // DVID does not currently store meshes chunked, the main
     // use-case is for low-resolution 3D views.
     // for now, fragmentId is the body id
@@ -118,25 +129,45 @@ export class DVIDMeshSource extends DVIDSource(
   }
 
   downloadFragment(chunk: FragmentChunk, signal: AbortSignal) {
-    const { parameters } = this;
-    const dvidInstance = new DVIDInstance(
-      parameters.baseUrl,
-      parameters.nodeKey,
-    );
-    const meshUrl = dvidInstance.getKeyValueUrl(
-      parameters.dataInstanceKey,
-      `${chunk.fragmentId}.ngmesh`,
-    );
+    const { fragmentId } = chunk;
+    if (fragmentId) {
+      const { parameters } = this;
+      const dvidInstance = new DVIDInstance(
+        parameters.baseUrl,
+        parameters.nodeKey,
+      );
+      const meshUrl = dvidInstance.getKeyValueUrl(
+        parameters.dataInstanceKey,
+        `${fragmentId}.ngmesh`,
+      );
 
-    return fetchWithDVIDCredentials(
-      this.credentialsProvider,
-      appendQueryStringForDvid(meshUrl, parameters.user),
-      {
-        signal: signal,
-      },
-    )
-      .then((response) => response.arrayBuffer())
-      .then((response) => decodeFragmentChunk(chunk, response));
+      const { forceDvidService, supervoxels } = parameters;
+      // DVID should never load meshes for supervoxels, so if that parameter is
+      // true, then we should always use the small mesh service.
+      if (forceDvidService || supervoxels) {
+        return fetchMeshDataFromService(parameters, fragmentId, signal)
+          .then((response) => decodeFragmentChunk(chunk, response))
+          .catch((error) => {
+            console.log(error);
+          });
+      }
+
+      return fetchWithDVIDCredentials(
+        this.credentialsProvider,
+        appendQueryStringForDvid(meshUrl, parameters.user),
+        {
+          signal: signal,
+        },
+      )
+        .then((response) => response.arrayBuffer())
+        .catch(() => fetchMeshDataFromService(parameters, fragmentId, signal))
+        .then((response) => decodeFragmentChunk(chunk, response))
+        .catch((error) => {
+          console.log(error);
+        });
+    }
+
+    throw new Error("Invalid mesh fragment ID.");
   }
 }
 

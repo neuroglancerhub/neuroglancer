@@ -24,6 +24,13 @@ import { RefCounted } from "#src/util/disposable.js";
 import type { GL } from "#src/webgl/context.js";
 import { RPC } from "#src/worker_rpc.js";
 
+// Global configuration for worker URLs (set by consuming apps via Viewer bundleRoot option)
+declare global {
+  interface Window {
+    __NEUROGLANCER_CHUNK_WORKER_URL__?: string;
+  }
+}
+
 export class DataManagementContext extends RefCounted {
   worker: Worker;
   chunkQueueManager: ChunkQueueManager;
@@ -38,14 +45,25 @@ export class DataManagementContext extends RefCounted {
     public frameNumberCounter: FrameNumberCounter,
   ) {
     super();
-    // Note: For compatibility with multiple bundlers, a browser-compatible URL
-    // must be used with `new URL`, which means a Node.js subpath import like
-    // "#src/chunk_worker.bundle.js" cannot be used.
-    this.worker = new Worker(
-      /* webpackChunkName: "neuroglancer_chunk_worker" */
-      new URL("./chunk_worker.bundle.js", import.meta.url),
-      { type: "module" },
-    );
+    // For library builds, the global __NEUROGLANCER_CHUNK_WORKER_URL__ can be set
+    // (via Viewer's bundleRoot option) to point to where the worker bundle is served.
+    if (
+      typeof window !== "undefined" &&
+      window.__NEUROGLANCER_CHUNK_WORKER_URL__
+    ) {
+      this.worker = new Worker(window.__NEUROGLANCER_CHUNK_WORKER_URL__, {
+        type: "module",
+      });
+    } else {
+      // Note: For compatibility with multiple bundlers, a browser-compatible URL
+      // must be used with `new URL`, which means a Node.js subpath import like
+      // "#src/chunk_worker.bundle.js" cannot be used.
+      this.worker = new Worker(
+        /* webpackChunkName: "neuroglancer_chunk_worker" */
+        new URL("./chunk_worker.bundle.js", import.meta.url),
+        { type: "module" },
+      );
+    }
     this.chunkQueueManager = this.registerDisposer(
       new ChunkQueueManager(
         new RPC(this.worker, /*waitUntilReady=*/ true),

@@ -12,3 +12,4 @@ import "#datasource/python/backend";
 import "#datasource/render/backend";
 import "#datasource/vtk/backend";
 import "#datasource/zarr/backend";
+import "#datasource/clio/backend";

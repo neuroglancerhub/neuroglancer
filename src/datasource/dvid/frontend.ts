@@ -482,25 +482,51 @@ class DvidMultiscaleVolumeChunkSource extends MultiscaleVolumeChunkSource {
     return 3;
   }
 
+  get baseUrl() {
+    return this.sourceParameters.baseUrl;
+  }
+
+  get nodeKey() {
+    return this.sourceParameters.nodeKey;
+  }
+
+  get dataInstanceKey() {
+    return this.sourceParameters.dataInstanceKey;
+  }
+
+  get supervoxels() {
+    return this.sourceParameters.supervoxels || false;
+  }
+
   constructor(
     chunkManager: ChunkManager,
-    public baseUrl: string,
-    public nodeKey: string,
-    public dataInstanceKey: string,
+    public sourceParameters: DVIDSourceParameters,
     public info: VolumeDataInstanceInfo,
     public credentialsProvider: CredentialsProvider<DVIDToken>,
   ) {
     super(chunkManager);
   }
 
+  getSegmentPosition?(id: bigint): Promise<Float32Array> {
+    const { dvidService } = this.sourceParameters;
+    if (dvidService) {
+      return fetch(
+        `${dvidService}/locate-body?dvid=${this.baseUrl}&uuid=${this.nodeKey}&segmentation=${this.dataInstanceKey}&body=${id.toString()}${this.supervoxels ? "&supervoxels=true" : ""}`,
+        {
+          method: "GET",
+        },
+      )
+        .then((response) => response.json())
+        .then((location) => new Float32Array(location));
+    }
+
+    return Promise.reject("No locate service is available");
+  }
+
   getSources(volumeSourceOptions: VolumeSourceOptions) {
     return this.info.getSources(
       this.chunkManager,
-      {
-        baseUrl: this.baseUrl,
-        nodeKey: this.nodeKey,
-        dataInstanceKey: this.dataInstanceKey,
-      },
+      this.sourceParameters,
       volumeSourceOptions,
       this.credentialsProvider,
     );
@@ -535,6 +561,24 @@ function parseSourceUrl(url: string): DVIDSourceParameters {
     if (parameters.user) {
       sourceParameters.user = parameters.user;
     }
+    // Janelia-specific: dvidService parameter (supports multiple naming conventions)
+    const dvidService =
+      parameters.dvidService ||
+      parameters.dvidservice ||
+      parameters["dvid-service"];
+    if (dvidService) {
+      sourceParameters.dvidService = dvidService;
+    }
+    // Janelia-specific: forceDvidService parameter
+    const force =
+      parameters.forceDvidService ||
+      parameters.forcedividservice ||
+      parameters["force-dvid-service"];
+    if (force) {
+      sourceParameters.forceDvidService = force === "true";
+    }
+    // Janelia-specific: supervoxels parameter
+    sourceParameters.supervoxels = parameters.supervoxels === "true";
   }
   sourceParameters.authServer = getDefaultAuthServer(sourceParameters.baseUrl);
   return sourceParameters;
@@ -546,10 +590,6 @@ function getVolumeSource(
   dataInstanceInfo: DataInstanceInfo,
   credentialsProvider: CredentialsProvider<DVIDToken>,
 ) {
-  const baseUrl = sourceParameters.baseUrl;
-  const nodeKey = sourceParameters.nodeKey;
-  const dataInstanceKey = sourceParameters.dataInstanceKey;
-
   const info = <VolumeDataInstanceInfo>dataInstanceInfo;
 
   const box: BoundingBox = {
@@ -566,9 +606,7 @@ function getVolumeSource(
 
   const volume = new DvidMultiscaleVolumeChunkSource(
     options.registry.chunkManager,
-    baseUrl,
-    nodeKey,
-    dataInstanceKey,
+    sourceParameters,
     info,
     credentialsProvider,
   );
@@ -595,6 +633,7 @@ function getVolumeSource(
         mesh: options.registry.chunkManager.getChunkSource(DVIDMeshSource, {
           parameters: {
             ...sourceParameters,
+            segmentationName: info.name,
             dataInstanceKey: info.meshSrc,
           },
           credentialsProvider: credentialsProvider,

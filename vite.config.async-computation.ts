@@ -1,0 +1,41 @@
+/**
+ * @license
+ * Copyright 2024 Howard Hughes Medical Institute
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { defineConfig, mergeConfig } from "vite";
+import { resolve } from "path";
+import baseConfig from "./vite.config.lib.ts";
+
+// Async computation worker build - self-contained with inlineDynamicImports
+export default mergeConfig(
+  baseConfig,
+  defineConfig({
+    plugins: [], // Don't generate .d.ts for workers
+    build: {
+      lib: {
+        entry: resolve(__dirname, "src/async_computation.bundle.js"),
+        formats: ["es"],
+      },
+      outDir: "dist/module",
+      emptyOutDir: false,
+      rollupOptions: {
+        output: {
+          entryFileNames: "async_computation.bundle.js",
+          inlineDynamicImports: true,
+        },
+      },
+    },
+  }),
+);

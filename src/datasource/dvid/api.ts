@@ -20,6 +20,8 @@
 
 import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.js";
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type { MeshSourceParameters } from "#src/datasource/dvid/base.js";
+import type { ProgressOptions } from "#src/util/progress_listener.js";
 
 export interface DVIDToken {
   // If token is undefined, it indicates anonymous credentials that may be retried.
@@ -55,26 +57,26 @@ export class DVIDInstance {
   }
 }
 
+export function appendQueryString(url: string, name: string, value: string) {
+  return `${url}${url.includes("?") ? "&" : "?"}${name}=${value}`;
+}
+
 export function appendQueryStringForDvid(
   url: string,
   user: string | null | undefined,
 ) {
-  if (url.includes("?")) {
-    url += "&";
-  } else {
-    url += "?";
-  }
-  url += "app=Neuroglancer";
+  let newUrl = appendQueryString(url, "app", "Neuroglancer");
   if (user) {
-    url += `&u=${user}`;
+    newUrl += `&u=${user}`;
   }
-  return url;
+  return newUrl;
 }
 
 export function fetchWithDVIDCredentials(
   credentialsProvider: CredentialsProvider<DVIDToken>,
   input: string,
   init: RequestInit,
+  options?: Partial<ProgressOptions>,
 ): Promise<Response> {
   return fetchOkWithCredentials(
     credentialsProvider,
@@ -85,7 +87,7 @@ export function fetchWithDVIDCredentials(
       if (credentials.token) {
         newInit.headers = {
           ...newInit.headers,
-          Authorization: `Bearer ${credentials}`,
+          Authorization: `Bearer ${credentials.token}`,
         };
       }
       return newInit;
@@ -96,7 +98,31 @@ export function fetchWithDVIDCredentials(
         // Authorization needed.  Retry with refreshed token.
         return "refresh";
       }
+      if (status === 504) {
+        // Gateway timeout can occur if the server takes too long to reply.  Retry.
+        return "retry";
+      }
       throw error;
     },
+    options,
   );
+}
+
+export function fetchMeshDataFromService(
+  parameters: MeshSourceParameters,
+  fragmentId: string,
+  signal?: AbortSignal,
+): Promise<ArrayBuffer> {
+  const { dvidService } = parameters;
+  if (dvidService) {
+    const serviceUrl = `${dvidService}/small-mesh?dvid=${parameters.baseUrl}&uuid=${parameters.nodeKey}&body=${fragmentId}&segmentation=${parameters.segmentationName}${parameters.user ? `&u=${parameters.user}` : ""}${parameters.supervoxels ? "&supervoxels=true" : ""}`;
+    return fetch(serviceUrl, { signal }).then((response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.arrayBuffer();
+    });
+  } else {
+    throw new Error("No mesh service available");
+  }
 }

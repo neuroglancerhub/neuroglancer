@@ -85,6 +85,7 @@ import { DataType, VolumeType } from "#src/sliceview/volume/base.js";
 import { MultiscaleVolumeChunkSource } from "#src/sliceview/volume/frontend.js";
 import { SegmentationRenderLayer } from "#src/sliceview/volume/segmentation_renderlayer.js";
 import { StatusMessage } from "#src/status.js";
+import { setClipboard } from "#src/util/clipboard.js";
 import { trackableAlphaValue } from "#src/trackable_alpha.js";
 import { TrackableBoolean } from "#src/trackable_boolean.js";
 import type {
@@ -626,6 +627,8 @@ export class SegmentationUserLayer extends Base {
     x === undefined ? undefined : parseUint64(x),
   );
 
+  private copiedSegments: bigint[] = [];
+
   constructor(managedLayer: Borrowed<ManagedUserLayer>) {
     super(managedLayer);
     this.codeVisible.changed.add(this.specificationChanged.dispatch);
@@ -1133,6 +1136,32 @@ export class SegmentationUserLayer extends Base {
               segmentSet.set(segment, newValue);
             }
           });
+        }
+        break;
+      }
+      case "copy-segment-id": {
+        if (!this.pick.value) break;
+        const { segmentSelectionState } = this.displayState;
+        if (segmentSelectionState.hasSelectedSegment) {
+          const segment = segmentSelectionState.selectedSegment;
+          this.copiedSegments = [segment];
+          const text = segment.toString();
+          if (setClipboard(text)) {
+            StatusMessage.showTemporaryMessage(`${text} copied to clipboard`);
+          }
+        }
+        break;
+      }
+      case "add-copy-segment-id": {
+        if (!this.pick.value) break;
+        const { segmentSelectionState } = this.displayState;
+        if (segmentSelectionState.hasSelectedSegment) {
+          const segment = segmentSelectionState.selectedSegment;
+          this.copiedSegments.push(segment);
+          const text = this.copiedSegments.map((s) => s.toString()).join(",");
+          if (setClipboard(text)) {
+            StatusMessage.showTemporaryMessage(`${text} copied to clipboard`);
+          }
         }
         break;
       }

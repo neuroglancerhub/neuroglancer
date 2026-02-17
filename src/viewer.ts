@@ -146,6 +146,9 @@ import {
   registerDimensionToolForViewer,
 } from "#src/widget/position_widget.js";
 import { TrackableScaleBarOptions } from "#src/widget/scale_bar.js";
+import { setClipboard } from "#src/util/clipboard.js";
+import { encodeFragment } from "#src/ui/url_hash_binding.js";
+import { makeCopyButton } from "#src/widget/copy_button.js";
 
 declare let NEUROGLANCER_OVERRIDE_DEFAULT_VIEWER_OPTIONS: any;
 
@@ -232,6 +235,12 @@ export interface ViewerOptions
   showLayerDialog: boolean;
   inputEventBindings: InputEventBindings;
   resetStateWhenEmpty: boolean;
+  /**
+   * Base path for worker bundles. When provided, worker URLs are constructed as
+   * bundleRoot + 'chunk_worker.bundle.js' and bundleRoot + 'async_computation.bundle.js'.
+   * This is useful for library builds where workers are separate files.
+   */
+  bundleRoot: string;
 }
 
 const defaultViewerOptions =
@@ -372,6 +381,10 @@ class TrackableViewerState extends CompoundTrackable {
   }
 }
 
+export const globalViewerConfig = {
+  expectingExternalUI: false,
+};
+
 export class Viewer extends RefCounted implements ViewerState {
   title = new TrackableValue<string | undefined>(undefined, verifyString);
   coordinateSpace = new TrackableCoordinateSpace();
@@ -487,6 +500,22 @@ export class Viewer extends RefCounted implements ViewerState {
 
   uiConfiguration: ViewerUIConfiguration;
 
+  makeUrlFromState = (state: { [key: string]: unknown }) => {
+    if (!globalViewerConfig.expectingExternalUI) {
+      return window.location.toString();
+    } else {
+      return `${window.location.origin}${window.location.pathname}#!${encodeFragment(JSON.stringify(state))}`;
+    }
+  };
+
+  get expectingExternalUI() {
+    return globalViewerConfig.expectingExternalUI;
+  }
+
+  set expectingExternalUI(on: boolean) {
+    globalViewerConfig.expectingExternalUI = on;
+  }
+
   private makeUiControlVisibilityState(
     key: (typeof VIEWER_UI_CONTROL_CONFIG_OPTIONS)[number],
   ) {
@@ -529,6 +558,17 @@ export class Viewer extends RefCounted implements ViewerState {
     options: Partial<ViewerOptions> = {},
   ) {
     super();
+    // Set worker URLs from bundleRoot before creating DataManagementContext
+    // This allows consuming apps to specify where the worker bundles are located
+    if (options.bundleRoot !== undefined) {
+      const bundleRoot = options.bundleRoot;
+      if (typeof window !== "undefined") {
+        window.__NEUROGLANCER_CHUNK_WORKER_URL__ =
+          bundleRoot + "chunk_worker.bundle.js";
+        window.__NEUROGLANCER_ASYNC_COMPUTATION_WORKER_URL__ =
+          bundleRoot + "async_computation.bundle.js";
+      }
+    }
     this.screenshotHandler = this.registerDisposer(new ScreenshotHandler(this));
     this.screenshotManager = this.registerDisposer(new ScreenshotManager(this));
     const {
@@ -879,6 +919,21 @@ export class Viewer extends RefCounted implements ViewerState {
     }
 
     {
+      const button = makeCopyButton({
+        title: "Copy view URL to clipboard",
+        onClick: () => {
+          const result = setClipboard(
+            this.makeUrlFromState(this.state.toJSON()),
+          );
+          StatusMessage.showTemporaryMessage(
+            result ? "URL copied to clipboard" : "Failed to copy URL to clipboard",
+          );
+        },
+      });
+      topRow.appendChild(button);
+    }
+
+    {
       const button = makeIcon({ svg: svg_camera, title: "Screenshot" });
       this.registerEventListener(button, "click", () => {
         this.showScreenshotDialog();
@@ -1060,6 +1115,17 @@ export class Viewer extends RefCounted implements ViewerState {
   }
 
   /**
+   * Binds a callback function to an action, passing the viewer instance to the callback.
+   * This allows external code to register custom handlers for neuroglancer actions.
+   */
+  bindCallback(action: string, callback: (viewer: Viewer) => void) {
+    const handler = () => {
+      callback(this);
+    };
+    this.registerDisposer(registerActionListener(this.element, action, handler));
+  }
+
+  /**
    * Called once by the constructor to register the action listeners.
    */
   private registerActionListeners() {
@@ -1069,7 +1135,7 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    for (const action of ["select", "star"]) {
+    for (const action of ["select", "star", "copy-segment-id", "add-copy-segment-id"]) {
       this.bindAction(action, () => {
         this.mouseState.updateUnconditionally();
         this.layerManager.invokeAction(action);
@@ -1182,6 +1248,10 @@ export class Viewer extends RefCounted implements ViewerState {
   editJsonState() {
     this.deactivateTools();
     new StateEditorDialog(this);
+  }
+
+  copyJsonStateToUrl() {
+    setClipboard(this.makeUrlFromState(this.state.toJSON()));
   }
 
   showScreenshotDialog() {

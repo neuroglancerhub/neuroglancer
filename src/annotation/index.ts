@@ -1253,21 +1253,22 @@ function restoreAnnotation(
       "id",
       allowMissingId ? verifyOptionalString : verifyString,
     ) || makeAnnotationId();
+  const relationships = schema.relationships || [];
   const relatedSegments = verifyObjectProperty(obj, "segments", (relObj) => {
-    if (relObj === undefined) {
-      return schema.relationships.map(() => []);
+    if (relObj === undefined || relationships.length === 0) {
+      return relationships.map(() => []);
     }
     const a = expectArray(relObj);
     if (a.length === 0) {
-      return schema.relationships.map(() => []);
+      return relationships.map(() => []);
     }
-    if (schema.relationships.length === 1 && !Array.isArray(a[0])) {
+    if (relationships.length === 1 && !Array.isArray(a[0])) {
       return [
         parseFixedLengthArray(new BigUint64Array(a.length), a, parseUint64),
       ];
     }
     return parseArray(
-      expectArray(relObj, schema.relationships.length),
+      expectArray(relObj, relationships.length),
       (segments) => {
         segments = expectArray(segments);
         return parseFixedLengthArray(

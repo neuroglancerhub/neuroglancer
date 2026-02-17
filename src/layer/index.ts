@@ -1236,9 +1236,11 @@ export class LayerSelectedValues extends RefCounted {
         const userLayer = layer.layer;
         if (layer.visible && userLayer !== null) {
           const { selectionState } = userLayer;
-          userLayer.resetSelectionState(selectionState);
-          selectionState.generation = generation;
-          userLayer.captureSelectionState(selectionState, mouseState);
+          if (selectionState !== undefined) {
+            userLayer.resetSelectionState(selectionState);
+            selectionState.generation = generation;
+            userLayer.captureSelectionState(selectionState, mouseState);
+          }
         }
       }
     }
@@ -1247,7 +1249,7 @@ export class LayerSelectedValues extends RefCounted {
   get<T extends UserLayer>(userLayer: T): T["selectionState"] | undefined {
     this.update();
     const { selectionState } = userLayer;
-    if (selectionState.generation !== this.changed.count) return undefined;
+    if (selectionState === undefined || selectionState.generation !== this.changed.count) return undefined;
     return selectionState;
   }
 

@@ -10,3 +10,4 @@ import "#datasource/precomputed/async_computation";
 import "#datasource/render/async_computation";
 import "#datasource/vtk/async_computation";
 import "#datasource/zarr/async_computation";
+import "#datasource/clio/async_computation";

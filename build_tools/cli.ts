@@ -89,6 +89,8 @@ async function getWebpackConfig(
   return (webpackEnv, webpackArgs) => {
     webpackEnv = { ...webpackEnv, NEUROGLANCER_CLI: true };
     const conditions = argv.conditions;
+    // Always use development condition for rspack builds to resolve #src/* to ./src/*.ts
+    conditions.push("neuroglancer/development");
     if (argv.python) conditions.push("neuroglancer/python");
     let outDir =
       (argv.output as string | undefined) ??

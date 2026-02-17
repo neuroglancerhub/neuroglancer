@@ -16,3 +16,5 @@ import "#datasource/python/register_default";
 import "#datasource/render/register_default";
 import "#datasource/vtk/register_default";
 import "#datasource/zarr/register_default";
+import "#datasource/clio/register_default";
+import "#datasource/clio/register_credentials_provider";

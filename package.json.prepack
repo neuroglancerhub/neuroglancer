@@ -36,51 +36,34 @@
     }
   },
   "files": [
-    "lib/**/*",
-    "dist/module/**/*",
-    "dist/lib/**/*",
-    "bin/**/*"
+    "lib/**/*"
   ],
-  "bin": {
-    "neuroglancer-copy-workers": "./bin/copy-workers.js"
-  },
   "private": false,
   "type": "module",
-  "main": "dist/module/main.js",
+  "main": "dist/lib-janelia/main.js",
   "exports": {
     ".": {
       "types": "./dist/lib/main.d.js",
       "default": "./dist/lib/main.js"
     },
     "./janelia": {
-      "types": "./dist/module/main.d.js",
-      "default": "./dist/module/main.js"
+      "types": "./dist/lib-janelia/main.d.js",
+      "default": "./dist/lib-janelia/main.js"
     },
     "./workers/*": "./dist/lib/*.js",
-    "./janelia/workers/*": "./dist/module/*.js",
+    "./janelia/workers/*": "./dist/lib-janelia/*.js",
     "./style.css": "./dist/lib/neuroglancer.css",
-    "./janelia/style.css": "./dist/module/main.css",
+    "./janelia/style.css": "./dist/lib-janelia/neuroglancer.css",
     "./unstable/*.js": "./lib/*.js",
     "./unstable/*": "./lib/*"
   },
   "imports": {
-    "#src/third_party/jpgjs/jpg.js": {
-      "neuroglancer/development": "./src/third_party/jpgjs/jpg.js",
-      "default": "./lib/third_party/jpgjs/jpg.js"
-    },
+    "#src/third_party/jpgjs/jpg.js": "./lib/third_party/jpgjs/jpg.js",
     "#src/async_computation/decode_zstd.js": {
-      "neuroglancer/development": "./src/async_computation/decode_zstd.ts",
-      "node": "./lib/async_computation/decode_zstd_node.js",
       "default": "./lib/async_computation/decode_zstd.js"
     },
-    "#src/*.js": {
-      "neuroglancer/development": "./src/*.ts",
-      "default": "./lib/*.js"
-    },
-    "#src/*": {
-      "neuroglancer/development": "./src/*",
-      "default": "./lib/*"
-    },
+    "#src/*.js": "./lib/*.js",
+    "#src/*": "./lib/*",
     "#datasource/boss/backend": {
       "neuroglancer/datasource/boss:enabled": "./lib/datasource/boss/backend.js",
       "neuroglancer/datasource:none_by_default": "./lib/util/false.js",
@@ -507,30 +490,76 @@
     }
   },
   "scripts": {
-    "build:lib": "vite build --config vite.config.lib.ts",
-    "build:lib-janelia": "vite build --config vite.config.janelia.ts && vite build --config vite.config.chunk-worker.ts && vite build --config vite.config.async-computation.ts",
-    "dev": "vite --config vite.config.dev.ts",
-    "postpack": "node ./build_tools/postpack.ts",
     "update-conditions": "node ./build_tools/update-conditions.ts",
+    "prepare": "node ./build_tools/build-package.ts --inplace --if-not-toplevel",
+    "prepack": "node ./build_tools/build-package.ts --inplace",
+    "postpack": "node ./build_tools/postpack.ts",
     "build": "node ./build_tools/cli.ts build",
     "build:watch": "node ./build_tools/cli.ts build --watch",
     "dev-server": "node ./build_tools/cli.ts serve",
     "dev-server-python": "node ./build_tools/cli.ts --python serve",
+    "build-package": "node ./build_tools/build-package.ts",
     "build-python": "node ./build_tools/cli.ts --python build",
     "build-python:watch": "node ./build_tools/cli.ts --python build --watch",
     "test": "vitest --run",
     "test:watch": "vitest watch",
+    "example-project-test": "playwright test",
+    "benchmark": "vitest bench --run",
+    "benchmark:watch": "vitest bench",
     "lint:check": "oxlint && eslint . --cache --format codeframe",
     "lint:fix": "oxlint --fix && eslint . --cache --fix --format codeframe && prettier --cache -w -l .",
+    "format:check": "prettier --cache . -c",
+    "format:fix": "prettier --cache -w -l .",
     "typecheck": "tsgo --noEmit",
-    "typecheck:watch": "tsgo --noEmit --watch"
+    "typecheck:watch": "tsgo --noEmit --watch",
+    "version": "node ./build_tools/after-version-change.ts",
+    "build:lib": "vite build --config vite.config.lib.ts",
+    "build:lib-janelia": "vite build --config vite.config.janelia.ts"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@iodigital/vite-plugin-msw": "^2.0.0",
+    "@playwright/browser-chromium": "^1.56.1",
+    "@playwright/test": "^1.56.1",
     "@rspack/cli": "^1.6.1",
     "@rspack/core": "^1.6.1",
-    "vite": "^6.4.1",
+    "@types/codemirror": "5.60.17",
+    "@types/gl-matrix": "^2.4.5",
+    "@types/http-server": "^0.12.4",
+    "@types/jsdom": "^27.0.0",
+    "@types/lodash-es": "^4.17.12",
+    "@types/node": "^24.10.0",
+    "@types/yargs": "^17.0.34",
+    "@typescript/native-preview": "^7.0.0-dev.20251106.1",
+    "@vitest/browser": "<4",
+    "@vitest/ui": "<4",
+    "@vitest/web-worker": "<4",
+    "cookie": "^1.0.2",
+    "css-loader": "^7.1.2",
+    "esbuild": "^0.25.12",
+    "eslint": "^9.39.1",
+    "eslint-formatter-codeframe": "^7.32.2",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-oxlint": "^1.26.0",
+    "express": "^5.1.0",
+    "fzstd": "^0.1.1",
+    "glob": "^11.0.3",
+    "http-server": "^14.1.1",
+    "jsdom": "^27.1.0",
+    "msw": "<2.8.0",
+    "oxlint": "^1.26.0",
+    "playwright": "^1.56.1",
+    "prettier": "3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "vite": "^7.3.1",
     "vite-plugin-dts": "^4.5.4",
+    "vitest": "<4",
+    "vitest-environment-jsdom-patched": "file:build_tools/vitest/vitest-environment-jsdom-patched",
+    "webpack-bundle-analyzer": "^4.10.2",
     "webpack-merge": "^6.0.1",
-    "yargs": "^18.0.0"
+    "yargs": "^18.0.0",
+    "yauzl": "^3.2.0"
   }
 }
