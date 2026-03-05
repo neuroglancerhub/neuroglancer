@@ -4,6 +4,8 @@ import "#datasource/boss/register_credentials_provider";
 import "#datasource/brainmaps/register_default";
 import "#datasource/brainmaps/register_credentials_provider";
 import "#datasource/deepzoom/register_default";
+import "#datasource/clio/register_default";
+import "#datasource/clio/register_credentials_provider";
 import "#datasource/dvid/register_default";
 import "#datasource/dvid/register_credentials_provider";
 import "#datasource/graphene/register_default";
