@@ -117,6 +117,8 @@ export function getDefaultRenderedDataPanelBindings() {
         "at:control+mousedown0": "annotate",
         "at:mousedown2": "move-to-mouse-position",
         "at:alt+mousedown0": "move-annotation",
+        "at:alt+mousedown2": "copy-segment-id",
+        "at:alt+shift+mousedown2": "add-copy-segment-id",
         "at:control+alt+mousedown2": "delete-annotation",
         enter: "finish-annotation",
         backspace: "undo-annotation-step",
