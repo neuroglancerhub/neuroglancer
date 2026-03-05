@@ -1060,6 +1060,19 @@ export class Viewer extends RefCounted implements ViewerState {
   }
 
   /**
+   * Registers a callback for the specified action that receives the viewer
+   * instance. Useful for external applications embedding neuroglancer.
+   */
+  bindCallback(action: string, callback: (viewer: this) => void) {
+    const handler = () => {
+      callback(this);
+    };
+    this.registerDisposer(
+      registerActionListener(this.element, action, handler),
+    );
+  }
+
+  /**
    * Called once by the constructor to register the action listeners.
    */
   private registerActionListeners() {

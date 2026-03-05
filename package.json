@@ -184,6 +184,25 @@
       "neuroglancer/datasource/brainmaps:disabled": "./src/util/false.ts",
       "default": "./src/datasource/brainmaps/register_credentials_provider.ts"
     },
+    "#datasource/clio/backend": {
+      "neuroglancer/datasource/clio:enabled": "./src/datasource/clio/backend.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/clio:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/clio/backend.ts"
+    },
+    "#datasource/clio/register_default": {
+      "neuroglancer/datasource/clio:enabled": "./src/datasource/clio/register_default.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/clio:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/clio/register_default.ts"
+    },
+    "#datasource/clio/register_credentials_provider": {
+      "neuroglancer/python": "./src/util/false.ts",
+      "neuroglancer/datasource/clio:enabled": "./src/datasource/clio/register_credentials_provider.ts",
+      "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
+      "neuroglancer/datasource/clio:disabled": "./src/util/false.ts",
+      "default": "./src/datasource/clio/register_credentials_provider.ts"
+    },
     "#datasource/deepzoom/backend": {
       "neuroglancer/datasource/deepzoom:enabled": "./src/datasource/deepzoom/backend.ts",
       "neuroglancer/datasource:none_by_default": "./src/util/false.ts",
