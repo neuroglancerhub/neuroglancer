@@ -20,6 +20,8 @@
 
 import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.js";
 import type { CredentialsProvider } from "#src/credentials_provider/index.js";
+import type { MeshSourceParameters } from "#src/datasource/dvid/base.js";
+import { fetchOk } from "#src/util/http_request.js";
 
 export interface DVIDToken {
   // If token is undefined, it indicates anonymous credentials that may be retried.
@@ -55,20 +57,23 @@ export class DVIDInstance {
   }
 }
 
+export function appendQueryString(
+  url: string,
+  name: string,
+  value: string,
+) {
+  return `${url}${url.includes("?") ? "&" : "?"}${name}=${value}`;
+}
+
 export function appendQueryStringForDvid(
   url: string,
   user: string | null | undefined,
 ) {
-  if (url.includes("?")) {
-    url += "&";
-  } else {
-    url += "?";
-  }
-  url += "app=Neuroglancer";
+  let newUrl = appendQueryString(url, "app", "Neuroglancer");
   if (user) {
-    url += `&u=${user}`;
+    newUrl += `&u=${user}`;
   }
-  return url;
+  return newUrl;
 }
 
 export function fetchWithDVIDCredentials(
@@ -99,4 +104,23 @@ export function fetchWithDVIDCredentials(
       throw error;
     },
   );
+}
+
+export async function fetchMeshDataFromService(
+  parameters: MeshSourceParameters,
+  fragmentId: string,
+  signal: AbortSignal,
+): Promise<ArrayBuffer> {
+  const { dvidService } = parameters;
+  if (dvidService) {
+    const serviceUrl =
+      `${dvidService}/small-mesh?dvid=${parameters.baseUrl}` +
+      `&uuid=${parameters.nodeKey}&body=${fragmentId}` +
+      `&segmentation=${parameters.segmentationName}` +
+      `${parameters.user ? `&u=${parameters.user}` : ""}` +
+      `${parameters.supervoxels ? "&supervoxels=true" : ""}`;
+    const response = await fetchOk(serviceUrl, { method: "GET", signal });
+    return response.arrayBuffer();
+  }
+  throw new Error("No mesh service available");
 }

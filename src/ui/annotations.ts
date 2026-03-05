@@ -35,6 +35,7 @@ import type {
   Ellipsoid,
   Line,
   PolyLine,
+  Sphere,
 } from "#src/annotation/index.js";
 import {
   AnnotationPropertySerializer,
@@ -198,6 +199,7 @@ function getCenterPosition(center: Float32Array, annotation: Annotation) {
   switch (annotation.type) {
     case AnnotationType.AXIS_ALIGNED_BOUNDING_BOX:
     case AnnotationType.LINE:
+    case AnnotationType.SPHERE:
       vector.add(center, annotation.pointA, annotation.pointB);
       vector.scale(center, center, 0.5);
       break;
@@ -1171,7 +1173,8 @@ abstract class PlaceAnnotationTool extends LegacyTool {
 const ANNOTATE_POINT_TOOL_ID = "annotatePoint";
 const ANNOTATE_LINE_TOOL_ID = "annotateLine";
 const ANNOTATE_BOUNDING_BOX_TOOL_ID = "annotateBoundingBox";
-const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateSphere";
+const ANNOTATE_ELLIPSOID_TOOL_ID = "annotateEllipsoid";
+const ANNOTATE_SPHERE_TOOL_ID = "annotateSphere";
 const ANNOTATE_POLYLINE_TOOL_ID = "annotatePolyline";
 
 export class PlacePointTool extends PlaceAnnotationTool {
@@ -1433,7 +1436,8 @@ abstract class TwoStepAnnotationTool extends PlaceAnnotationTool {
 abstract class PlaceTwoCornerAnnotationTool extends TwoStepAnnotationTool {
   declare annotationType:
     | AnnotationType.LINE
-    | AnnotationType.AXIS_ALIGNED_BOUNDING_BOX;
+    | AnnotationType.AXIS_ALIGNED_BOUNDING_BOX
+    | AnnotationType.SPHERE;
 
   getInitialAnnotation(
     mouseState: MouseSelectionState,
@@ -1443,7 +1447,7 @@ abstract class PlaceTwoCornerAnnotationTool extends TwoStepAnnotationTool {
       mouseState,
       annotationLayer,
     );
-    return <AxisAlignedBoundingBox | Line>{
+    return <AxisAlignedBoundingBox | Line | Sphere>{
       id: "",
       type: this.annotationType,
       description: "",
@@ -1454,7 +1458,7 @@ abstract class PlaceTwoCornerAnnotationTool extends TwoStepAnnotationTool {
   }
 
   getUpdatedAnnotation(
-    oldAnnotation: AxisAlignedBoundingBox | Line,
+    oldAnnotation: AxisAlignedBoundingBox | Line | Sphere,
     mouseState: MouseSelectionState,
     annotationLayer: AnnotationLayerState,
   ): Annotation {
@@ -1553,6 +1557,58 @@ export class PlaceLineTool extends PlaceTwoCornerAnnotationTool {
   }
 }
 PlaceLineTool.prototype.annotationType = AnnotationType.LINE;
+
+export class PlaceSphereTool extends PlaceTwoCornerAnnotationTool {
+  get description() {
+    return "annotate sphere";
+  }
+
+  private initialRelationships: BigUint64Array[] | undefined;
+
+  getInitialAnnotation(
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ): Annotation {
+    const result = super.getInitialAnnotation(mouseState, annotationLayer);
+    this.initialRelationships = result.relatedSegments =
+      getSelectedAssociatedSegments(annotationLayer);
+    return result;
+  }
+
+  getUpdatedAnnotation(
+    oldAnnotation: Sphere,
+    mouseState: MouseSelectionState,
+    annotationLayer: AnnotationLayerState,
+  ) {
+    const result = super.getUpdatedAnnotation(
+      oldAnnotation,
+      mouseState,
+      annotationLayer,
+    );
+    const initialRelationships = this.initialRelationships;
+    const newRelationships = getSelectedAssociatedSegments(annotationLayer);
+    if (initialRelationships === undefined) {
+      result.relatedSegments = newRelationships;
+    } else {
+      result.relatedSegments = Array.from(
+        newRelationships,
+        (newSegments, i) => {
+          const initialSegments = initialRelationships[i];
+          newSegments = newSegments.filter(
+            (x) => !initialSegments.includes(x),
+          );
+          return BigUint64Array.from([...initialSegments, ...newSegments]);
+        },
+      );
+    }
+    return result;
+  }
+
+  toJSON() {
+    return ANNOTATE_SPHERE_TOOL_ID;
+  }
+}
+PlaceSphereTool.prototype.annotationType = AnnotationType.SPHERE;
 
 class PlacePolylineTool extends MultiStepAnnotationTool {
   getBaseSegment = false;
@@ -1761,6 +1817,11 @@ registerLegacyTool(
   ANNOTATE_ELLIPSOID_TOOL_ID,
   (layer, options) =>
     new PlaceEllipsoidTool(<UserLayerWithAnnotations>layer, options),
+);
+registerLegacyTool(
+  ANNOTATE_SPHERE_TOOL_ID,
+  (layer, options) =>
+    new PlaceSphereTool(<UserLayerWithAnnotations>layer, options),
 );
 registerLegacyTool(
   ANNOTATE_POLYLINE_TOOL_ID,

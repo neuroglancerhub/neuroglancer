@@ -19,6 +19,7 @@ import "#src/annotation/line.js";
 import "#src/annotation/point.js";
 import "#src/annotation/ellipsoid.js";
 import "#src/annotation/polyline.js";
+import "#src/annotation/sphere.js";
 
 import type {
   AnnotationLayerState,

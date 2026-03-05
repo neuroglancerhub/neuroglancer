@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+import type { AnnotationPropertySpec } from "#src/annotation/index.js";
+import { vec3 } from "#src/util/geom.js";
+
+const annotationChunkDataSize = vec3.fromValues(128, 128, 128);
+
 export enum VolumeChunkEncoding {
   JPEG = 0,
   RAW = 1,
@@ -27,6 +32,10 @@ export class DVIDSourceParameters {
   dataInstanceKey: string;
   authServer?: string;
   user?: string;
+  usertag?: boolean;
+  dvidService?: string;
+  forceDvidService?: boolean;
+  supervoxels?: boolean;
 }
 
 export class VolumeChunkSourceParameters extends DVIDSourceParameters {
@@ -40,5 +49,22 @@ export class SkeletonSourceParameters extends DVIDSourceParameters {
 }
 
 export class MeshSourceParameters extends DVIDSourceParameters {
+  segmentationName: string;
   static RPC_ID = "dvid/MeshSource";
+}
+
+export class AnnotationSourceParametersBase extends DVIDSourceParameters {
+  chunkDataSize = annotationChunkDataSize;
+  properties: AnnotationPropertySpec[];
+  syncedLabel?: string;
+  readonly?: boolean;
+  schema?: any;
+}
+
+export class AnnotationSourceParameters extends AnnotationSourceParametersBase {
+  static RPC_ID = "dvid/AnnotationSource";
+}
+
+export class AnnotationChunkSourceParameters extends AnnotationSourceParametersBase {
+  static RPC_ID = "dvid/AnnotationChunkSource";
 }
