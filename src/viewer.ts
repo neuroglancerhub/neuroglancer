@@ -92,7 +92,6 @@ import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
 import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
 import { ScreenshotDialog } from "#src/ui/screenshot_menu.js";
 import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
-import { encodeFragment } from "#src/ui/url_hash_binding.js";
 import { globalViewerConfig } from "#src/viewer_config.js";
 import { SidePanelManager } from "#src/ui/side_panel.js";
 import { StateEditorDialog } from "#src/ui/state_editor.js";
@@ -502,10 +501,13 @@ export class Viewer extends RefCounted implements ViewerState {
    * replace this to control what the shared URL looks like.
    */
   makeUrlFromState = (state: { [key: string]: any }) => {
-    if (!globalViewerConfig.expectingExternalUI) {
-      return window.location.toString();
+    const stateString = encodeStateAsFragment(state);
+    if (globalViewerConfig.expectingExternalUI) {
+      return "/#!" + stateString;
     }
-    return "/#!" + encodeFragment(JSON.stringify(state));
+    const url = new URL(window.location.href);
+    url.hash = "#!" + stateString;
+    return url.href;
   };
 
   get expectingExternalUI() {
@@ -932,10 +934,9 @@ export class Viewer extends RefCounted implements ViewerState {
       const button = makeCopyUrlButton({
         title: "Copy URL to clipboard",
         onClick: () => {
-          const stateString = encodeStateAsFragment(this.state.toJSON());
-          const url = new URL(window.location.href);
-          url.hash = "#!" + stateString;
-          const result = setClipboard(url.href);
+          const result = setClipboard(
+            this.makeUrlFromState(this.state.toJSON()),
+          );
           StatusMessage.showTemporaryMessage(
             result ? "URL copied to clipboard" : "Failed to copy URL",
           );
