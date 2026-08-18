@@ -18,15 +18,16 @@
  * limitations under the License.
  */
 
+/**
+ * @file Backend-safe FlyEM API helpers.
+ *
+ * Everything here must remain free of DOM access so that it can be included in
+ * the chunk worker bundle. The interactive credentials provider lives in
+ * #src/datasource/flyem/credentials_provider.js.
+ */
+
 import { fetchOkWithCredentials } from "#src/credentials_provider/http_request.js";
-import {
-  CredentialsProvider,
-  AnonymousFirstCredentialsProvider,
-  makeCredentialsGetter,
-} from "#src/credentials_provider/index.js";
-import { getCredentialsWithStatus } from "#src/credentials_provider/interactive_credentials_provider.js";
-import { fetchOk } from "#src/util/http_request.js";
-import { ProgressSpan } from "#src/util/progress_listener.js";
+import type { CredentialsProvider } from "#src/credentials_provider/index.js";
 
 export type DefaultTokenType = string;
 
@@ -35,85 +36,6 @@ export interface FlyEMToken {
 }
 
 export const flyEMCredentialsKey = "FlyEM";
-
-interface NeurohubWindow {
-  neurohub: {
-    clio: {
-      auth: {
-        getAuthResponse: () => { id_token: DefaultTokenType };
-      };
-    };
-  };
-}
-
-function getNeurohubToken(w: any): Promise<string> {
-  if ("neurohub" in w) {
-    return Promise.resolve(
-      (<NeurohubWindow>(<unknown>w)).neurohub.clio.auth
-        .getAuthResponse()
-        .id_token,
-    );
-  }
-  return Promise.resolve("");
-}
-
-async function getAuthTokenFromServer(
-  authServer: string,
-  signal: AbortSignal,
-): Promise<FlyEMToken> {
-  if (!authServer) {
-    return { token: "" };
-  }
-  if (authServer.startsWith("token:")) {
-    return { token: authServer.substring(6) };
-  }
-  if (authServer === "neurohub") {
-    const token = await getNeurohubToken(window);
-    return { token };
-  }
-  const response = await fetchOk(authServer, {
-    method: "GET",
-    credentials: "include",
-    signal,
-  });
-  const token = await response.text();
-  return { token };
-}
-
-class BaseFlyEMCredentialsProvider extends CredentialsProvider<FlyEMToken> {
-  constructor(public authServer: string | undefined) {
-    super();
-  }
-
-  get = makeCredentialsGetter(async (options) => {
-    const { authServer } = this;
-    if (!authServer) return { token: "" };
-    using _span = new ProgressSpan(options.progressListener, {
-      message: `Requesting FlyEM access token from ${authServer}`,
-    });
-    return await getCredentialsWithStatus(
-      {
-        description: `FlyEM server ${this.authServer}`,
-        supportsImmediate: true,
-        get: async (signal, immediate) => {
-          if (immediate) {
-            return await getAuthTokenFromServer(authServer, signal);
-          }
-          throw new Error(
-            `Please check your authorization server ${authServer} to make sure it is correct.`,
-          );
-        },
-      },
-      options.signal,
-    );
-  });
-}
-
-export class FlyEMCredentialsProvider extends AnonymousFirstCredentialsProvider<FlyEMToken> {
-  constructor(authServer: string | undefined) {
-    super(new BaseFlyEMCredentialsProvider(authServer), {});
-  }
-}
 
 export function fetchWithFlyEMCredentials(
   credentialsProvider: CredentialsProvider<FlyEMToken>,
