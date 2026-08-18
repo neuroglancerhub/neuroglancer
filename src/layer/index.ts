@@ -113,6 +113,7 @@ import type { DependentViewContext } from "#src/widget/dependent_view_widget.js"
 import type { Tab } from "#src/widget/tab_view.js";
 import { TabSpecification } from "#src/widget/tab_view.js";
 import type { RPC } from "#src/worker_rpc.js";
+import { globalViewerConfig } from "#src/viewer_config.js";
 
 const TOOL_JSON_KEY = "tool";
 const TOOL_BINDINGS_JSON_KEY = "toolBindings";
@@ -1417,9 +1418,10 @@ export class TrackableDataSelectionState
     const { value } = this;
     let obj: any;
     if (this.location.visible) {
-      obj = this.location.toJSON(
-        DATA_SELECTION_STATE_DEFAULT_PANEL_LOCATION_VISIBLE,
-      );
+      obj = this.location.toJSON({
+        ...DATA_SELECTION_STATE_DEFAULT_PANEL_LOCATION_VISIBLE,
+        visible: !globalViewerConfig.expectingExternalUI,
+      });
       if (this.pin.value && value !== undefined) {
         const layersJson: any = {};
         for (const layerData of value.layers) {
@@ -1442,9 +1444,11 @@ export class TrackableDataSelectionState
     }
     return obj;
   }
-  select() {
+  select(panelOn = true) {
     const { pin } = this;
-    this.location.visible = true;
+    if (panelOn) {
+      this.location.visible = true;
+    }
     pin.value = true;
     this.capture();
   }
@@ -1473,10 +1477,10 @@ export class TrackableDataSelectionState
     }
     verifyObject(obj);
     // If the object is present, then visible by default.
-    this.location.restoreState(
-      obj,
-      DATA_SELECTION_STATE_DEFAULT_PANEL_LOCATION_VISIBLE,
-    );
+    this.location.restoreState(obj, {
+      ...DATA_SELECTION_STATE_DEFAULT_PANEL_LOCATION_VISIBLE,
+      visible: !globalViewerConfig.expectingExternalUI,
+    });
     const coordinateSpace = this.coordinateSpace.value;
     const position = verifyOptionalObjectProperty(
       obj,

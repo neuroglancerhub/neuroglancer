@@ -40,6 +40,7 @@ import type {
   EventActionMap,
 } from "#src/util/event_action_map.js";
 import { registerActionListener } from "#src/util/event_action_map.js";
+import { globalViewerConfig } from "#src/viewer_config.js";
 import { AXES_NAMES, kAxes, mat4, vec2, vec3 } from "#src/util/geom.js";
 import { KeyboardEventBinder } from "#src/util/keyboard_bindings.js";
 import * as matrix from "#src/util/matrix.js";
@@ -467,7 +468,11 @@ export abstract class RenderedDataPanel extends RenderedPanel {
     );
 
     registerActionListener(element, "select-position", () => {
-      this.viewer.selectionDetailsState.select();
+      // When an external UI is driving the viewer it owns panel visibility, so
+      // pin the selection without forcing our own panel open.
+      this.viewer.selectionDetailsState.select(
+        !globalViewerConfig.expectingExternalUI,
+      );
     });
 
     registerActionListener(element, "unpin-selected-position", () => {

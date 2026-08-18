@@ -92,6 +92,8 @@ import { LayerSidePanelManager } from "#src/ui/layer_side_panel.js";
 import { setupPositionDropHandlers } from "#src/ui/position_drag_and_drop.js";
 import { ScreenshotDialog } from "#src/ui/screenshot_menu.js";
 import { SelectionDetailsPanel } from "#src/ui/selection_details.js";
+import { encodeFragment } from "#src/ui/url_hash_binding.js";
+import { globalViewerConfig } from "#src/viewer_config.js";
 import { SidePanelManager } from "#src/ui/side_panel.js";
 import { StateEditorDialog } from "#src/ui/state_editor.js";
 import { StatisticsDisplayState, StatisticsPanel } from "#src/ui/statistics.js";
@@ -378,6 +380,8 @@ class TrackableViewerState extends CompoundTrackable {
   }
 }
 
+export { globalViewerConfig };
+
 export class Viewer extends RefCounted implements ViewerState {
   title = new TrackableValue<string | undefined>(undefined, verifyString);
   coordinateSpace = new TrackableCoordinateSpace();
@@ -493,6 +497,25 @@ export class Viewer extends RefCounted implements ViewerState {
 
   uiConfiguration: ViewerUIConfiguration;
 
+  /**
+   * Builds the URL that represents `state`. An embedding application may
+   * replace this to control what the shared URL looks like.
+   */
+  makeUrlFromState = (state: { [key: string]: any }) => {
+    if (!globalViewerConfig.expectingExternalUI) {
+      return window.location.toString();
+    }
+    return "/#!" + encodeFragment(JSON.stringify(state));
+  };
+
+  get expectingExternalUI() {
+    return globalViewerConfig.expectingExternalUI;
+  }
+
+  set expectingExternalUI(on: boolean) {
+    globalViewerConfig.expectingExternalUI = on;
+  }
+
   private makeUiControlVisibilityState(
     key: (typeof VIEWER_UI_CONTROL_CONFIG_OPTIONS)[number],
   ) {
@@ -529,6 +552,13 @@ export class Viewer extends RefCounted implements ViewerState {
   }
 
   visible = true;
+
+  /**
+   * Closes any open selection details panel. Assigned in the constructor, once
+   * the side panel manager exists; embedding applications call this to dismiss
+   * neuroglancer's own selection UI.
+   */
+  closeSelectionTab?: () => void;
 
   constructor(
     public display: DisplayContext,
@@ -1009,6 +1039,14 @@ export class Viewer extends RefCounted implements ViewerState {
     );
     gridContainer.appendChild(this.sidePanelManager.element);
 
+    this.closeSelectionTab = () => {
+      for (const { panel } of this.sidePanelManager.registeredPanels) {
+        if (panel instanceof SelectionDetailsPanel) {
+          panel.close();
+        }
+      }
+    };
+
     this.registerDisposer(
       this.sidePanelManager.registerPanel({
         location: this.statisticsDisplayState.location,
@@ -1106,6 +1144,7 @@ export class Viewer extends RefCounted implements ViewerState {
     for (const action of ["recolor", "clear-segments"]) {
       this.bindAction(action, () => {
         this.layerManager.invokeAction(action);
+        this.closeSelectionTab?.();
       });
     }
 

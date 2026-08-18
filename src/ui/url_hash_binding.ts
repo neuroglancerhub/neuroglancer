@@ -34,7 +34,7 @@ import { getCachedJson } from "#src/util/trackable.js";
 /**
  * Encodes a fragment string robustly.
  */
-function encodeFragment(fragment: string) {
+export function encodeFragment(fragment: string) {
   return encodeURI(fragment).replace(
     /[!'()*;,]/g,
     (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase(),
