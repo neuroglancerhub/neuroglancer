@@ -31,9 +31,7 @@ import { setDefaultInputEventBindings } from "#src/ui/default_input_event_bindin
 import { makeMinimalViewer } from "#src/ui/minimal_viewer.js";
 import { disableContextMenu } from "#src/ui/disable_default_actions.js";
 
-export function setupDefaultViewer(options?: {
-  target?: HTMLElement;
-}) {
+export function setupDefaultViewer(options?: { target?: HTMLElement }) {
   const viewer = makeMinimalViewer({
     target: options?.target,
   });
@@ -42,7 +40,7 @@ export function setupDefaultViewer(options?: {
   bindDefaultCopyHandler(viewer);
   bindDefaultPasteHandler(viewer);
 
-  disableContextMenu();
+  disableContextMenu(options?.target);
 
   return viewer;
 }
