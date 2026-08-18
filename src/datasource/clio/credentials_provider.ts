@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import { FlyEMCredentialsProvider } from "#src/datasource/flyem/api.js";
+import { FlyEMCredentialsProvider } from "#src/datasource/flyem/credentials_provider.js";
 
 export class ClioCredentialsProvider extends FlyEMCredentialsProvider {
   constructor(authServer: string | undefined) {
