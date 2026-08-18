@@ -290,3 +290,12 @@ export abstract class MultiscaleVolumeChunkSource extends MultiscaleSliceViewChu
   abstract dataType: DataType;
   abstract volumeType: VolumeType;
 }
+
+export interface MultiscaleVolumeChunkSource {
+  /**
+   * Optionally implemented by data sources that can resolve the position of a
+   * segment on demand, e.g. the DVID locate-body service. Used by
+   * SegmentationUserLayer.moveToSegment when no mesh layer knows the position.
+   */
+  getSegmentPosition?(id: bigint): Promise<Float32Array>;
+}

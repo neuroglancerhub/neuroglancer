@@ -1148,9 +1148,7 @@ export class SegmentationUserLayer extends Base {
           this.copiedSegments = [segment];
           const text = segment.toString();
           if (setClipboard(text)) {
-            StatusMessage.showTemporaryMessage(
-              `${text} copied to clipboard`,
-            );
+            StatusMessage.showTemporaryMessage(`${text} copied to clipboard`);
           }
         }
         break;
@@ -1163,9 +1161,7 @@ export class SegmentationUserLayer extends Base {
           this.copiedSegments.push(segment);
           const text = this.copiedSegments.map((s) => s.toString()).join(",");
           if (setClipboard(text)) {
-            StatusMessage.showTemporaryMessage(
-              `${text} copied to clipboard`,
-            );
+            StatusMessage.showTemporaryMessage(`${text} copied to clipboard`);
           }
         }
         break;
@@ -1333,6 +1329,30 @@ export class SegmentationUserLayer extends Base {
       this.setLayerPosition(transform, layerPosition);
       return;
     }
+
+    // No mesh layer knows the position; fall back to any volume source that can
+    // look it up on demand, e.g. the DVID locate-body service.
+    let hasPositionApi = false;
+    for (const layer of this.renderLayers) {
+      if (!(layer instanceof SegmentationRenderLayer)) continue;
+      const { multiscaleSource } = layer;
+      if (multiscaleSource.getSegmentPosition === undefined) continue;
+      hasPositionApi = true;
+      multiscaleSource
+        .getSegmentPosition(id)
+        .then((segmentPosition) => {
+          const { globalPosition } = this.manager.root;
+          globalPosition.value.set(segmentPosition);
+          globalPosition.changed.dispatch();
+        })
+        .catch((error) => {
+          StatusMessage.showTemporaryMessage(
+            `Failed to retrieve position for segment ${id}: ${error}`,
+          );
+        });
+    }
+    if (hasPositionApi) return;
+
     StatusMessage.showTemporaryMessage(
       `No position information loaded for segment ${id}`,
     );
