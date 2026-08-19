@@ -97,6 +97,52 @@ class RenderHelper extends AnnotationRenderHelper {
       rank,
       2,
     );
+    builder.addVertexCode(`
+struct SphereParams {
+  highp vec3 subspaceCenter;
+  highp vec3 subspaceRadii;
+  highp float clipCoefficient;
+  bool cull;
+};
+SphereParams getSphereParams() {
+  SphereParams params;
+  highp float modelPositionA[${rank}] = getVertexPosition0();
+  highp float modelPositionB[${rank}] = getVertexPosition1();
+  highp float modelCenter[${rank}];
+  highp float modelRadii[${rank}];
+  float diameterSquared = 0.0;
+  for (int i = 0; i < ${rank}; ++i) {
+    float dx = modelPositionA[i] - modelPositionB[i];
+    diameterSquared += dx * dx;
+    modelCenter[i] = (modelPositionA[i] + modelPositionB[i]) * 0.5;
+  }
+  float radius = sqrt(diameterSquared) * 0.5;
+  for (int i = 0; i < ${rank}; ++i) {
+    modelRadii[i] = radius;
+  }
+  float radiusAdjustment = 1.0;
+  float clipCoefficient = 1.0;
+  for (int i = 0; i < ${rank}; ++i) {
+    float r = modelRadii[i];
+    float c = modelCenter[i];
+    float x = uModelClipBounds[i];
+    float clipRadius = uModelClipBounds[i + ${rank}];
+    if (r != 0.0 && clipRadius != 0.0) {
+      float d = c - x;
+      d = d * d;
+      radiusAdjustment -= d / (r * r);
+    }
+    float e = abs(x - clamp(x, c - r, c + r)) * clipRadius;
+    clipCoefficient *= max(0.0, 1.0 - e);
+  }
+  radiusAdjustment = sqrt(max(0.0, radiusAdjustment));
+  params.subspaceCenter = projectModelVectorToSubspace(modelCenter);
+  params.subspaceRadii = projectModelVectorToSubspace(modelRadii) * radiusAdjustment;
+  params.clipCoefficient = clipCoefficient;
+  params.cull = clipCoefficient == 0.0 || radiusAdjustment == 0.0;
+  return params;
+}
+`);
   }
 
   private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
@@ -275,13 +321,12 @@ function snapPositionToEndpoint(
  */
 class PerspectiveRenderHelper extends RenderHelper {
   private sphereRenderHelper = this.registerDisposer(
-    new SphereRenderHelper(this.gl, 10, 10),
+    new SphereRenderHelper(this.gl, 20, 20),
   );
 
   private sphereShaderGetter = this.getDependentShader(
     "annotation/sphere/projection",
     (builder: ShaderBuilder) => {
-      const { rank } = this;
       this.defineShader(builder);
       this.sphereRenderHelper.defineShader(builder);
       builder.addUniform("highp vec4", "uLightDirection");
@@ -295,21 +340,15 @@ void setSphereColor(vec4 color) {
 }
 `);
       builder.setVertexMain(`
-float modelPositionA[${rank}] = getVertexPosition0();
-float modelPositionB[${rank}] = getVertexPosition1();
-float centerPosition[${rank}];
-float diameterSquared = 0.0;
-for (int i = 0; i < ${rank}; ++i) {
-  float dx = modelPositionA[i] - modelPositionB[i];
-  diameterSquared += dx * dx;
-  centerPosition[i] = (modelPositionA[i] + modelPositionB[i]) * 0.5;
+SphereParams params = getSphereParams();
+if (params.cull) {
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+  return;
 }
-float radius = sqrt(diameterSquared) * 0.5;
-vClipCoefficient = getSubspaceClipCoefficient(centerPosition);
+vClipCoefficient = params.clipCoefficient;
 ${this.invokeUserMain}
-emitSphere(uModelViewProjection, uNormalTransform,
-           projectModelVectorToSubspace(centerPosition),
-           vec3(radius, radius, radius), uLightDirection);
+emitSphere(uModelViewProjection, uNormalTransform, params.subspaceCenter,
+           params.subspaceRadii, uLightDirection);
 ${this.setPartIndex(builder)};
 `);
       builder.setFragmentMain(`
