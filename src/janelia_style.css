@@ -1,0 +1,15 @@
+/**
+ * Stylesheet for embedders, published as the "./janelia/style.css" subpath.
+ *
+ * When neuroglancer is consumed as modules these rules already arrive through
+ * the JS graph - viewer.ts imports both of them - so importing this file is
+ * optional and costs nothing extra: the bundler resolves it to the same
+ * modules. It exists so an embedding application can pull the viewer styles in
+ * explicitly, and so the "./janelia" entry has a stylesheet counterpart.
+ *
+ * Deliberately excludes ui/default_viewer.css, whose html/body rules would
+ * leak into the host page.
+ */
+
+@import "./viewer.css";
+@import "./noselect.css";

@@ -115,6 +115,7 @@
   "exports": {
     ".": "./src/main_module.ts",
     "./janelia": "./src/flyem_main_module.ts",
+    "./janelia/style.css": "./src/janelia_style.css",
     "./unstable/*.js": "./src/*.ts",
     "./unstable/*": "./src/*"
   },
