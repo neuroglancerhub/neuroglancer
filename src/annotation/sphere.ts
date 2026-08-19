@@ -40,6 +40,7 @@ import {
   registerAnnotationTypeRenderHandler,
 } from "#src/annotation/type_handler.js";
 import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
+import type { SliceViewPanelRenderContext } from "#src/sliceview/renderlayer.js";
 import { mat4, vec3 } from "#src/util/geom.js";
 import { projectPointToLineSegment } from "#src/util/geom.js";
 import {
@@ -52,6 +53,9 @@ import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { defineVectorArrayVertexShaderInput } from "#src/webgl/shader_lib.js";
 import { SphereRenderHelper } from "#src/webgl/spheres.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
+
+const tempViewportToObject = mat4.create();
+const tempObjectToViewport = mat4.create();
 
 const FULL_OBJECT_PICK_OFFSET = 0;
 const ENDPOINTS_PICK_OFFSET = FULL_OBJECT_PICK_OFFSET + 1;
@@ -97,11 +101,6 @@ class RenderHelper extends AnnotationRenderHelper {
     builder.addVertexCode(`
 struct SphereParams {
   highp vec3 subspaceCenter;
-  // The centre projected onto the plane being displayed: identical to
-  // subspaceCenter in the perspective view, but moved onto the current slice
-  // in a cross section, where geometry at the sphere's own depth would fall
-  // outside the slab and be clipped away.
-  highp vec3 subspaceSliceCenter;
   highp vec3 subspaceRadii;
   highp float clipCoefficient;
   bool cull;
@@ -138,14 +137,6 @@ SphereParams getSphereParams() {
     clipCoefficient *= max(0.0, 1.0 - e);
   }
   radiusAdjustment = sqrt(max(0.0, radiusAdjustment));
-  highp float sliceCenter[${rank}];
-  for (int i = 0; i < ${rank}; ++i) {
-    // uModelClipBounds holds the current position, and its second half is 1
-    // exactly for the dimensions not displayed in this panel.
-    sliceCenter[i] = mix(modelCenter[i], uModelClipBounds[i],
-                         uModelClipBounds[i + ${rank}]);
-  }
-  params.subspaceSliceCenter = projectModelVectorToSubspace(sliceCenter);
   params.subspaceCenter = projectModelVectorToSubspace(modelCenter);
   params.subspaceRadii = projectModelVectorToSubspace(modelRadii) * radiusAdjustment;
   params.clipCoefficient = clipCoefficient;
@@ -209,15 +200,18 @@ emitAnnotation(color);
     },
   );
 
-  // The cross section of a sphere is always a circle, so this reuses the circle
-  // shader rather than the general ellipse machinery in ellipsoid.ts.
-  // getSphereParams already shrinks the radius to the cross section at the
-  // current plane, so what is left is projecting it into pixels.
+  // A sphere's cross section is always a circle, so this reuses the circle
+  // shader rather than the general ellipse machinery in ellipsoid.ts. The
+  // intersection is computed in viewport space, where the slice plane is z=0:
+  // the centre's z is its signed distance from the plane, giving a circle of
+  // radius sqrt(R^2 - d^2) at the centre's in-plane position.
   private crossSectionShaderGetter = this.getDependentShader(
     "annotation/sphere/crossSection",
     (builder: ShaderBuilder) => {
       this.defineShader(builder);
       defineCircleShader(builder, this.targetIsSliceView);
+      builder.addUniform("highp mat4", "uObjectToViewport");
+      builder.addUniform("highp mat4", "uViewportToDevice");
       builder.addVarying("highp float", "vClipCoefficient");
       builder.addVarying("highp vec4", "vBorderColor");
       defineNoOpAxisSetters(builder);
@@ -237,21 +231,27 @@ vClipCoefficient = params.clipCoefficient;
 vColor = vec4(0.0, 0.0, 0.0, 0.0);
 vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
 ${this.invokeUserMain}
-vec4 clipCenter = uModelViewProjection * vec4(params.subspaceSliceCenter, 1.0);
-float w = max(abs(clipCenter.w), 1e-6);
-// Project a radius offset along each subspace axis and keep the longest: in a
-// slice view the axis lying along the plane normal projects to nothing, so the
-// longest is the in-plane radius.
-float pixelRadius = 0.0;
+vec3 viewportCenter = (uObjectToViewport * vec4(params.subspaceCenter, 1.0)).xyz;
+float radius = 0.0;
 for (int i = 0; i < 3; ++i) {
   vec3 offset = vec3(0.0);
   offset[i] = params.subspaceRadii[i];
-  vec4 clipOffset = uModelViewProjection * vec4(offset, 0.0);
-  vec2 pixelOffset = vec2(clipOffset.x * 0.5 / (uCircleParams.x * w),
-                          clipOffset.y * 0.5 / (uCircleParams.y * w));
-  pixelRadius = max(pixelRadius, length(pixelOffset));
+  radius = max(radius, length((uObjectToViewport * vec4(offset, 0.0)).xyz));
 }
-emitCircle(clipCenter, 2.0 * pixelRadius, 1.0);
+float d = viewportCenter.z;
+float crossRadius = sqrt(max(0.0, radius * radius - d * d));
+if (crossRadius <= 0.0) {
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+  return;
+}
+vec4 clipCenter = uViewportToDevice * vec4(viewportCenter.xy, 0.0, 1.0);
+vec4 clipEdge = uViewportToDevice *
+    vec4(viewportCenter.x + crossRadius, viewportCenter.y, 0.0, 1.0);
+vec2 ndcCenter = clipCenter.xy / max(abs(clipCenter.w), 1e-6);
+vec2 ndcEdge = clipEdge.xy / max(abs(clipEdge.w), 1e-6);
+vec2 pixelOffset = (ndcEdge - ndcCenter) * 0.5 /
+    vec2(uCircleParams.x, uCircleParams.y);
+emitCircle(clipCenter, 2.0 * length(pixelOffset), 1.0);
 ${this.setPartIndex(builder)};
 `);
       builder.setFragmentMain(`
@@ -262,8 +262,32 @@ emitAnnotation(color);
     },
   );
 
-  drawCrossSection(context: AnnotationRenderContext) {
+  drawCrossSection(
+    context: AnnotationRenderContext & {
+      renderContext: SliceViewPanelRenderContext;
+    },
+  ) {
     this.enable(this.crossSectionShaderGetter, context, (shader) => {
+      const { gl } = shader;
+      const sliceProjection =
+        context.renderContext.sliceView.projectionParameters.value;
+      const viewportToObject = mat4.multiply(
+        tempViewportToObject,
+        context.renderSubspaceInvModelMatrix,
+        sliceProjection.invViewMatrix,
+      );
+      const objectToViewport = tempObjectToViewport;
+      mat4.invert(objectToViewport, viewportToObject);
+      gl.uniformMatrix4fv(
+        shader.uniform("uObjectToViewport"),
+        /*transpose=*/ false,
+        objectToViewport,
+      );
+      gl.uniformMatrix4fv(
+        shader.uniform("uViewportToDevice"),
+        /*transpose=*/ false,
+        sliceProjection.projectionMat,
+      );
       initializeCircleShader(
         shader,
         context.renderContext.projectionParameters,
@@ -308,6 +332,20 @@ emitAnnotation(color);
 
   draw(context: AnnotationRenderContext) {
     this.drawEndpoints(context);
+  }
+}
+
+/**
+ * Draws the sphere's cross section with the current plane, alongside the
+ * endpoint markers.
+ */
+class SliceViewRenderHelper extends RenderHelper {
+  draw(
+    context: AnnotationRenderContext & {
+      renderContext: SliceViewPanelRenderContext;
+    },
+  ) {
+    super.draw(context);
     this.drawCrossSection(context);
   }
 }
@@ -412,13 +450,13 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a * vClipCoefficient));
       renderContext: PerspectiveViewRenderContext;
     },
   ) {
-    this.drawEndpoints(context);
+    super.draw(context);
     this.drawSphere(context);
   }
 }
 
 registerAnnotationTypeRenderHandler<Sphere>(AnnotationType.SPHERE, {
-  sliceViewRenderHelper: RenderHelper,
+  sliceViewRenderHelper: SliceViewRenderHelper,
   perspectiveViewRenderHelper: PerspectiveRenderHelper,
   defineShaderNoOpSetters(builder) {
     defineNoOpEndpointMarkerSetters(builder);
