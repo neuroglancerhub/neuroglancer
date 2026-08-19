@@ -437,6 +437,9 @@ class SelectNextAnnotationTool extends LayerTool<AnnotationUserLayer> {
 }
 
 export class AnnotationUserLayer extends Base {
+  // Annotation sources such as dvid and clio can refetch on demand, so offer
+  // the layer bar's refresh button for this layer type.
+  allowingRefresh = true;
   localAnnotations: LocalAnnotationSource | undefined;
   codeVisible = new TrackableBoolean(true);
   hideInactiveShaderControls = new TrackableBoolean(false);

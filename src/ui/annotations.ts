@@ -357,6 +357,13 @@ export class AnnotationLayerView extends Tab {
           source.childrenReordered.add(this.forceUpdateView),
         );
       }
+      // A refresh replaces the source's annotations wholesale, so rebuild the
+      // whole view rather than applying per-child updates. Dispatched by the
+      // dvid and clio sources after invalidateCache; MultiscaleAnnotationSource
+      // carries the signal too, so this is not restricted to AnnotationSource.
+      refCounted.registerDisposer(
+        source.childRefreshed.add(this.forceUpdateView),
+      );
       refCounted.registerDisposer(
         state.transform.changed.add(this.forceUpdateView),
       );
@@ -1594,9 +1601,7 @@ export class PlaceSphereTool extends PlaceTwoCornerAnnotationTool {
         newRelationships,
         (newSegments, i) => {
           const initialSegments = initialRelationships[i];
-          newSegments = newSegments.filter(
-            (x) => !initialSegments.includes(x),
-          );
+          newSegments = newSegments.filter((x) => !initialSegments.includes(x));
           return BigUint64Array.from([...initialSegments, ...newSegments]);
         },
       );

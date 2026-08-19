@@ -1042,7 +1042,16 @@ export class MultiscaleAnnotationSource
   childUpdated: Signal<(annotation: Annotation) => void>;
   childCommitted: Signal<(annotationId: string) => void>;
   childDeleted: Signal<(annotationId: string) => void>;
+  childRefreshed = new NullarySignal();
   childrenReordered = new NullarySignal();
+}
+
+export interface MultiscaleAnnotationSource {
+  /**
+   * Optionally implemented by sources that can refetch their annotations on
+   * demand, e.g. dvid and clio. Used by the layer bar's refresh button.
+   */
+  invalidateCache?(): void;
 }
 
 registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function (x) {

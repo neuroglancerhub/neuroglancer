@@ -93,7 +93,7 @@ import {
 } from "#src/util/json.js";
 import type { ProgressOptions } from "#src/util/progress_listener.js";
 import { ProgressSpan } from "#src/util/progress_listener.js";
-import { NullarySignal, Signal } from "#src/util/signal.js";
+import { Signal } from "#src/util/signal.js";
 
 const serverDataTypes = new Map<string, DataType>();
 serverDataTypes.set("uint8", DataType.UINT8);
@@ -194,9 +194,7 @@ export class VolumeDataInstanceInfo extends DataInstanceInfo {
 
     const instSet = new Set<string>(instanceNames);
     if (encoding !== VolumeChunkEncoding.COMPRESSED_SEGMENTATIONARRAY) {
-      while (
-        instSet.has(name + "_" + this.volumeInfo.numLevels.toString())
-      ) {
+      while (instSet.has(name + "_" + this.volumeInfo.numLevels.toString())) {
         this.volumeInfo.numLevels += 1;
       }
     }
@@ -671,7 +669,6 @@ class DVIDAnnotationChunkSource extends WithParameters(
 export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   declare key: any;
   readonly = false;
-  childRefreshed = new NullarySignal();
   private multiscaleVolumeInfo: MultiscaleVolumeInfo;
   private chunkSources: SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][];
 
@@ -694,14 +691,11 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.multiscaleVolumeInfo = options.multiscaleVolumeInfo;
 
     this.childAdded =
-      this.childAdded ||
-      new Signal<(annotation: Annotation) => void>();
+      this.childAdded || new Signal<(annotation: Annotation) => void>();
     this.childUpdated =
-      this.childUpdated ||
-      new Signal<(annotation: Annotation) => void>();
+      this.childUpdated || new Signal<(annotation: Annotation) => void>();
     this.childDeleted =
-      this.childDeleted ||
-      new Signal<(annotationId: string) => void>();
+      this.childDeleted || new Signal<(annotationId: string) => void>();
 
     if (this.parameters.readonly !== undefined) {
       this.readonly = this.parameters.readonly;
@@ -715,11 +709,10 @@ export class DVIDAnnotationSource extends MultiscaleAnnotationSourceBase {
   getSources(
     _options: VolumeSourceOptions,
   ): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
-    const sourceSpecifications =
-      makeAnnotationGeometrySourceSpecifications(
-        this.multiscaleVolumeInfo,
-        this.parameters,
-      );
+    const sourceSpecifications = makeAnnotationGeometrySourceSpecifications(
+      this.multiscaleVolumeInfo,
+      this.parameters,
+    );
 
     let limit = 0;
     if (sourceSpecifications[0].length > 1) {

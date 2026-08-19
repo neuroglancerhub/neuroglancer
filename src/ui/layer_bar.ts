@@ -17,7 +17,7 @@
 import "#src/noselect.css";
 import "#src/ui/layer_bar.css";
 import svg_plus from "ikonate/icons/plus.svg?raw";
-import type { ManagedUserLayer } from "#src/layer/index.js";
+import type { ManagedUserLayer, UserLayer } from "#src/layer/index.js";
 import { addNewLayer, deleteLayer, makeLayer } from "#src/layer/index.js";
 import type { LayerGroupViewer } from "#src/layer_group_viewer.js";
 import { NavigationLinkType } from "#src/navigation_state.js";
@@ -37,10 +37,31 @@ import {
 import { RefCounted } from "#src/util/disposable.js";
 import { removeFromParent } from "#src/util/dom.js";
 import { preventDrag } from "#src/util/drag_and_drop.js";
-import { makeCloseButton } from "#src/widget/close_button.js";
+import { LoadedLayerDataSource } from "#src/layer/layer_data_source.js";
+import {
+  makeCloseButton,
+  makeRefreshButton,
+} from "#src/widget/close_button.js";
 import { makeDeleteButton } from "#src/widget/delete_button.js";
 import { makeIcon } from "#src/widget/icon.js";
 import { PositionWidget } from "#src/widget/position_widget.js";
+
+/**
+ * Asks every annotation subsource of `userLayer` to refetch, which is what the
+ * layer bar's refresh button does. Sources that cannot refetch simply have no
+ * invalidateCache.
+ */
+function refreshLayerData(userLayer: UserLayer | null) {
+  if (userLayer === null) return;
+  for (const dataSource of userLayer.dataSources) {
+    const { loadState } = dataSource;
+    if (loadState === undefined) continue;
+    if (!(loadState instanceof LoadedLayerDataSource)) continue;
+    for (const { subsource } of loadState.dataSource.subsources) {
+      subsource.annotation?.invalidateCache?.();
+    }
+  }
+}
 
 class LayerWidget extends RefCounted {
   element = document.createElement("div");
@@ -51,6 +72,7 @@ class LayerWidget extends RefCounted {
   prefetchProgress = document.createElement("div");
   labelElementText = document.createTextNode("");
   valueElement = document.createElement("div");
+  refreshElement: HTMLElement;
   maxLength = 0;
   prevValueText = "";
   private colorChangeDisposer: () => void = () => {};
@@ -111,6 +133,12 @@ class LayerWidget extends RefCounted {
       }
       event.stopPropagation();
     });
+    const refreshElement = (this.refreshElement = makeRefreshButton());
+    refreshElement.title = "Refresh data";
+    refreshElement.addEventListener("click", (event: MouseEvent) => {
+      refreshLayerData(this.layer.layer);
+      event.stopPropagation();
+    });
     const deleteElement = makeDeleteButton();
     deleteElement.title = "Delete this layer";
     deleteElement.addEventListener("click", (event: MouseEvent) => {
@@ -122,6 +150,7 @@ class LayerWidget extends RefCounted {
     element.appendChild(layerNumberElement);
     valueContainer.appendChild(valueElement);
     valueContainer.appendChild(buttonContainer);
+    buttonContainer.appendChild(refreshElement);
     buttonContainer.appendChild(closeElement);
     buttonContainer.appendChild(deleteElement);
     element.appendChild(labelWrapper);
@@ -238,6 +267,9 @@ class LayerWidget extends RefCounted {
     }
     title += ", drag to move, shift+drag to copy";
     element.title = title;
+    this.refreshElement.style.display = layer.layer?.allowingRefresh
+      ? ""
+      : "none";
     this.setColor();
   }
 
