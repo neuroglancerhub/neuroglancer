@@ -1,11 +1,11 @@
 {
-  "name": "neuroglancer",
-  "description": "Visualization tool for 3-D volumetric data.",
+  "name": "@janelia-flyem/neuroglancer",
+  "description": "Visualization tool for 3-D volumetric data (Janelia fork).",
   "license": "Apache-2.0",
   "version": "2.41.2",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/google/neuroglancer.git"
+    "url": "git+https://github.com/neuroglancerhub/neuroglancer.git"
   },
   "engines": {
     "node": ">=22.18"
@@ -114,6 +114,7 @@
   "type": "module",
   "exports": {
     ".": "./src/main_module.ts",
+    "./janelia": "./src/flyem_main_module.ts",
     "./unstable/*.js": "./src/*.ts",
     "./unstable/*": "./src/*"
   },

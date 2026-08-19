@@ -18,35 +18,45 @@
  * limitations under the License.
  */
 
+/**
+ * @file Janelia library entry point, published as the "./janelia" subpath.
+ *
+ * Importing this module registers the standard datasources plus the Janelia
+ * ones (clio, dvid), and re-exports the API surface that embedding
+ * applications - react-neuroglancer and, through it, clio_website - depend on.
+ */
+
 import "#src/util/polyfills.js";
 import "#src/layer/enabled_frontend_modules.js";
 import "#src/datasource/enabled_frontend_modules.js";
 import "#src/kvstore/enabled_frontend_modules.js";
 
-import {
-  bindDefaultCopyHandler,
-  bindDefaultPasteHandler,
-} from "#src/ui/default_clipboard_handling.js";
-import { setDefaultInputEventBindings } from "#src/ui/default_input_event_bindings.js";
-import { makeMinimalViewer } from "#src/ui/minimal_viewer.js";
-import { disableContextMenu } from "#src/ui/disable_default_actions.js";
+// Viewer setup. setupMinimalViewer avoids default_viewer.css, whose html/body
+// rules would otherwise leak into the host page; setupDefaultViewer is kept as
+// an alias so existing embedders keep working.
+export { setupMinimalViewer } from "#src/ui/minimal_viewer_setup.js";
+export { setupMinimalViewer as setupDefaultViewer } from "#src/ui/minimal_viewer_setup.js";
+export { makeMinimalViewer } from "#src/ui/minimal_viewer.js";
+export { makeMinimalViewer as makeDefaultViewer } from "#src/ui/minimal_viewer.js";
+export type { MinimalViewerOptions } from "#src/ui/minimal_viewer.js";
 
-export function setupDefaultViewer(options?: { target?: HTMLElement }) {
-  const viewer = makeMinimalViewer({
-    target: options?.target,
-  });
-  setDefaultInputEventBindings(viewer.inputEventBindings);
+export { Viewer, globalViewerConfig } from "#src/viewer.js";
+export type { ViewerOptions } from "#src/viewer.js";
+export { DisplayContext } from "#src/display_context.js";
+export { StatusMessage } from "#src/status.js";
 
-  bindDefaultCopyHandler(viewer);
-  bindDefaultPasteHandler(viewer);
+// Utilities used by react-neuroglancer. Note that Uint64 is gone upstream -
+// segment ids are native bigint now, so use parseUint64 to parse strings.
+export { parseUint64, urlSafeParse } from "#src/util/json.js";
+export { serializeColor } from "#src/util/color.js";
+// encodeStateAsFragment serialises and encodes in one step, applying the
+// bigint replacer that plain JSON.stringify needs to avoid throwing on
+// segment ids; encodeFragment only encodes an already-serialised string.
+export {
+  encodeFragment,
+  encodeStateAsFragment,
+} from "#src/ui/url_hash_binding.js";
 
-  disableContextMenu(options?.target);
-
-  return viewer;
-}
-
-export default class Neuroglancer {
-  version() {
-    return "0.0.1";
-  }
-}
+export { AnnotationUserLayer } from "#src/layer/annotation/index.js";
+export { SegmentationUserLayer } from "#src/layer/segmentation/index.js";
+export { getObjectColor } from "#src/segmentation_display_state/frontend.js";
