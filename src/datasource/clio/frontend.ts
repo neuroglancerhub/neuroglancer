@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-import type { Annotation } from "#src/annotation/index.js";
+import type { Annotation, AnnotationReference } from "#src/annotation/index.js";
 import { AnnotationType } from "#src/annotation/index.js";
 import {
   AnnotationGeometryChunkSource,
@@ -57,6 +57,7 @@ import {
 import { getUserFromToken } from "#src/datasource/flyem/annotation.js";
 import type { FlyEMAnnotation } from "#src/datasource/flyem/annotation.js";
 import { VolumeInfo } from "#src/datasource/flyem/datainfo.js";
+import { makeAnnotationEditWidget } from "#src/datasource/flyem/widgets.js";
 import type {
   CompleteUrlOptions,
   CompletionResult,
@@ -160,6 +161,41 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
       this.childUpdated || new Signal<(annotation: Annotation) => void>();
     this.childDeleted =
       this.childDeleted || new Signal<(annotationId: string) => void>();
+  }
+
+  /**
+   * Clio annotations carry a user-defined schema, so they are edited through a
+   * generated form rather than the plain description field. Returns null when
+   * the annotation type has no form, and the caller falls back to the default
+   * editor.
+   */
+  makeEditWidget(reference: AnnotationReference) {
+    const getFacade = (annotation: FlyEMAnnotation) =>
+      new ClioAnnotationFacade(annotation);
+    const getProp = (annotation: FlyEMAnnotation) => ({
+      ...annotation.prop,
+      ...annotation.ext,
+    });
+    const setProp = (
+      annotation: FlyEMAnnotation,
+      prop: { [key: string]: any },
+    ) => {
+      const annotationRef = new ClioAnnotationFacade(annotation);
+      if (prop.title) {
+        annotationRef.title = prop.title;
+      }
+      if (prop.description) {
+        annotationRef.description = prop.description;
+      }
+    };
+    return makeAnnotationEditWidget(
+      reference,
+      this.parameters.schema,
+      this,
+      getFacade,
+      getProp,
+      setProp,
+    );
   }
 
   getSources(

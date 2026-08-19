@@ -2693,9 +2693,26 @@ export function UserLayerWithAnnotationsMixin<
                   );
                 }
 
+                // Sources with a schema, i.e. clio, render their own edit
+                // form in place of the description field. A null result means
+                // this annotation has no form, so fall through to the default.
+                let editWidget: HTMLElement | null = null;
+                const { source } = annotationLayer;
                 if (
-                  !annotationLayer.source.readonly ||
-                  annotation.description
+                  source instanceof MultiscaleAnnotationSource &&
+                  source.makeEditWidget !== undefined
+                ) {
+                  editWidget = source.makeEditWidget(reference);
+                  if (editWidget !== null) {
+                    editWidget.className =
+                      "neuroglancer-annotation-details-description";
+                    parent.appendChild(editWidget);
+                  }
+                }
+
+                if (
+                  editWidget === null &&
+                  (!annotationLayer.source.readonly || annotation.description)
                 ) {
                   if (annotationLayer.source.readonly) {
                     const description = document.createElement("div");

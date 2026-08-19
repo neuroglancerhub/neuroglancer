@@ -1052,6 +1052,13 @@ export interface MultiscaleAnnotationSource {
    * demand, e.g. dvid and clio. Used by the layer bar's refresh button.
    */
   invalidateCache?(): void;
+
+  /**
+   * Optionally implemented by sources that edit annotations through a
+   * schema-driven form rather than the plain description field, i.e. clio.
+   * Returning null falls back to the default description editor.
+   */
+  makeEditWidget?(reference: AnnotationReference): HTMLElement | null;
 }
 
 registerRPC(ANNOTATION_COMMIT_UPDATE_RESULT_RPC_ID, function (x) {
