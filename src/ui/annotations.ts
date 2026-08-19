@@ -535,6 +535,15 @@ export class AnnotationLayerView extends Tab {
     });
     mutableControls.appendChild(ellipsoidButton);
 
+    const sphereButton = makeIcon({
+      text: annotationTypeHandlers[AnnotationType.SPHERE].icon,
+      title: "Annotate sphere",
+      onClick: () => {
+        this.layer.tool.value = new PlaceSphereTool(this.layer, {});
+      },
+    });
+    mutableControls.appendChild(sphereButton);
+
     const polylineButton = makeIcon({
       text: annotationTypeHandlers[AnnotationType.POLYLINE].icon,
       title: "Annotate polyline",
