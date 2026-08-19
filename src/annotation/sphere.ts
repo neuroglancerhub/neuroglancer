@@ -48,11 +48,6 @@ import {
   initializeCircleShader,
   VERTICES_PER_CIRCLE,
 } from "#src/webgl/circles.js";
-import {
-  defineLineShader,
-  drawLines,
-  initializeLineShader,
-} from "#src/webgl/lines.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { defineVectorArrayVertexShaderInput } from "#src/webgl/shader_lib.js";
 import { SphereRenderHelper } from "#src/webgl/spheres.js";
@@ -77,6 +72,8 @@ void setSphereColor(vec4 color) {}
 `);
 }
 
+// The axis between the two points is no longer drawn, but the setters remain
+// defined so that saved shaders which call them still compile.
 function defineNoOpAxisSetters(builder: ShaderBuilder) {
   builder.addVertexCode(`
 void setSphereAxisWidth(float width) {}
@@ -146,49 +143,6 @@ SphereParams getSphereParams() {
   }
 
   private vertexIdHelper = this.registerDisposer(VertexIdHelper.get(this.gl));
-
-  private edgeShaderGetter = this.getDependentShader(
-    "annotation/sphere/axis",
-    (builder: ShaderBuilder) => {
-      const { rank } = this;
-      this.defineShader(builder);
-      defineLineShader(builder);
-      builder.addVarying(`highp float[${rank}]`, "vModelPosition");
-      builder.addVertexCode(`
-float ng_LineWidth;
-`);
-      defineNoOpEndpointMarkerSetters(builder);
-      defineNoOpSphereSetters(builder);
-      builder.addVertexCode(`
-void setSphereAxisWidth(float width) {
-  ng_LineWidth = width;
-}
-void setSphereAxisColor(vec4 startColor, vec4 endColor) {
-  vColor = mix(startColor, endColor, getLineEndpointCoefficient());
-}
-`);
-      builder.setVertexMain(`
-float modelPositionA[${rank}] = getVertexPosition0();
-float modelPositionB[${rank}] = getVertexPosition1();
-for (int i = 0; i < ${rank}; ++i) {
-  vModelPosition[i] = mix(modelPositionA[i], modelPositionB[i], getLineEndpointCoefficient());
-}
-ng_LineWidth = 1.0;
-vColor = vec4(0.0, 0.0, 0.0, 0.0);
-${this.invokeUserMain}
-emitLine(uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionA), 1.0),
-         uModelViewProjection * vec4(projectModelVectorToSubspace(modelPositionB), 1.0),
-         ng_LineWidth);
-${this.setPartIndex(builder)};
-`);
-      builder.setFragmentMain(`
-float clipCoefficient = getSubspaceClipCoefficient(vModelPosition);
-emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() *
-                                ${this.getCrossSectionFadeFactor()} *
-                                clipCoefficient));
-`);
-    },
-  );
 
   private endpointShaderGetter = this.getDependentShader(
     "annotation/sphere/endpoint",
@@ -328,17 +282,6 @@ emitAnnotation(color);
     });
   }
 
-  drawEdges(context: AnnotationRenderContext) {
-    this.enable(this.edgeShaderGetter, context, (shader) => {
-      initializeLineShader(
-        shader,
-        context.renderContext.projectionParameters,
-        /*featherWidthInPixels=*/ 1.0,
-      );
-      drawLines(shader.gl, 1, context.count);
-    });
-  }
-
   drawEndpoints(context: AnnotationRenderContext) {
     this.enable(this.endpointShaderGetter, context, (shader) => {
       initializeCircleShader(
@@ -351,7 +294,6 @@ emitAnnotation(color);
   }
 
   draw(context: AnnotationRenderContext) {
-    this.drawEdges(context);
     this.drawEndpoints(context);
     this.drawCrossSection(context);
   }
@@ -457,7 +399,6 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a * vClipCoefficient));
       renderContext: PerspectiveViewRenderContext;
     },
   ) {
-    this.drawEdges(context);
     this.drawEndpoints(context);
     this.drawSphere(context);
   }
