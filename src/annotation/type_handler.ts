@@ -571,7 +571,7 @@ void setColor(vec4 color) {
   setEllipsoidFillColor(vec4(color.rgb, color.a * (PROJECTION_VIEW ? 1.0 : 0.5)));
   setSphereAxisColor(color);
   setSphereEndpointMarkerColor(color);
-  setSphereColor(vec4(color.rgb, color.a * (PROJECTION_VIEW ? 1.0 : 0.5)));
+  setSphereColor(color);
 }
 void setEllipsoidFillColor(vec3 color) { setEllipsoidFillColor(vec4(color, 1.0)); }
 

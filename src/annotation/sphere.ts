@@ -242,6 +242,70 @@ emitAnnotation(color);
     },
   );
 
+  // The cross section of a sphere is always a circle, so this reuses the circle
+  // shader rather than the general ellipse machinery in ellipsoid.ts.
+  // getSphereParams already shrinks the radius to the cross section at the
+  // current plane, so what is left is projecting it into pixels.
+  private crossSectionShaderGetter = this.getDependentShader(
+    "annotation/sphere/crossSection",
+    (builder: ShaderBuilder) => {
+      this.defineShader(builder);
+      defineCircleShader(builder, this.targetIsSliceView);
+      builder.addVarying("highp float", "vClipCoefficient");
+      builder.addVarying("highp vec4", "vBorderColor");
+      defineNoOpAxisSetters(builder);
+      defineNoOpEndpointMarkerSetters(builder);
+      builder.addVertexCode(`
+void setSphereColor(vec4 color) {
+  vBorderColor = color;
+}
+`);
+      builder.setVertexMain(`
+SphereParams params = getSphereParams();
+if (params.cull) {
+  gl_Position = vec4(2.0, 0.0, 0.0, 1.0);
+  return;
+}
+vClipCoefficient = params.clipCoefficient;
+vColor = vec4(0.0, 0.0, 0.0, 0.0);
+vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
+${this.invokeUserMain}
+vec4 clipCenter = uModelViewProjection * vec4(params.subspaceCenter, 1.0);
+float w = max(abs(clipCenter.w), 1e-6);
+// Project a radius offset along each subspace axis and keep the longest: in a
+// slice view the axis lying along the plane normal projects to nothing, so the
+// longest is the in-plane radius.
+float pixelRadius = 0.0;
+for (int i = 0; i < 3; ++i) {
+  vec3 offset = vec3(0.0);
+  offset[i] = params.subspaceRadii[i];
+  vec4 clipOffset = uModelViewProjection * vec4(offset, 0.0);
+  vec2 pixelOffset = vec2(clipOffset.x * 0.5 / (uCircleParams.x * w),
+                          clipOffset.y * 0.5 / (uCircleParams.y * w));
+  pixelRadius = max(pixelRadius, length(pixelOffset));
+}
+emitCircle(clipCenter, 2.0 * pixelRadius, 1.0);
+${this.setPartIndex(builder)};
+`);
+      builder.setFragmentMain(`
+vec4 color = getCircleColor(vColor, vBorderColor);
+color.a *= vClipCoefficient;
+emitAnnotation(color);
+`);
+    },
+  );
+
+  drawCrossSection(context: AnnotationRenderContext) {
+    this.enable(this.crossSectionShaderGetter, context, (shader) => {
+      initializeCircleShader(
+        shader,
+        context.renderContext.projectionParameters,
+        { featherWidthInPixels: 0.5 },
+      );
+      drawCircles(shader.gl, 1, context.count);
+    });
+  }
+
   enable(
     shaderGetter: AnnotationShaderGetter,
     context: AnnotationRenderContext,
@@ -289,6 +353,7 @@ emitAnnotation(color);
   draw(context: AnnotationRenderContext) {
     this.drawEdges(context);
     this.drawEndpoints(context);
+    this.drawCrossSection(context);
   }
 }
 
@@ -336,7 +401,7 @@ class PerspectiveRenderHelper extends RenderHelper {
       defineNoOpEndpointMarkerSetters(builder);
       builder.addVertexCode(`
 void setSphereColor(vec4 color) {
-  vColor = color;
+  vColor = vec4(color.rgb, color.a * 0.5);
 }
 `);
       builder.setVertexMain(`
@@ -392,7 +457,8 @@ emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a * vClipCoefficient));
       renderContext: PerspectiveViewRenderContext;
     },
   ) {
-    super.draw(context);
+    this.drawEdges(context);
+    this.drawEndpoints(context);
     this.drawSphere(context);
   }
 }
