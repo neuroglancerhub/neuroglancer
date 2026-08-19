@@ -15,9 +15,14 @@
  */
 
 import svg_close from "ikonate/icons/close.svg?raw";
+import svg_refresh from "ikonate/icons/refresh.svg?raw";
 import type { MakeIconOptions } from "#src/widget/icon.js";
 import { makeIcon } from "#src/widget/icon.js";
 
 export function makeCloseButton(options: MakeIconOptions = {}) {
   return makeIcon({ svg: svg_close, ...options });
+}
+
+export function makeRefreshButton(options: MakeIconOptions = {}) {
+  return makeIcon({ svg: svg_refresh, ...options });
 }

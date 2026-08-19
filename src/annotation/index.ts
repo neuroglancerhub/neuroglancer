@@ -1450,6 +1450,12 @@ export interface AnnotationSourceSignals {
   childCommitted: Signal<(annotationId: string) => void>;
   childDeleted: Signal<(annotationId: string) => void>;
   childrenReordered: NullarySignal;
+  /**
+   * Dispatched when a source has refetched its annotations wholesale, e.g.
+   * after invalidateCache, so views should rebuild rather than apply per-child
+   * updates.
+   */
+  childRefreshed: NullarySignal;
 }
 
 export class AnnotationSource
@@ -1464,6 +1470,7 @@ export class AnnotationSource
   childCommitted = new Signal<(annotationId: string) => void>();
   childDeleted = new Signal<(annotationId: string) => void>();
   childrenReordered = new NullarySignal();
+  childRefreshed = new NullarySignal();
 
   public pending = new Set<AnnotationId>();
 

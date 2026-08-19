@@ -75,7 +75,7 @@ import {
   verifyObjectProperty,
   verifyString,
 } from "#src/util/json.js";
-import { NullarySignal, Signal } from "#src/util/signal.js";
+import { Signal } from "#src/util/signal.js";
 import { StatusMessage } from "#src/status.js";
 
 class ClioAnnotationChunkSource extends WithParameters(
@@ -133,7 +133,6 @@ const MultiscaleAnnotationSourceBase = WithParameters(
 export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
   declare key: any;
   readonly = false;
-  childRefreshed = new NullarySignal();
   private dataInfo: VolumeInfo;
   private chunkSources: SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][];
 
@@ -156,21 +155,19 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
     this.dataInfo = options.dataInfo;
 
     this.childAdded =
-      this.childAdded ||
-      new Signal<(annotation: Annotation) => void>();
+      this.childAdded || new Signal<(annotation: Annotation) => void>();
     this.childUpdated =
-      this.childUpdated ||
-      new Signal<(annotation: Annotation) => void>();
+      this.childUpdated || new Signal<(annotation: Annotation) => void>();
     this.childDeleted =
-      this.childDeleted ||
-      new Signal<(annotationId: string) => void>();
+      this.childDeleted || new Signal<(annotationId: string) => void>();
   }
 
   getSources(
     _options: VolumeSourceOptions,
   ): SliceViewSingleResolutionSource<AnnotationGeometryChunkSource>[][] {
-    const sourceSpecifications =
-      makeAnnotationGeometrySourceSpecifications(this.dataInfo);
+    const sourceSpecifications = makeAnnotationGeometrySourceSpecifications(
+      this.dataInfo,
+    );
 
     let limit = 0;
     if (sourceSpecifications[0].length > 1) {
@@ -210,7 +207,9 @@ export class ClioAnnotationSource extends MultiscaleAnnotationSourceBase {
       throw Error(errorMessage);
     }
 
-    const clioAnnotation = new ClioAnnotationFacade(annotation as FlyEMAnnotation);
+    const clioAnnotation = new ClioAnnotationFacade(
+      annotation as FlyEMAnnotation,
+    );
     clioAnnotation.addTimeStamp();
     if (this.parameters.user) {
       clioAnnotation.user = this.parameters.user;
@@ -258,14 +257,11 @@ async function getAnnotationChunkSource(
   dataInfo: VolumeInfo,
   credentialsProvider: CredentialsProvider<ClioToken>,
 ) {
-  return options.registry.chunkManager.getChunkSource(
-    ClioAnnotationSource,
-    {
-      parameters: sourceParameters,
-      credentialsProvider,
-      dataInfo,
-    } as any,
-  );
+  return options.registry.chunkManager.getChunkSource(ClioAnnotationSource, {
+    parameters: sourceParameters,
+    credentialsProvider,
+    dataInfo,
+  } as any);
 }
 
 async function getAnnotationSource(

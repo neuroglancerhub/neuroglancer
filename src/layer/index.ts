@@ -373,6 +373,11 @@ export class UserLayer extends RefCounted {
 
   dataSourcesChanged = new NullarySignal();
   dataSources: LayerDataSource[] = [];
+  /**
+   * Whether the layer bar offers a refresh button for this layer. Set by layer
+   * types whose sources can refetch their data, e.g. annotation layers.
+   */
+  allowingRefresh = false;
 
   get manager() {
     return this.managedLayer.manager;
