@@ -21,10 +21,12 @@
 /**
  * @file Support for rendering sphere annotations.
  *
- * A sphere annotation is defined by two points: the center (pointA) and a
- * surface point (pointB). It renders as a line between the two endpoints with
- * circle markers, similar to a Line annotation but with sphere-specific
- * shader setter names.
+ * A sphere annotation is defined by two points at opposite ends of a diameter,
+ * so its centre is their midpoint and its radius half their separation.
+ *
+ * The cross-section view draws the axis between the two points with endpoint
+ * markers, like a Line annotation but with sphere-specific setter names. The
+ * perspective view additionally draws the sphere itself as shaded geometry.
  */
 
 import type { Sphere } from "#src/annotation/index.js";
@@ -37,6 +39,8 @@ import {
   AnnotationRenderHelper,
   registerAnnotationTypeRenderHandler,
 } from "#src/annotation/type_handler.js";
+import type { PerspectiveViewRenderContext } from "#src/perspective_view/render_layer.js";
+import { mat4, vec3 } from "#src/util/geom.js";
 import { projectPointToLineSegment } from "#src/util/geom.js";
 import {
   defineCircleShader,
@@ -51,6 +55,7 @@ import {
 } from "#src/webgl/lines.js";
 import type { ShaderBuilder, ShaderProgram } from "#src/webgl/shader.js";
 import { defineVectorArrayVertexShaderInput } from "#src/webgl/shader_lib.js";
+import { SphereRenderHelper } from "#src/webgl/spheres.js";
 import { defineVertexId, VertexIdHelper } from "#src/webgl/vertex_id.js";
 
 const FULL_OBJECT_PICK_OFFSET = 0;
@@ -63,6 +68,12 @@ void setSphereEndpointMarkerSize(float startSize, float endSize) {}
 void setSphereEndpointMarkerBorderWidth(float startSize, float endSize) {}
 void setSphereEndpointMarkerColor(vec4 startColor, vec4 endColor) {}
 void setSphereEndpointMarkerBorderColor(vec4 startColor, vec4 endColor) {}
+`);
+}
+
+function defineNoOpSphereSetters(builder: ShaderBuilder) {
+  builder.addVertexCode(`
+void setSphereColor(vec4 color) {}
 `);
 }
 
@@ -101,6 +112,7 @@ class RenderHelper extends AnnotationRenderHelper {
 float ng_LineWidth;
 `);
       defineNoOpEndpointMarkerSetters(builder);
+      defineNoOpSphereSetters(builder);
       builder.addVertexCode(`
 void setSphereAxisWidth(float width) {
   ng_LineWidth = width;
@@ -141,6 +153,7 @@ emitAnnotation(vec4(vColor.rgb, vColor.a * getLineAlpha() *
       builder.addVarying("highp float", "vClipCoefficient");
       builder.addVarying("highp vec4", "vBorderColor");
       defineNoOpAxisSetters(builder);
+      defineNoOpSphereSetters(builder);
       builder.addVertexCode(`
 float ng_markerDiameter;
 float ng_markerBorderWidth;
@@ -187,6 +200,7 @@ emitAnnotation(color);
     shaderGetter: AnnotationShaderGetter,
     context: AnnotationRenderContext,
     callback: (shader: ShaderProgram) => void,
+    usingVertexIdHelper = true,
   ) {
     super.enable(shaderGetter, context, (shader) => {
       const binder = shader.vertexShaderInputBinders.VertexPosition;
@@ -197,9 +211,9 @@ emitAnnotation(color);
       );
       binder.bind(this.geometryDataStride, context.bufferOffset);
       const { vertexIdHelper } = this;
-      vertexIdHelper.enable();
+      if (usingVertexIdHelper) vertexIdHelper.enable();
       callback(shader);
-      vertexIdHelper.disable();
+      if (usingVertexIdHelper) vertexIdHelper.disable();
       binder.disable();
     });
   }
@@ -254,12 +268,103 @@ function snapPositionToEndpoint(
   }
 }
 
+/**
+ * Draws the sphere itself as shaded geometry, on top of the axis and endpoint
+ * markers. Only used in the perspective view: the lighting parameters it needs
+ * come from PerspectiveViewRenderContext.
+ */
+class PerspectiveRenderHelper extends RenderHelper {
+  private sphereRenderHelper = this.registerDisposer(
+    new SphereRenderHelper(this.gl, 10, 10),
+  );
+
+  private sphereShaderGetter = this.getDependentShader(
+    "annotation/sphere/projection",
+    (builder: ShaderBuilder) => {
+      const { rank } = this;
+      this.defineShader(builder);
+      this.sphereRenderHelper.defineShader(builder);
+      builder.addUniform("highp vec4", "uLightDirection");
+      builder.addUniform("highp mat4", "uNormalTransform");
+      builder.addVarying("highp float", "vClipCoefficient");
+      defineNoOpAxisSetters(builder);
+      defineNoOpEndpointMarkerSetters(builder);
+      builder.addVertexCode(`
+void setSphereColor(vec4 color) {
+  vColor = color;
+}
+`);
+      builder.setVertexMain(`
+float modelPositionA[${rank}] = getVertexPosition0();
+float modelPositionB[${rank}] = getVertexPosition1();
+float centerPosition[${rank}];
+float diameterSquared = 0.0;
+for (int i = 0; i < ${rank}; ++i) {
+  float dx = modelPositionA[i] - modelPositionB[i];
+  diameterSquared += dx * dx;
+  centerPosition[i] = (modelPositionA[i] + modelPositionB[i]) * 0.5;
+}
+float radius = sqrt(diameterSquared) * 0.5;
+vClipCoefficient = getSubspaceClipCoefficient(centerPosition);
+${this.invokeUserMain}
+emitSphere(uModelViewProjection, uNormalTransform,
+           projectModelVectorToSubspace(centerPosition),
+           vec3(radius, radius, radius), uLightDirection);
+${this.setPartIndex(builder)};
+`);
+      builder.setFragmentMain(`
+emitAnnotation(vec4(vColor.rgb * vLightingFactor, vColor.a * vClipCoefficient));
+`);
+    },
+  );
+
+  private tempLightVec = new Float32Array(4);
+
+  drawSphere(
+    context: AnnotationRenderContext & {
+      renderContext: PerspectiveViewRenderContext;
+    },
+  ) {
+    this.enable(
+      this.sphereShaderGetter,
+      context,
+      (shader) => {
+        const { gl } = shader;
+        const lightVec = <vec3>this.tempLightVec;
+        const { lightDirection, ambientLighting, directionalLighting } =
+          context.renderContext;
+        vec3.scale(lightVec, lightDirection, directionalLighting);
+        lightVec[3] = ambientLighting;
+        gl.uniform4fv(shader.uniform("uLightDirection"), lightVec);
+        gl.uniformMatrix4fv(
+          shader.uniform("uNormalTransform"),
+          /*transpose=*/ false,
+          mat4.transpose(mat4.create(), context.renderSubspaceInvModelMatrix),
+        );
+        this.sphereRenderHelper.draw(shader, context.count);
+      },
+      // SphereRenderHelper supplies its own vertex attributes.
+      /*usingVertexIdHelper=*/ false,
+    );
+  }
+
+  draw(
+    context: AnnotationRenderContext & {
+      renderContext: PerspectiveViewRenderContext;
+    },
+  ) {
+    super.draw(context);
+    this.drawSphere(context);
+  }
+}
+
 registerAnnotationTypeRenderHandler<Sphere>(AnnotationType.SPHERE, {
   sliceViewRenderHelper: RenderHelper,
-  perspectiveViewRenderHelper: RenderHelper,
+  perspectiveViewRenderHelper: PerspectiveRenderHelper,
   defineShaderNoOpSetters(builder) {
     defineNoOpEndpointMarkerSetters(builder);
     defineNoOpAxisSetters(builder);
+    defineNoOpSphereSetters(builder);
   },
   pickIdsPerInstance: PICK_IDS_PER_INSTANCE,
   snapPosition(position, data, offset, partIndex) {
