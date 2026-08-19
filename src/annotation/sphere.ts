@@ -97,6 +97,11 @@ class RenderHelper extends AnnotationRenderHelper {
     builder.addVertexCode(`
 struct SphereParams {
   highp vec3 subspaceCenter;
+  // The centre projected onto the plane being displayed: identical to
+  // subspaceCenter in the perspective view, but moved onto the current slice
+  // in a cross section, where geometry at the sphere's own depth would fall
+  // outside the slab and be clipped away.
+  highp vec3 subspaceSliceCenter;
   highp vec3 subspaceRadii;
   highp float clipCoefficient;
   bool cull;
@@ -133,6 +138,14 @@ SphereParams getSphereParams() {
     clipCoefficient *= max(0.0, 1.0 - e);
   }
   radiusAdjustment = sqrt(max(0.0, radiusAdjustment));
+  highp float sliceCenter[${rank}];
+  for (int i = 0; i < ${rank}; ++i) {
+    // uModelClipBounds holds the current position, and its second half is 1
+    // exactly for the dimensions not displayed in this panel.
+    sliceCenter[i] = mix(modelCenter[i], uModelClipBounds[i],
+                         uModelClipBounds[i + ${rank}]);
+  }
+  params.subspaceSliceCenter = projectModelVectorToSubspace(sliceCenter);
   params.subspaceCenter = projectModelVectorToSubspace(modelCenter);
   params.subspaceRadii = projectModelVectorToSubspace(modelRadii) * radiusAdjustment;
   params.clipCoefficient = clipCoefficient;
@@ -224,7 +237,7 @@ vClipCoefficient = params.clipCoefficient;
 vColor = vec4(0.0, 0.0, 0.0, 0.0);
 vBorderColor = vec4(0.0, 0.0, 0.0, 1.0);
 ${this.invokeUserMain}
-vec4 clipCenter = uModelViewProjection * vec4(params.subspaceCenter, 1.0);
+vec4 clipCenter = uModelViewProjection * vec4(params.subspaceSliceCenter, 1.0);
 float w = max(abs(clipCenter.w), 1e-6);
 // Project a radius offset along each subspace axis and keep the longest: in a
 // slice view the axis lying along the plane normal projects to nothing, so the
