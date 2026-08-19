@@ -458,8 +458,20 @@ function startChunkDownload(chunk: Chunk) {
 }
 
 function cancelChunkDownload(chunk: Chunk) {
-  const controller = chunk.downloadAbortController!;
+  const controller = chunk.downloadAbortController;
   chunk.downloadAbortController = undefined;
+  if (controller === undefined) {
+    // A chunk can reach here in the DOWNLOADING state with no controller: the
+    // field is cleared as soon as a download settles, and again by this
+    // function, while the state is only moved off DOWNLOADING by the caller.
+    // Observed when neuroglancer is embedded in react-neuroglancer, where
+    // eviction and source invalidation run against a viewer whose state is
+    // being replaced. There is nothing to abort; the caller requeues the chunk.
+    if (DEBUG_CHUNK_UPDATES) {
+      console.log(`${chunk}: cancelled while DOWNLOADING with no controller`);
+    }
+    return;
+  }
   controller.abort(new DOMException("chunk download cancelled", "AbortError"));
 }
 
