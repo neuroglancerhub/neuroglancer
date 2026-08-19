@@ -536,12 +536,42 @@ void setPolyLineColor(vec4 color) { setPolyLineColor(color, color); }
 void setPolyLineColor(vec3 color) { setPolyLineColor(vec4(color, 1.0)); }
 void setPolyLineColor(vec3 startColor, vec3 endColor) { setPolyLineColor(vec4(startColor, 1.0), vec4(endColor, 1.0)); }
 
+void setSphereAxisWidth(float width);
+void setSphereAxisColor(vec4 startColor, vec4 endColor);
+void setSphereEndpointMarkerSize(float startSize, float endSize);
+void setSphereEndpointMarkerBorderWidth(float startSize, float endSize);
+void setSphereEndpointMarkerColor(vec4 startColor, vec4 endColor);
+void setSphereEndpointMarkerBorderColor(vec4 startColor, vec4 endColor);
+void setSphereColor(vec4 color);
+
+void setSphereAxisColor(vec4 color) { setSphereAxisColor(color, color); }
+void setSphereAxisColor(vec3 color) { setSphereAxisColor(vec4(color, 1.0)); }
+void setSphereAxisColor(vec3 startColor, vec3 endColor) {
+  setSphereAxisColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setSphereEndpointMarkerColor(vec3 startColor, vec3 endColor) {
+  setSphereEndpointMarkerColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setSphereEndpointMarkerColor(vec3 color) { setSphereEndpointMarkerColor(color, color); }
+void setSphereEndpointMarkerColor(vec4 color) { setSphereEndpointMarkerColor(color, color); }
+void setSphereEndpointMarkerBorderColor(vec3 startColor, vec3 endColor) {
+  setSphereEndpointMarkerBorderColor(vec4(startColor, 1.0), vec4(endColor, 1.0));
+}
+void setSphereEndpointMarkerBorderColor(vec3 color) { setSphereEndpointMarkerBorderColor(color, color); }
+void setSphereEndpointMarkerBorderColor(vec4 color) { setSphereEndpointMarkerBorderColor(color, color); }
+void setSphereEndpointMarkerSize(float size) { setSphereEndpointMarkerSize(size, size); }
+void setSphereEndpointMarkerBorderWidth(float size) { setSphereEndpointMarkerBorderWidth(size, size); }
+void setSphereColor(vec3 color) { setSphereColor(vec4(color, 1.0)); }
+
 void setColor(vec4 color) {
   setPointMarkerColor(color);
   setLineColor(color);
   setEndpointMarkerColor(color);
   setBoundingBoxBorderColor(color);
   setEllipsoidFillColor(vec4(color.rgb, color.a * (PROJECTION_VIEW ? 1.0 : 0.5)));
+  setSphereAxisColor(color);
+  setSphereEndpointMarkerColor(color);
+  setSphereColor(vec4(color.rgb, color.a * (PROJECTION_VIEW ? 1.0 : 0.5)));
 }
 void setEllipsoidFillColor(vec3 color) { setEllipsoidFillColor(vec4(color, 1.0)); }
 
