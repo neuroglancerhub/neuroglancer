@@ -12,6 +12,49 @@ Refer to the documentation website at https://neuroglancer-docs.web.app for more
 
 This is not an official Google product.
 
+# This fork
+
+This is Janelia's fork of [google/neuroglancer](https://github.com/google/neuroglancer),
+published to npm as `@janelia-flyem/neuroglancer`. It tracks upstream closely and adds:
+
+- **Clio and DVID data sources** for FlyEM annotations, under `src/datasource/{clio,dvid,flyem}`
+- **Sphere annotations** — a shaded body in the 3-D view, a cross section in the slice views
+- **Schema-driven annotation editing** for Clio layers, in place of the plain description field
+- **Refresh** — a per-layer button that refetches annotations from the source
+- **External-UI mode** for embedding, used by
+  [react-neuroglancer](https://github.com/neuroglancerhub/react-neuroglancer) and Clio
+- A **`./janelia` entry point** exporting the API those applications import
+
+`JANELIA-DELTA.md` lists every commit the fork adds and how the repo is laid out.
+`FLYEM-PORT-AUDIT.md` records how these features were migrated from the old
+`feature-flyem-newbuild` branch and what was deliberately left behind.
+
+## Branches
+
+| Branch            | Purpose                                                          |
+| ----------------- | ---------------------------------------------------------------- |
+| `master`          | Mirrors `upstream/master`. Fast-forward only.                    |
+| `janelia-release` | The fork: upstream plus the commit series in `JANELIA-DELTA.md`. |
+
+`git diff master..janelia-release` is therefore exactly what this fork changes.
+
+Work branches off `janelia-release` and merges back into it. Published states are tagged
+`janelia-v<upstream-version>-<n>`; consumers install the package, not the branch, so
+`janelia-release` is rebased and force-pushed when upstream is pulled.
+
+## Pulling from upstream
+
+```bash
+janelia/sync-upstream.sh          # fast-forwards master, rebases janelia-release, typechecks, tests
+git push --force-with-lease origin janelia-release
+```
+
+The script pushes nothing itself. `git rerere` is enabled, so a conflict resolved during one
+sync is replayed automatically in the next.
+
+Old branches were pruned once their content had been ported; every tip is preserved as a tag
+(`git tag -l 'archive/*'`).
+
 # Getting started
 
 A live demo is hosted at <https://neuroglancer-demo.appspot.com>. (The prior link opens the viewer without any preloaded dataset.) Use the viewer links below to open the viewer preloaded with an example dataset.
