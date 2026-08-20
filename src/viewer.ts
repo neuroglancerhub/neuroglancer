@@ -1149,15 +1149,20 @@ export class Viewer extends RefCounted implements ViewerState {
       });
     }
 
-    for (const action of [
-      "select",
-      "star",
-      "copy-segment-id",
-      "add-copy-segment-id",
-    ]) {
+    for (const action of ["select", "star"]) {
       this.bindAction(action, () => {
         this.mouseState.updateUnconditionally();
         this.layerManager.invokeAction(action);
+      });
+    }
+
+    // These read the segment under the cursor, so they go to the selected layer
+    // only: run against every visible layer, which segment id ends up on the
+    // clipboard would depend on layer order.
+    for (const action of ["copy-segment-id", "add-copy-segment-id"]) {
+      this.bindAction(action, () => {
+        this.mouseState.updateUnconditionally();
+        this.layerManager.invokeAction(action, this.selectedLayer.layer);
       });
     }
 
