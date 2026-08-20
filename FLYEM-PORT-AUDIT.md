@@ -189,3 +189,33 @@ clio/dvid refresh path) can reach a chunk in DOWNLOADING with nothing to abort. 
 DEBUG_CHUNK_UPDATES log; the caller requeues the chunk.
 Lesson: "upstream rewrote this subsystem" does not mean the fork's defensive fix is stale - check
 whether the underlying condition still exists.
+
+
+## RE-SWEEP 2026-08-20 (commit 8db2109c)
+Re-derived the old branch's 49 changed files from scratch and checked each against HEAD rather
+than trusting the notes above. Three hunks had never been categorised, all in files upstream had
+since moved, which is why the first pass skipped them:
+
+1. LayerManager.invokeAction(action, appliedLayer?) and the copy-segment-id / add-copy-segment-id
+   bindings passing this.selectedLayer.layer. Without it those actions ran against every visible
+   layer and the clipboard contents depended on layer order. PORTED.
+2. TrackableDataSelectionState.restoreState skipping the position when coordinateSpace.rank is 0.
+   PORTED - react-neuroglancer wraps restoreState in try/catch today because of this.
+3. AnnotationUserLayer.toJSON tolerating an unset localAnnotationRelationships. PORTED -
+   react-neuroglancer swallows this error today too.
+
+Deliberately still not ported:
+- Null guards on UserLayer.selectionState (old src/layer.ts). Non-optional in the type here and no
+  evidence of it being unset; trivial to add if it ever throws.
+- webgl/circles.ts SphereShader (+132 lines) - superseded by the SphereRenderHelper approach.
+- segmentation_display_state/base.ts forEachVisibleSegment rewrite - already upstream.
+- util/http_path_completion.ts + special_protocol_request.ts gs+json support - upstream's
+  kvstore/gcs already uses the storage JSON API.
+- main_module.ts datasource registrations - covered by enabled_frontend_modules (clio, dvid,
+  brainmaps, precomputed, n5, zarr and the four credentials providers all verified present).
+- The old branch's build config (.babelrc, .npmignore, config/*) - obsolete post-Vite.
+
+Everything else from the old branch is accounted for. What remains is verification, not code:
+group B needs a live clio layer with a schema, group C needs dvid/clio annotations changed out of
+band, group D needs react-neuroglancer built against a packed library. Group A is verified in the
+browser against the old Clio build.
