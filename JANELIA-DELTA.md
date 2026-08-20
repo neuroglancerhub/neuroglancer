@@ -12,8 +12,11 @@ is always exactly the fork's delta. Keep it that way.
 - **`master`** mirrors `upstream/master`. Fast-forward only; never commit to it.
 - **`janelia-release`** is the fork: upstream plus the series below, maintained by rebase.
 - Feature work branches off `janelia-release` and merges back into it.
-- Tags mark published states (`janelia-v<upstream-version>-<n>`). Consumers install the published
-  package, not the branch, so the branch may be force-pushed after a rebase.
+- Tags mark published states: `janelia-v<version>`, e.g. `janelia-v3.0.0`. The `v*` namespace
+  belongs to upstream, which has 71 such tags, so the fork stays out of it. The fork versions
+  independently of upstream — it began at 3.0.0 on top of upstream 2.41.2 — and each tag message
+  records the upstream release it was built from. Consumers install the published package, not the
+  branch, so the branch may be force-pushed after a rebase.
 
 Sync with `janelia/sync-upstream.sh`: it fast-forwards `master`, rebases `janelia-release`,
 then typechecks and tests. It pushes nothing. `git rerere` is enabled, so a conflict resolved in
@@ -103,6 +106,7 @@ an annotated tag, so nothing became unreachable:
     git show archive/feature/vite-library-build:src/datasource/flyem/widgets.ts
 
 Of note:
+
 - `archive/feature-flyem-newbuild` - the long-lived branch this fork was ported from (2024-10-08).
 - `archive/feature/vite-library-build` - the February 2026 packaging attempt; the widget code
   came from here.

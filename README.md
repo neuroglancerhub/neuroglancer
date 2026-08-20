@@ -38,9 +38,12 @@ published to npm as `@janelia-flyem/neuroglancer`. It tracks upstream closely an
 
 `git diff master..janelia-release` is therefore exactly what this fork changes.
 
-Work branches off `janelia-release` and merges back into it. Published states are tagged
-`janelia-v<upstream-version>-<n>`; consumers install the package, not the branch, so
-`janelia-release` is rebased and force-pushed when upstream is pulled.
+Work branches off `janelia-release` and merges back into it. Consumers install the package, not
+the branch, so `janelia-release` is rebased and force-pushed when upstream is pulled.
+
+The fork carries its own version, independent of upstream's: it started at 3.0.0, built on
+upstream 2.41.2. Published states are tagged `janelia-v<version>` — `v*` belongs to upstream —
+and each tag message records the upstream release it was built from.
 
 ## Pulling from upstream
 
