@@ -1103,10 +1103,18 @@ export class LayerManager extends RefCounted {
     };
   }
 
-  invokeAction(action: string) {
+  /**
+   * Invokes `action` on every visible layer, or only on `appliedLayer` when one
+   * is given - used for actions that read the layer under the cursor, where
+   * running them against every visible layer would be ambiguous.
+   */
+  invokeAction(action: string, appliedLayer?: ManagedUserLayer) {
     const context = new LayerActionContext();
     for (const managedLayer of this.managedLayers) {
       if (managedLayer.layer === null || !managedLayer.visible) {
+        continue;
+      }
+      if (appliedLayer !== undefined && managedLayer !== appliedLayer) {
         continue;
       }
       const userLayer = managedLayer.layer;
@@ -1487,16 +1495,19 @@ export class TrackableDataSelectionState
       visible: !globalViewerConfig.expectingExternalUI,
     });
     const coordinateSpace = this.coordinateSpace.value;
-    const position = verifyOptionalObjectProperty(
-      obj,
-      "position",
-      (positionObj) =>
-        parseFixedLengthArray(
-          new Float32Array(coordinateSpace.rank),
-          positionObj,
-          verifyFiniteFloat,
-        ),
-    );
+    // An embedded viewer can be handed state before its coordinate space is
+    // established, in which case rank is 0 and parsing a position of any length
+    // throws.
+    const position =
+      coordinateSpace.rank === 0
+        ? undefined
+        : verifyOptionalObjectProperty(obj, "position", (positionObj) =>
+            parseFixedLengthArray(
+              new Float32Array(coordinateSpace.rank),
+              positionObj,
+              verifyFiniteFloat,
+            ),
+          );
     const layers: PersistentLayerSelectionState[] = [];
     verifyOptionalObjectProperty(obj, "layers", (layersObj) => {
       verifyObject(layersObj);

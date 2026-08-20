@@ -803,6 +803,9 @@ export class AnnotationUserLayer extends Base {
     );
     const { localAnnotationRelationships } = this;
     x[ANNOTATION_RELATIONSHIPS_JSON_KEY] =
+      // May be serialised before it has been assigned, e.g. by an embedder that
+      // reports state on every change.
+      localAnnotationRelationships &&
       localAnnotationRelationships.length === 1 &&
       localAnnotationRelationships[0] === "segments"
         ? undefined
