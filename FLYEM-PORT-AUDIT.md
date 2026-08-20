@@ -5,7 +5,7 @@ A record of porting the FlyEM features from the long-lived `feature-flyem-newbui
 Kept in the repo because it documents what was ported, what was deliberately left behind and
 why, and several places where the obvious reading of the old code was wrong.
 
-OLD: origin/feature-flyem-newbuild @ 7228ee8e (2024-10-08), merge-base with upstream
+OLD: archive/feature-flyem-newbuild @ 7228ee8e (2024-10-08), merge-base with upstream
      5f620342 (2022-05-17), 49 files changed
 NEW: feature/update-feature-flyem-newbuild @ 34f6bc19, rebased onto master c0f79b10 (2026-08-14)
 Upstream path rename: src/neuroglancer/X -> src/X
@@ -51,7 +51,7 @@ viewport space - exact for a true sphere, slightly generous for anisotropic voxe
 quadratic-form path handles that case if it ever matters.
 
 ### B. FlyEM annotation edit widget - PORTED 2026-08-19 (commit 3d870343)
-Ported widgets.ts from origin/feature/vite-library-build (373-line rewrite on a Dec-2025 base, vs
+Ported widgets.ts from archive/feature/vite-library-build (373-line rewrite on a Dec-2025 base, vs
 the 459-line 2024 original); it typechecked against this branch unchanged. That branch never wired
 it up either - makeAnnotationEditWidget had no callers - so the integration came from the 2024
 branch: makeEditWidget declared as an optional capability on MultiscaleAnnotationSource (next to
@@ -116,7 +116,7 @@ applied directly to globalPosition, matching the old branch's setLayerPosition(n
 errors surface via StatusMessage. Typecheck clean, full suite 786 passed / 0 failed.
 
 ## PACKAGING - not ported
-NEW keeps package name "neuroglancer"; OLD and origin/feature/vite-library-build use
+NEW keeps package name "neuroglancer"; OLD and archive/feature/vite-library-build use
 "@janelia-flyem/neuroglancer". Library-build plumbing (package.json.prepack, bin/copy-workers.js,
 src/chunk_worker_janelia.bundle.js) exists only on feature/vite-library-build, not on NEW.
 => NEW cannot currently be published as the npm package react-neuroglancer consumes.
@@ -154,7 +154,7 @@ Probing #src/status.js alone in a worker reproduces it; #src/util/abort.js is cl
 Both of status.ts's imports (status.css, widget/close_button.js) throw independently in a worker.
 Disabling only the clio backend import makes nifti+zarr pass 9/9 - single cause for all 6 failures.
 
-NOT caused by the rebase: backup/flyem-newbuild-pre-rebase fails the same 3 nifti tests, and
+NOT caused by the rebase: archive/backup/flyem-newbuild-pre-rebase fails the same 3 nifti tests, and
 78ad594c:src/status.ts already imported status.css. The port has always broken the chunk worker.
 
 Note flyem/annotation.ts:29 correctly uses `import type` for frontend_source (erased, harmless).
@@ -168,7 +168,7 @@ clio/credentials_provider.ts repointed. Full suite: 786 passed / 0 failed (was 6
 
 ## BRANCH STATE 2026-08-18
 feature/update-feature-flyem-newbuild rebased onto master c0f79b10 (2026-08-14), 4 commits ahead,
-still unpushed. Backup of pre-rebase tip: branch backup/flyem-newbuild-pre-rebase + tag
+still unpushed. Backup of pre-rebase tip: branch archive/backup/flyem-newbuild-pre-rebase + tag
 pre-rebase-2026-08-18.
 ALL GROUPS PORTED (A, B, C, D, F; E was already upstream). Remaining risk is verification,
 not missing code: groups A, B, C and D have no automated coverage and need a browser.

@@ -92,3 +92,21 @@ turns a permanent conflict into none.
 
 See `FLYEM-PORT-AUDIT.md` for how these changes were migrated from the old
 `feature-flyem-newbuild` branch, and what was deliberately left behind.
+
+## Archived branches
+
+The fork's old branches were pruned once their content had been ported. Every tip is preserved as
+an annotated tag, so nothing became unreachable:
+
+    git tag -l 'archive/*'
+    git log archive/feature-flyem-newbuild
+    git show archive/feature/vite-library-build:src/datasource/flyem/widgets.ts
+
+Of note:
+- `archive/feature-flyem-newbuild` - the long-lived branch this fork was ported from (2024-10-08).
+- `archive/feature/vite-library-build` - the February 2026 packaging attempt; the widget code
+  came from here.
+- `archive/backup/flyem-newbuild-pre-rebase` - the port before it was rebased onto current upstream.
+- `archive/keep/pre-reorder` - janelia-release before its commits were regrouped.
+- `archive/janelia-version-0.10.0-local` - a local tip that had diverged from origin by three
+  unpushed commits.
