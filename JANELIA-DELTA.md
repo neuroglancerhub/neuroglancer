@@ -34,6 +34,10 @@ in a sync.
 Nothing FlyEM-specific; these are plain bug fixes.
 
 - `0d29ca7e` fix(chunk_manager): tolerate cancelling a download that has no controller
+- `688f8698` fix(layer): tolerate layers that are mid-restore in LayerSelectedValues
+
+`688f8698` currently sits above the packaging and release commits rather than in this group,
+because it was found while integrating the beta. Move it down at the next rebase.
 
 Also upstreamable, but currently folded into a fork-only commit rather than split out:
 the rank-0 guard in `TrackableDataSelectionState.restoreState` and the unset-relationships guard in
