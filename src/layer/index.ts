@@ -1250,6 +1250,12 @@ export class LayerSelectedValues extends RefCounted {
         const userLayer = layer.layer;
         if (layer.visible && userLayer !== null) {
           const { selectionState } = userLayer;
+          // Layers are added to the layer manager in the first pass of
+          // TopLevelLayerListSpecification.restoreState and only reach
+          // initializationDone() -- which creates selectionState -- in the
+          // second. A layer observed between the two passes is not selectable
+          // yet; skip it rather than throwing.
+          if (selectionState === undefined) continue;
           userLayer.resetSelectionState(selectionState);
           selectionState.generation = generation;
           userLayer.captureSelectionState(selectionState, mouseState);
@@ -1261,6 +1267,10 @@ export class LayerSelectedValues extends RefCounted {
   get<T extends UserLayer>(userLayer: T): T["selectionState"] | undefined {
     this.update();
     const { selectionState } = userLayer;
+    // See update(): a layer part-way through restoreState has no selection
+    // state yet. Unlike update() this runs for every layer, not just visible
+    // ones, so archived layers reach it too.
+    if (selectionState === undefined) return undefined;
     if (selectionState.generation !== this.changed.count) return undefined;
     return selectionState;
   }
