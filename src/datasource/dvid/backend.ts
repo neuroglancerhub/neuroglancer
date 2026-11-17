@@ -211,7 +211,11 @@ function parsePointAnnotation(
 ): DVIDPointAnnotation {
   let prop: { [key: string]: string } = {};
 
-  const propertiesObj = verifyObjectProperty(entry, "Prop", verifyObject);
+  // DVID may return "Prop": null (or omit it) for elements posted without
+  // properties; treat that the same as an empty object.
+  const propertiesObj = verifyObjectProperty(entry, "Prop", (x) =>
+    x == null ? {} : verifyObject(x),
+  );
   const corner = verifyObjectProperty(entry, "Pos", (x) =>
     parseIntVec(vec3.create(), x),
   );
@@ -426,8 +430,10 @@ function parseAnnotations(
             serializer.add(annotation);
           }
         } catch (e) {
-          throw new Error(
-            `Error parsing annotation: ${(e as Error).message}`,
+          // Skip the malformed element rather than failing the whole chunk,
+          // which would hide every other annotation in it.
+          console.warn(
+            `Skipping unparseable DVID annotation ${JSON.stringify(response)}: ${(e as Error).message}`,
           );
         }
       }
